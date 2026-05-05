@@ -1,0 +1,208 @@
+"""SQLite-backed state store. Owns the "never send twice" guarantee.
+
+Connection-per-thread (sqlite3 connections are not shareable across threads).
+WAL mode + immediate commits keep the crash window tiny: a row only flips to
+`sent` after the API confirmed 200, and that flip is committed before we
+release the row.
+"""
+from __future__ import annotations
+
+import sqlite3
+import threading
+import time
+from contextlib import contextmanager
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterator
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS recipients (
+    phone           TEXT PRIMARY KEY,
+    raw             TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    message_id      INTEGER,
+    status_code     INTEGER,
+    attempts        INTEGER NOT NULL DEFAULT 0,
+    last_error      TEXT,
+    first_seen_at   REAL NOT NULL,
+    last_attempt_at REAL,
+    sent_at         REAL
+);
+CREATE INDEX IF NOT EXISTS idx_recipients_status ON recipients(status);
+"""
+
+# Status values
+PENDING = "pending"
+IN_FLIGHT = "in_flight"
+SENT = "sent"
+FAILED_PERMANENT = "failed_permanent"
+FAILED_RETRIABLE = "failed_retriable"
+
+CLAIMABLE = (PENDING, FAILED_RETRIABLE)
+
+
+@dataclass(frozen=True)
+class Recipient:
+    phone: str
+    raw: str
+    attempts: int
+
+
+class StateStore:
+    """Thread-safe SQLite repository.
+
+    Each thread gets its own connection on first use; the file is opened in
+    WAL mode so concurrent writers don't block each other for long.
+    """
+
+    def __init__(self, db_path: str | Path):
+        self.db_path = str(db_path)
+        self._local = threading.local()
+        # Init schema once on the main thread.
+        with self._connect() as conn:
+            conn.executescript(SCHEMA)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.commit()
+
+    def _connect(self) -> sqlite3.Connection:
+        # New connection — used for setup. Not cached.
+        conn = sqlite3.connect(self.db_path, timeout=30, isolation_level=None)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _conn(self) -> sqlite3.Connection:
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = sqlite3.connect(self.db_path, timeout=30, isolation_level=None)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            self._local.conn = conn
+        return conn
+
+    @contextmanager
+    def _tx(self) -> Iterator[sqlite3.Connection]:
+        conn = self._conn()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            yield conn
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        else:
+            conn.execute("COMMIT")
+
+    # ---------- bulk loading ----------
+
+    def upsert_pending(self, rows: list[tuple[str, str]]) -> int:
+        """Insert (phone, raw) pairs as pending. Returns number of new rows."""
+        if not rows:
+            return 0
+        now = time.time()
+        with self._tx() as conn:
+            before = conn.execute("SELECT COUNT(*) FROM recipients").fetchone()[0]
+            conn.executemany(
+                "INSERT OR IGNORE INTO recipients "
+                "(phone, raw, status, first_seen_at) VALUES (?, ?, ?, ?)",
+                [(p, r, PENDING, now) for p, r in rows],
+            )
+            after = conn.execute("SELECT COUNT(*) FROM recipients").fetchone()[0]
+        return after - before
+
+    def record_invalid(self, raw: str, reason: str) -> None:
+        """Persist a structurally invalid input as a permanent failure.
+
+        Keyed by `raw` (synthetic phone column) to keep the PK contract;
+        prefixed with `INVALID:` so it can never collide with a real number.
+        """
+        now = time.time()
+        synthetic = f"INVALID:{raw}"
+        with self._tx() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO recipients "
+                "(phone, raw, status, attempts, last_error, first_seen_at, last_attempt_at) "
+                "VALUES (?, ?, ?, 0, ?, ?, ?)",
+                (synthetic, raw, FAILED_PERMANENT, reason, now, now),
+            )
+
+    # ---------- run lifecycle ----------
+
+    def reset_status(self, from_status: str) -> int:
+        """Promote rows in `from_status` back to pending. Returns rows changed."""
+        with self._tx() as conn:
+            cur = conn.execute(
+                "UPDATE recipients SET status=?, last_error=NULL, status_code=NULL "
+                "WHERE status=?",
+                (PENDING, from_status),
+            )
+            return cur.rowcount
+
+    def reset_orphan_in_flight(self) -> int:
+        """On startup, any `in_flight` row is from a prior crash — reclaim it."""
+        with self._tx() as conn:
+            cur = conn.execute(
+                f"UPDATE recipients SET status=? WHERE status=?",
+                (PENDING, IN_FLIGHT),
+            )
+            return cur.rowcount
+
+    def list_claimable_phones(self) -> list[str]:
+        rows = self._conn().execute(
+            f"SELECT phone FROM recipients WHERE status IN ({','.join('?' * len(CLAIMABLE))}) "
+            "ORDER BY first_seen_at",
+            CLAIMABLE,
+        ).fetchall()
+        return [r["phone"] for r in rows]
+
+    # ---------- per-row workflow ----------
+
+    def claim(self, phone: str) -> Recipient | None:
+        """Atomically transition a row to in_flight. Returns None if not claimable."""
+        now = time.time()
+        with self._tx() as conn:
+            cur = conn.execute(
+                f"UPDATE recipients SET status=?, attempts=attempts+1, last_attempt_at=? "
+                f"WHERE phone=? AND status IN ({','.join('?' * len(CLAIMABLE))})",
+                (IN_FLIGHT, now, phone, *CLAIMABLE),
+            )
+            if cur.rowcount == 0:
+                return None
+            row = conn.execute(
+                "SELECT phone, raw, attempts FROM recipients WHERE phone=?", (phone,)
+            ).fetchone()
+        return Recipient(phone=row["phone"], raw=row["raw"], attempts=row["attempts"])
+
+    def mark_sent(self, phone: str, message_id: int | None, status_code: int) -> None:
+        now = time.time()
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE recipients SET status=?, message_id=?, status_code=?, "
+                "sent_at=?, last_error=NULL WHERE phone=?",
+                (SENT, message_id, status_code, now, phone),
+            )
+
+    def mark_failed(
+        self, phone: str, status_code: int | None, error: str, *, permanent: bool
+    ) -> None:
+        target = FAILED_PERMANENT if permanent else FAILED_RETRIABLE
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE recipients SET status=?, status_code=?, last_error=? WHERE phone=?",
+                (target, status_code, error, phone),
+            )
+
+    # ---------- reporting ----------
+
+    def counts(self) -> dict[str, int]:
+        rows = self._conn().execute(
+            "SELECT status, COUNT(*) AS n FROM recipients GROUP BY status"
+        ).fetchall()
+        return {r["status"]: r["n"] for r in rows}
+
+    def iter_failed_permanent(self) -> Iterator[sqlite3.Row]:
+        yield from self._conn().execute(
+            "SELECT phone, raw, status_code, attempts, last_error, last_attempt_at "
+            "FROM recipients WHERE status=?",
+            (FAILED_PERMANENT,),
+        )
