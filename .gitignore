@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.env
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+logs/
+.pytest_cache/
+.coverage
+.idea/
+.vscode/
+
+# Recipient number lists (PII — never commit)
+test-numbers.txt
+numbers.txt
+numbers.csv
+*-numbers.txt
+*-numbers.csv
+*_numbers.txt
+*_numbers.csv
