@@ -25,3 +25,6 @@ numbers.csv
 *-numbers.csv
 *_numbers.txt
 *_numbers.csv
+
+# Local profile config — may contain campaign-specific tokens / template names
+sms-sender.toml

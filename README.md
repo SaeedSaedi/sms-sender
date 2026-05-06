@@ -57,6 +57,98 @@ sms-sender send \
 Re-run the same command after a crash, network outage, or credit top-up — it
 picks up exactly where it left off.
 
+### Safer first runs
+
+Two flags catch the common mistakes (wrong template, expired credit) **before**
+fanning out across 10k rows:
+
+```bash
+sms-sender send --input numbers.csv --template my-tpl --token 12345 \
+    --smoke-test            # send to the first phone synchronously, abort if it fails
+# Add --no-preflight to skip the account/info check (default is on).
+```
+
+You can also dry-run the exact request without sending:
+
+```bash
+sms-sender preview --phone 09123456789 --template my-tpl --token 12345
+sms-sender preview --input numbers.csv --template my-tpl --token 12345 --limit 5
+sms-sender preview --phone 09123456789 --template my-tpl --token 12345 --send
+```
+
+`preview` prints the URL and POST body for each phone. With `--send` and a single
+`--phone`, it actually sends (and does **not** touch the state DB).
+
+### Retrying failures
+
+After fixing a template/token issue, promote retriable failures back to
+pending and re-send in one shot:
+
+```bash
+sms-sender retry-failed --input numbers.csv --template my-tpl --token 12345
+# Add --include-permanent to also reset failed_permanent rows.
+```
+
+### Throughput control
+
+`--workers` controls parallelism; `--rate` caps total requests per second on
+top of that. With 20 workers and `--rate 10/s`, half the workers will be
+parked on the rate gate at any moment.
+
+```bash
+sms-sender send --input numbers.csv --template my-tpl --token 12345 \
+    --workers 20 --rate 10/s     # also: 60/m, 3600/h, "5" (== 5/s), "0" (off)
+```
+
+### End-of-run notifications
+
+Get pinged on Slack/Telegram (or any webhook) when a long run finishes:
+
+```bash
+sms-sender send … --notify slack:https://hooks.slack.com/services/AAA/BBB/CCC
+sms-sender send … --notify telegram:<bot_token>:<chat_id>
+sms-sender send … --notify https://example.com/webhook   # generic JSON POST
+```
+
+The Slack and Telegram forms post a human-readable report (counts, top
+errors, sends/sec). The generic `https://` form POSTs the structured run
+summary as JSON. Failures are best-effort: a notification that doesn't go
+through never aborts the run, only logs a warning.
+
+### Profiles (`sms-sender.toml`)
+
+Stop typing `--template … --token … --workers …` every run. Drop a
+`sms-sender.toml` next to your input file:
+
+```toml
+[profile.default]
+workers = 10
+rate = "10/s"
+log_file = "./logs/sms-sender.log"
+
+[profile.verify]
+template = "my-verify-template"
+token = "12345"
+
+[profile.welcome]
+template = "welcome"
+token = "salam"
+```
+
+Then:
+
+```bash
+sms-sender send --input numbers.csv                    # uses [profile.default]
+sms-sender --profile welcome send --input list.csv     # default + welcome merged
+sms-sender --config /path/to/other.toml send --input … # explicit config file
+```
+
+Resolution order (highest wins): explicit CLI flag → named profile →
+`[profile.default]` → built-in default. Any flag the CLI knows about can be
+set in the profile (`template`, `token`, `token2`, `workers`, `rate`,
+`max_attempts`, `timeout`, `state` (db_path), `log_file`, `smoke_test`,
+`no_preflight`, `verbose`/`quiet`, etc.).
+
 ### Other commands
 
 ```bash

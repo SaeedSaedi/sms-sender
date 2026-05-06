@@ -13,7 +13,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from typing import Iterable, Iterator
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS recipients (
@@ -199,6 +199,34 @@ class StateStore:
             "SELECT status, COUNT(*) AS n FROM recipients GROUP BY status"
         ).fetchall()
         return {r["status"]: r["n"] for r in rows}
+
+    def status_for_phones(self, phones: Iterable[str]) -> dict[str, str]:
+        """Return {phone: status} for phones already in the DB. Read-only.
+
+        Used by the wizard to preview "X already sent, Y new" without writing
+        any rows. SQLite caps the IN-list at 999 params by default; we chunk
+        at 500 to stay well under.
+        """
+        out: dict[str, str] = {}
+        chunk: list[str] = []
+        conn = self._conn()
+        for p in phones:
+            chunk.append(p)
+            if len(chunk) >= 500:
+                self._fill_status(conn, chunk, out)
+                chunk = []
+        if chunk:
+            self._fill_status(conn, chunk, out)
+        return out
+
+    @staticmethod
+    def _fill_status(conn: sqlite3.Connection, phones: list[str], out: dict[str, str]) -> None:
+        placeholders = ",".join("?" * len(phones))
+        for row in conn.execute(
+            f"SELECT phone, status FROM recipients WHERE phone IN ({placeholders})",
+            phones,
+        ):
+            out[row["phone"]] = row["status"]
 
     def iter_failed_permanent(self) -> Iterator[sqlite3.Row]:
         yield from self._conn().execute(

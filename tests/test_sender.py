@@ -11,14 +11,23 @@ from sms_sender.sender import (
 
 
 class FakeSDK:
-    def __init__(self, script):
+    def __init__(self, script, account_script=None):
         # script is a list; each element is either a return value or an exception to raise.
         self.script = list(script)
+        self.account_script = list(account_script or [])
         self.calls = []
+        self.account_calls = 0
 
     def verify_lookup(self, params):
         self.calls.append(params)
         item = self.script.pop(0)
+        if isinstance(item, BaseException):
+            raise item
+        return item
+
+    def account_info(self):
+        self.account_calls += 1
+        item = self.account_script.pop(0)
         if isinstance(item, BaseException):
             raise item
         return item
@@ -98,3 +107,39 @@ def test_token2_token3_passed_through():
         "receptor": "09123456789", "template": "t",
         "token": "a", "token2": "b", "token3": "c",
     }
+
+
+def test_account_info_parses_fields():
+    sdk = FakeSDK([], account_script=[
+        {"remaincredit": "12345", "expiredate": "2027-01-01", "type": "Master"}
+    ])
+    s = Sender(cfg(), sdk=sdk)
+    info = s.account_info()
+    assert info.remaining_credit == 12345
+    assert info.expire_date == "2027-01-01"
+    assert info.type == "Master"
+    assert sdk.account_calls == 1
+
+
+def test_account_info_halts_on_auth_error():
+    sdk = FakeSDK([], account_script=[APIException("APIException[401 invalid api key]")])
+    s = Sender(cfg(), sdk=sdk)
+    with pytest.raises(HaltError) as exc:
+        s.account_info()
+    assert exc.value.status_code == 401
+
+
+def test_account_info_network_error_is_send_error_not_halt():
+    sdk = FakeSDK([], account_script=[HTTPException("connection refused")])
+    s = Sender(cfg(), sdk=sdk)
+    with pytest.raises(SendError) as exc:
+        s.account_info()
+    assert not isinstance(exc.value, HaltError)
+
+
+def test_build_params_is_pure_no_io():
+    sdk = FakeSDK([])
+    s = Sender(cfg(token="x", token2="y"), sdk=sdk)
+    p = s.build_params("09120000000")
+    assert p == {"receptor": "09120000000", "template": "t", "token": "x", "token2": "y"}
+    assert sdk.calls == []  # no API calls

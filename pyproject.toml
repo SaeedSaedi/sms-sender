@@ -16,6 +16,8 @@ dependencies = [
     "tenacity>=8.2",
     "tqdm>=4.66",
     "python-dotenv>=1.0",
+    "tomli>=2.0; python_version < '3.11'",
+    "questionary>=2.0",
 ]
 
 [project.optional-dependencies]

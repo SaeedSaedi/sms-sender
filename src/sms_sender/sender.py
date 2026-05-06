@@ -73,8 +73,16 @@ class SenderConfig:
     backoff_max: float = 30.0
 
 
+@dataclass(frozen=True)
+class AccountInfo:
+    remaining_credit: int | None
+    expire_date: str | None
+    type: str | None
+
+
 class _SDK(Protocol):
     def verify_lookup(self, params: dict) -> list[dict]: ...
+    def account_info(self) -> dict: ...
 
 
 def _parse_api_exception(exc: APIException) -> tuple[int | None, str]:
@@ -98,16 +106,17 @@ class _KavenegarHTTP:
     Also normalizes the APIException message to `[CODE] message` format.
     """
 
-    BASE = "https://api.kavenegar.com/v1/{key}/verify/lookup.json"
+    BASE = "https://api.kavenegar.com/v1/{key}/{path}.json"
 
     def __init__(self, api_key: str, timeout: float):
-        self._url = self.BASE.format(key=api_key)
+        self._verify_url = self.BASE.format(key=api_key, path="verify/lookup")
+        self._account_url = self.BASE.format(key=api_key, path="account/info")
         self._timeout = timeout
         self._session = requests.Session()
 
-    def verify_lookup(self, params: dict) -> list[dict]:
+    def _post(self, url: str, params: dict | None = None) -> dict:
         try:
-            resp = self._session.post(self._url, data=params, timeout=self._timeout)
+            resp = self._session.post(url, data=params or {}, timeout=self._timeout)
         except requests.exceptions.RequestException as e:
             raise HTTPException(str(e)) from e
         try:
@@ -118,7 +127,18 @@ class _KavenegarHTTP:
         status = ret.get("status")
         if status != 200:
             raise APIException(f"APIException[{status}] {ret.get('message', '')}")
+        return body
+
+    def verify_lookup(self, params: dict) -> list[dict]:
+        body = self._post(self._verify_url, params)
         return body.get("entries") or []
+
+    def account_info(self) -> dict:
+        body = self._post(self._account_url)
+        entries = body.get("entries") or {}
+        if isinstance(entries, list):
+            entries = entries[0] if entries else {}
+        return entries
 
 
 class Sender:
@@ -129,7 +149,8 @@ class Sender:
         self.cfg = cfg
         self._sdk: _SDK = sdk or _KavenegarHTTP(cfg.api_key, cfg.timeout)
 
-    def _build_params(self, phone: str) -> dict:
+    def build_params(self, phone: str) -> dict:
+        """Return the exact POST body that would be sent for `phone`. No I/O."""
         params: dict = {"receptor": phone, "template": self.cfg.template}
         for name in ("token", "token2", "token3", "token10", "token20"):
             value = getattr(self.cfg, name)
@@ -139,7 +160,7 @@ class Sender:
 
     def _do_call(self, phone: str) -> SendResult:
         try:
-            response = self._sdk.verify_lookup(self._build_params(phone))
+            response = self._sdk.verify_lookup(self.build_params(phone))
         except HTTPException as e:
             # Network / timeout — always retriable.
             raise _RetriableSendError(None, f"http: {e}") from e
@@ -186,3 +207,30 @@ class Sender:
             raise SendError(inner.status_code, f"retries exhausted: {inner.message}") from e
         # Unreachable — Retrying either returns or raises.
         raise RuntimeError("unreachable")
+
+    def account_info(self) -> AccountInfo:
+        """Fetch account info (credit, expiry, plan). Raises HaltError on auth issues."""
+        try:
+            data = self._sdk.account_info()
+        except HTTPException as e:
+            raise SendError(None, f"http: {e}") from e
+        except APIException as e:
+            code, message = _parse_api_exception(e)
+            action = classify(code)
+            if action is Action.HALT:
+                raise HaltError(code, message) from e
+            raise SendError(code, message) from e
+        return AccountInfo(
+            remaining_credit=_safe_int(data.get("remaincredit")),
+            expire_date=data.get("expiredate"),
+            type=data.get("type"),
+        )
+
+
+def _safe_int(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None

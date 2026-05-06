@@ -5,62 +5,132 @@ import csv
 import logging
 import sys
 from pathlib import Path
+from typing import Any, Callable, TypeVar
 
 import click
 
 from . import logging_config
 from .config import load_api_key
-from .runner import make_runner
-from .sender import SenderConfig
+from .notify import notify
+from .profile import ProfileError, load_profile, to_default_map
+from .rate import parse_rate
+from .runner import format_report, make_runner
+from .sender import Sender, SenderConfig
 from .state import StateStore
 
 logger = logging.getLogger(__name__)
 
+F = TypeVar("F", bound=Callable[..., Any])
 
-@click.group()
-def cli() -> None:
+
+_PROFILE_COMMANDS = ("send", "retry-failed", "preview", "status", "export-failed", "reset", "purge", "dry-run")
+
+
+@click.group(invoke_without_command=True)
+@click.option(
+    "--config", "config_path", default=None, type=click.Path(dir_okay=False),
+    help=f"TOML config file (defaults to ./sms-sender.toml if present).",
+)
+@click.option(
+    "--profile", "profile_name", default=None,
+    help="Profile section to load from the config file (default: 'default').",
+)
+@click.pass_context
+def cli(ctx: click.Context, config_path: str | None, profile_name: str | None) -> None:
     """Reliable bulk SMS sender for Kavenegar verify/lookup."""
+    try:
+        values = load_profile(config_path, profile_name)
+    except ProfileError as e:
+        raise click.UsageError(str(e)) from e
+    if values:
+        ctx.default_map = to_default_map(values, list(_PROFILE_COMMANDS))
+    # Bare `sms-sender` in a TTY launches the wizard; otherwise show help.
+    if ctx.invoked_subcommand is None:
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            from .wizard import run_wizard
+            run_wizard()
+        else:
+            click.echo(ctx.get_help())
 
 
-@cli.command()
-@click.option(
-    "--input", "input_path", required=True, type=click.Path(exists=True, dir_okay=False),
-    help="Path to a .txt (one number per line) or .csv (first cell per row).",
-)
-@click.option("--template", required=True, help="Kavenegar template name.")
-@click.option("--token", default=None, help="Static token value (no spaces).")
-@click.option("--token2", default=None, help="Static token2 value (no spaces).")
-@click.option("--token3", default=None, help="Static token3 value (no spaces).")
-@click.option("--token10", default=None, help="Static token10 value (allows up to 5 spaces).")
-@click.option("--token20", default=None, help="Static token20 value (allows up to 8 spaces).")
-@click.option("--workers", default=5, show_default=True, type=int)
-@click.option("--max-attempts", default=5, show_default=True, type=int)
-@click.option("--timeout", default=15.0, show_default=True, type=float)
-@click.option("--backoff-max", default=30.0, show_default=True, type=float)
-@click.option(
-    "--state", "db_path", default="./sms_state.db", show_default=True,
-    type=click.Path(dir_okay=False),
-    help="SQLite file used for resume + dedup. Re-runs reuse the same DB.",
-)
-@click.option(
-    "--log-file", default="./logs/sms-sender.log", show_default=True,
-    type=click.Path(dir_okay=False),
-)
-@click.option("--verbose", is_flag=True, help="DEBUG-level console output.")
-@click.option("--quiet", is_flag=True, help="Only WARNING+ on console.")
-def send(
-    input_path: str, template: str, token: str | None, token2: str | None,
-    token3: str | None, token10: str | None, token20: str | None,
-    workers: int, max_attempts: int, timeout: float,
-    backoff_max: float, db_path: str, log_file: str, verbose: bool, quiet: bool,
+def _send_options(f: F) -> F:
+    """Flags shared by `send` and `retry-failed` so both stay in sync."""
+    decorators = [
+        click.option(
+            "--input", "input_path", required=True,
+            type=click.Path(exists=True, dir_okay=False),
+            help="Path to a .txt (one number per line) or .csv (first cell per row).",
+        ),
+        click.option("--template", required=True, help="Kavenegar template name."),
+        click.option("--token", default=None, help="Static token value (no spaces)."),
+        click.option("--token2", default=None, help="Static token2 value (no spaces)."),
+        click.option("--token3", default=None, help="Static token3 value (no spaces)."),
+        click.option("--token10", default=None, help="Static token10 value (up to 5 spaces)."),
+        click.option("--token20", default=None, help="Static token20 value (up to 8 spaces)."),
+        click.option("--workers", default=5, show_default=True, type=int),
+        click.option("--max-attempts", default=5, show_default=True, type=int),
+        click.option("--timeout", default=15.0, show_default=True, type=float),
+        click.option("--backoff-max", default=30.0, show_default=True, type=float),
+        click.option(
+            "--state", "db_path", default="./sms_state.db", show_default=True,
+            type=click.Path(dir_okay=False),
+            help="SQLite file used for resume + dedup. Re-runs reuse the same DB.",
+        ),
+        click.option(
+            "--log-file", default="./logs/sms-sender.log", show_default=True,
+            type=click.Path(dir_okay=False),
+        ),
+        click.option(
+            "--smoke-test", is_flag=True,
+            help="Send to the first phone synchronously and abort if it fails. "
+                 "Catches bad template/tokens before fanning out.",
+        ),
+        click.option(
+            "--no-preflight", is_flag=True,
+            help="Skip the account-info check at the start of the run.",
+        ),
+        click.option(
+            "--rate", "rate", default=None,
+            help="Cap throughput, e.g. '10/s', '60/m', '3600/h'. Off by default. "
+                 "Works on top of --workers: workers control parallelism, --rate "
+                 "caps total requests per second.",
+        ),
+        click.option(
+            "--notify", "notify_target", default=None,
+            help="Post the run summary on completion. Forms: "
+                 "'slack:<webhook_url>', 'telegram:<bot_token>:<chat_id>', or a "
+                 "plain http(s):// URL (generic JSON webhook). Best-effort — a "
+                 "failed notification never aborts the run.",
+        ),
+        click.option("--verbose", is_flag=True, help="DEBUG-level console output."),
+        click.option("--quiet", is_flag=True, help="Only WARNING+ on console."),
+    ]
+    for dec in reversed(decorators):
+        f = dec(f)
+    return f
+
+
+def _do_send(
+    *, input_path: str, template: str,
+    token: str | None, token2: str | None, token3: str | None,
+    token10: str | None, token20: str | None,
+    workers: int, max_attempts: int, timeout: float, backoff_max: float,
+    db_path: str, log_file: str,
+    smoke_test: bool, no_preflight: bool, rate: str | None,
+    notify_target: str | None,
+    verbose: bool, quiet: bool,
 ) -> None:
-    """Send SMS to every number in INPUT, resuming from prior state."""
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
     console_level = (
         logging.DEBUG if verbose else (logging.WARNING if quiet else logging.INFO)
     )
     logging_config.setup(log_file=log_file, console_level=console_level)
+
+    try:
+        rate_per_sec = parse_rate(rate)
+    except ValueError as e:
+        raise click.UsageError(str(e)) from e
 
     api_key = load_api_key()
     sender_cfg = SenderConfig(
@@ -74,20 +144,49 @@ def send(
     )
     runner = make_runner(
         input_path=input_path, db_path=db_path, sender_cfg=sender_cfg, workers=workers,
+        preflight=not no_preflight, smoke_test=smoke_test,
+        rate_per_sec=rate_per_sec,
     )
     summary = runner.run()
 
-    click.echo(
-        f"\nSummary: sent={summary.sent} "
-        f"failed_permanent={summary.failed_permanent} "
-        f"failed_retriable={summary.failed_retriable} "
-        f"invalid={summary.invalid} "
-        f"halted={summary.halted}"
-    )
+    click.echo("\n" + format_report(summary))
+    notify(notify_target, summary)
     if summary.halted:
         sys.exit(2)
     if summary.failed_permanent or summary.failed_retriable:
         sys.exit(1)
+
+
+@cli.command()
+@_send_options
+def send(**kwargs: Any) -> None:
+    """Send SMS to every number in INPUT, resuming from prior state."""
+    _do_send(**kwargs)
+
+
+@cli.command("retry-failed")
+@click.option(
+    "--include-permanent", is_flag=True,
+    help="Also reset failed_permanent rows to pending. Off by default — those "
+         "are usually permanent (bad receptor, bad template). Use after fixing "
+         "a template/token issue and you want to re-attempt them.",
+)
+@_send_options
+def retry_failed(include_permanent: bool, **kwargs: Any) -> None:
+    """Reset failed rows to pending, then run `send`.
+
+    Sugar for: `sms-sender reset --status failed_retriable && sms-sender send …`
+    With `--include-permanent`, also resets failed_permanent.
+    """
+    store = StateStore(kwargs["db_path"])
+    n = store.reset_status("failed_retriable")
+    if include_permanent:
+        n += store.reset_status("failed_permanent")
+    click.echo(f"Reset {n} row(s) to pending.")
+    if n == 0:
+        click.echo("Nothing to retry.")
+        return
+    _do_send(**kwargs)
 
 
 @cli.command()
@@ -182,6 +281,102 @@ def dry_run(input_path: str) -> None:
         click.echo(f"  ... and {len(result.valid) - 10} more")
     for inv in result.invalid:
         click.echo(f"  INVALID line {inv.line_no}: {inv.raw!r} — {inv.reason}")
+
+
+@cli.command()
+@click.option("--template", required=True, help="Kavenegar template name.")
+@click.option("--token", default=None)
+@click.option("--token2", default=None)
+@click.option("--token3", default=None)
+@click.option("--token10", default=None)
+@click.option("--token20", default=None)
+@click.option(
+    "--phone", default=None,
+    help="Single phone to preview (alternative to --input).",
+)
+@click.option(
+    "--input", "input_path", default=None,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Preview the first --limit phones from this file.",
+)
+@click.option("--limit", default=5, show_default=True, type=int)
+@click.option(
+    "--check-account", is_flag=True,
+    help="Also call Kavenegar account/info to confirm the API key works.",
+)
+@click.option(
+    "--send", "do_send", is_flag=True,
+    help="Actually send to --phone. Requires --phone (single number) and "
+         "does NOT touch the state DB.",
+)
+@click.option("--timeout", default=15.0, show_default=True, type=float)
+def preview(
+    template: str, token: str | None, token2: str | None, token3: str | None,
+    token10: str | None, token20: str | None,
+    phone: str | None, input_path: str | None, limit: int,
+    check_account: bool, do_send: bool, timeout: float,
+) -> None:
+    """Show the exact request that would be POSTed for one or more phones.
+
+    Useful as a 'show me what I'm about to do before I do it across 10k rows'
+    check. With --send, sends to a single --phone for real (no state DB changes).
+    """
+    from . import input_loader
+    from .phone import InvalidPhoneError, normalize
+
+    if not phone and not input_path:
+        raise click.UsageError("Pass --phone or --input.")
+    if do_send and not phone:
+        raise click.UsageError("--send requires --phone (single number).")
+
+    if phone:
+        try:
+            phones = [normalize(phone)]
+        except InvalidPhoneError as e:
+            raise click.UsageError(f"invalid phone {phone!r}: {e}") from e
+    else:
+        assert input_path is not None
+        loaded = input_loader.load(input_path)
+        phones = [r.phone for r in loaded.valid[:limit]]
+        click.echo(
+            f"Loaded {len(loaded.valid)} valid, {len(loaded.invalid)} invalid; "
+            f"previewing first {len(phones)}."
+        )
+
+    api_key = load_api_key() if (do_send or check_account) else "<API_KEY>"
+    cfg = SenderConfig(
+        api_key=api_key, template=template,
+        token=token, token2=token2, token3=token3,
+        token10=token10, token20=token20,
+        timeout=timeout,
+    )
+    sender = Sender(cfg)
+
+    if check_account:
+        info = sender.account_info()
+        click.echo(
+            f"Account: credit={info.remaining_credit} "
+            f"expires={info.expire_date or '?'} type={info.type or '?'}"
+        )
+
+    base_url = f"https://api.kavenegar.com/v1/{api_key}/verify/lookup.json"
+    for p in phones:
+        params = sender.build_params(p)
+        click.echo(f"\nPOST {base_url}")
+        for k, v in params.items():
+            click.echo(f"  {k}={v}")
+
+    if do_send:
+        click.echo("\nSending …")
+        result = sender.send(phones[0])
+        click.echo(f"OK: message_id={result.message_id} status={result.status_code}")
+
+
+@cli.command()
+def wizard() -> None:
+    """Interactive guided flow — recommended for new users."""
+    from .wizard import run_wizard
+    run_wizard()
 
 
 if __name__ == "__main__":
