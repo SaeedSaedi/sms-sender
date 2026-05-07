@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator
 
+from .redact import redact_secrets
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS recipients (
     phone           TEXT PRIMARY KEY,
@@ -101,29 +103,41 @@ class StateStore:
             return 0
         now = time.time()
         with self._tx() as conn:
-            before = conn.execute("SELECT COUNT(*) FROM recipients").fetchone()[0]
+            before = conn.total_changes
             conn.executemany(
                 "INSERT OR IGNORE INTO recipients "
                 "(phone, raw, status, first_seen_at) VALUES (?, ?, ?, ?)",
                 [(p, r, PENDING, now) for p, r in rows],
             )
-            after = conn.execute("SELECT COUNT(*) FROM recipients").fetchone()[0]
-        return after - before
+            return conn.total_changes - before
 
     def record_invalid(self, raw: str, reason: str) -> None:
-        """Persist a structurally invalid input as a permanent failure.
+        """Persist a single structurally invalid input as a permanent failure.
 
-        Keyed by `raw` (synthetic phone column) to keep the PK contract;
-        prefixed with `INVALID:` so it can never collide with a real number.
+        Prefer `record_invalid_many` when seeding from a parsed input — this
+        single-row variant runs its own transaction.
         """
+        self.record_invalid_many([(raw, reason)])
+
+    def record_invalid_many(self, rows: list[tuple[str, str]]) -> None:
+        """Persist a batch of invalid inputs in one transaction.
+
+        Each row is keyed by a synthetic `INVALID:<raw>` phone so it can't
+        collide with real numbers and so re-feeding the same input is a no-op.
+        """
+        if not rows:
+            return
         now = time.time()
-        synthetic = f"INVALID:{raw}"
+        payload = [
+            (f"INVALID:{raw}", raw, FAILED_PERMANENT, reason, now, now)
+            for raw, reason in rows
+        ]
         with self._tx() as conn:
-            conn.execute(
+            conn.executemany(
                 "INSERT OR IGNORE INTO recipients "
                 "(phone, raw, status, attempts, last_error, first_seen_at, last_attempt_at) "
                 "VALUES (?, ?, ?, 0, ?, ?, ?)",
-                (synthetic, raw, FAILED_PERMANENT, reason, now, now),
+                payload,
             )
 
     # ---------- run lifecycle ----------
@@ -142,7 +156,7 @@ class StateStore:
         """On startup, any `in_flight` row is from a prior crash — reclaim it."""
         with self._tx() as conn:
             cur = conn.execute(
-                f"UPDATE recipients SET status=? WHERE status=?",
+                "UPDATE recipients SET status=? WHERE status=?",
                 (PENDING, IN_FLIGHT),
             )
             return cur.rowcount
@@ -189,7 +203,7 @@ class StateStore:
         with self._tx() as conn:
             conn.execute(
                 "UPDATE recipients SET status=?, status_code=?, last_error=? WHERE phone=?",
-                (target, status_code, error, phone),
+                (target, status_code, redact_secrets(error), phone),
             )
 
     # ---------- reporting ----------

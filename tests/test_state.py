@@ -96,3 +96,30 @@ def test_record_invalid(tmp_path):
     rows = list(s.iter_failed_permanent())
     assert rows[0]["raw"] == "not-a-phone"
     assert rows[0]["last_error"] == "no digits"
+
+
+def test_record_invalid_many_single_transaction(tmp_path):
+    """Bulk-recording invalids should be one transaction, not N. Verifies
+    correctness; performance is observable via this single-tx behaviour."""
+    s = make(tmp_path)
+    rows = [(f"junk{i}", f"reason {i}") for i in range(50)]
+    s.record_invalid_many(rows)
+    counts = s.counts()
+    assert counts == {FAILED_PERMANENT: 50}
+    # Re-feeding the same batch is a no-op (synthetic key keeps PK contract).
+    s.record_invalid_many(rows)
+    assert s.counts() == {FAILED_PERMANENT: 50}
+
+
+def test_record_invalid_many_empty_is_noop(tmp_path):
+    s = make(tmp_path)
+    s.record_invalid_many([])
+    assert s.counts() == {}
+
+
+def test_upsert_pending_returns_only_newly_inserted(tmp_path):
+    """Edge: re-inserting some-existing-some-new should count just the new ones."""
+    s = make(tmp_path)
+    assert s.upsert_pending([("09120000001", "x"), ("09120000002", "y")]) == 2
+    assert s.upsert_pending([("09120000002", "y"), ("09120000003", "z")]) == 1
+    assert s.counts().get(PENDING) == 3

@@ -17,6 +17,7 @@ from tenacity import (
 )
 
 from .classifier import Action, classify
+from .redact import redact_secrets
 
 logger = logging.getLogger(__name__)
 
@@ -118,13 +119,29 @@ class _KavenegarHTTP:
         try:
             resp = self._session.post(url, data=params or {}, timeout=self._timeout)
         except requests.exceptions.RequestException as e:
-            raise HTTPException(str(e)) from e
+            raise HTTPException(redact_secrets(str(e))) from e
         try:
             body = resp.json()
         except ValueError as e:
-            raise HTTPException(f"non-json response (http {resp.status_code}): {e}") from e
+            # Non-JSON body (HTML 5xx page, gateway error, garbled response).
+            # Permanent — retrying won't fix a misconfigured upstream that
+            # serves HTML where JSON is expected.
+            raise PermanentSendError(
+                resp.status_code,
+                redact_secrets(f"non-json response (http {resp.status_code}): {e}"),
+            ) from e
+        if not isinstance(body, dict) or "return" not in body:
+            raise PermanentSendError(
+                None,
+                f"malformed response (no `return` key): {str(body)[:200]}",
+            )
         ret = body.get("return") or {}
         status = ret.get("status")
+        if not isinstance(status, int):
+            raise PermanentSendError(
+                None,
+                f"malformed response (status not int): status={status!r}",
+            )
         if status != 200:
             raise APIException(f"APIException[{status}] {ret.get('message', '')}")
         return body
@@ -202,11 +219,17 @@ class Sender:
                     return self._do_call(phone)
         except RetryError as e:
             inner = e.last_attempt.exception()
-            assert isinstance(inner, _RetriableSendError)
-            # Surface as a generic SendError that the caller treats as retriable-failed.
-            raise SendError(inner.status_code, f"retries exhausted: {inner.message}") from e
-        # Unreachable — Retrying either returns or raises.
-        raise RuntimeError("unreachable")
+            if isinstance(inner, _RetriableSendError):
+                raise SendError(
+                    inner.status_code, f"retries exhausted: {inner.message}"
+                ) from e
+            # Should not happen — tenacity only retries _RetriableSendError —
+            # but if it ever does, surface the original cause faithfully.
+            raise SendError(None, f"retries exhausted: {inner!r}") from e
+        # `Retrying` always either `return`s from inside the loop or raises
+        # `RetryError`, so this line is unreachable in practice. mypy/pyright
+        # need a final return path, hence the explicit raise.
+        raise SendError(None, "tenacity loop exited without result")
 
     def account_info(self) -> AccountInfo:
         """Fetch account info (credit, expiry, plan). Raises HaltError on auth issues."""
