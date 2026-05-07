@@ -28,3 +28,6 @@ numbers.csv
 
 # Local profile config — may contain campaign-specific tokens / template names
 sms-sender.toml
+
+# Local review / planning notes (not part of the project)
+audit/
