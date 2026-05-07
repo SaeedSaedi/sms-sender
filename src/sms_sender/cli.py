@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any, Callable, TypeVar
@@ -12,24 +13,45 @@ import click
 from . import logging_config
 from .config import load_api_key
 from .notify import notify
+from .phone import InvalidPhoneError, normalize as normalize_phone
 from .profile import ProfileError, load_profile, to_default_map
 from .rate import parse_rate
 from .runner import format_report, make_runner
 from .sender import Sender, SenderConfig
 from .state import StateStore
 
+TEST_NUMBER_ENV = "SMS_SENDER_TEST_NUMBER"
+
 logger = logging.getLogger(__name__)
 
 F = TypeVar("F", bound=Callable[..., Any])
 
+# Kavenegar's token-format rules. token/2/3 reject spaces entirely; token10
+# allows up to 5; token20 up to 8. Validating at the CLI saves a wasted
+# preflight round-trip on misuse.
+_TOKEN_MAX_SPACES = {"token": 0, "token2": 0, "token3": 0, "token10": 5, "token20": 8}
 
-_PROFILE_COMMANDS = ("send", "retry-failed", "preview", "status", "export-failed", "reset", "purge", "dry-run")
+
+def _validate_token(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
+    if value is None:
+        return None
+    name = param.name or ""
+    limit = _TOKEN_MAX_SPACES.get(name)
+    if limit is None:
+        return value
+    spaces = value.count(" ")
+    if spaces > limit:
+        raise click.BadParameter(
+            f"--{name} allows at most {limit} space(s); got {spaces}",
+            ctx=ctx, param=param,
+        )
+    return value
 
 
 @click.group(invoke_without_command=True)
 @click.option(
     "--config", "config_path", default=None, type=click.Path(dir_okay=False),
-    help=f"TOML config file (defaults to ./sms-sender.toml if present).",
+    help="TOML config file (defaults to ./sms-sender.toml if present).",
 )
 @click.option(
     "--profile", "profile_name", default=None,
@@ -43,7 +65,9 @@ def cli(ctx: click.Context, config_path: str | None, profile_name: str | None) -
     except ProfileError as e:
         raise click.UsageError(str(e)) from e
     if values:
-        ctx.default_map = to_default_map(values, list(_PROFILE_COMMANDS))
+        # Derive the command list from the group itself so adding a new
+        # subcommand automatically picks up profile defaults.
+        ctx.default_map = to_default_map(values, list(cli.commands.keys()))
     # Bare `sms-sender` in a TTY launches the wizard; otherwise show help.
     if ctx.invoked_subcommand is None:
         if sys.stdin.isatty() and sys.stdout.isatty():
@@ -62,11 +86,16 @@ def _send_options(f: F) -> F:
             help="Path to a .txt (one number per line) or .csv (first cell per row).",
         ),
         click.option("--template", required=True, help="Kavenegar template name."),
-        click.option("--token", default=None, help="Static token value (no spaces)."),
-        click.option("--token2", default=None, help="Static token2 value (no spaces)."),
-        click.option("--token3", default=None, help="Static token3 value (no spaces)."),
-        click.option("--token10", default=None, help="Static token10 value (up to 5 spaces)."),
-        click.option("--token20", default=None, help="Static token20 value (up to 8 spaces)."),
+        click.option("--token", default=None, callback=_validate_token,
+                     help="Static token value (no spaces)."),
+        click.option("--token2", default=None, callback=_validate_token,
+                     help="Static token2 value (no spaces)."),
+        click.option("--token3", default=None, callback=_validate_token,
+                     help="Static token3 value (no spaces)."),
+        click.option("--token10", default=None, callback=_validate_token,
+                     help="Static token10 value (up to 5 spaces)."),
+        click.option("--token20", default=None, callback=_validate_token,
+                     help="Static token20 value (up to 8 spaces)."),
         click.option("--workers", default=5, show_default=True, type=int),
         click.option("--max-attempts", default=5, show_default=True, type=int),
         click.option("--timeout", default=15.0, show_default=True, type=float),
@@ -82,8 +111,23 @@ def _send_options(f: F) -> F:
         ),
         click.option(
             "--smoke-test", is_flag=True,
-            help="Send to the first phone synchronously and abort if it fails. "
-                 "Catches bad template/tokens before fanning out.",
+            help="Send to the first claimable phone (DB order, not input order) "
+                 "synchronously and abort if it fails. Catches bad "
+                 "template/tokens before fanning out across the rest.",
+        ),
+        click.option(
+            "--approval-test/--no-approval-test", default=False,
+            help=f"Send a single test SMS to the operator's own number, then "
+                 f"prompt y/N at the terminal before fanning out to the rest. "
+                 f"The number comes from --test-number or the {TEST_NUMBER_ENV} "
+                 f"env var. Out-of-band: the test send does not touch the state "
+                 f"DB, so a number that is also in the input file still gets a "
+                 f"normal send through the regular pipeline.",
+        ),
+        click.option(
+            "--test-number", default=None,
+            help=f"Phone number for --approval-test. Overrides the "
+                 f"{TEST_NUMBER_ENV} env var.",
         ),
         click.option(
             "--no-preflight", is_flag=True,
@@ -110,13 +154,34 @@ def _send_options(f: F) -> F:
     return f
 
 
+def _resolve_test_number(approval_test: bool, test_number: str | None) -> str | None:
+    """Pick the test number from --test-number or the env var, normalize it.
+
+    Returns None when --approval-test is off. When it's on, requires a number
+    from one of the two sources and validates it as an Iranian mobile. Caller
+    is responsible for loading `.env` (via `load_api_key`) before this runs.
+    """
+    if not approval_test:
+        return None
+    raw = test_number or os.environ.get(TEST_NUMBER_ENV)
+    if not raw:
+        raise click.UsageError(
+            f"--approval-test requires --test-number or the {TEST_NUMBER_ENV} env var"
+        )
+    try:
+        return normalize_phone(raw)
+    except InvalidPhoneError as e:
+        raise click.UsageError(f"invalid test number {raw!r}: {e}") from e
+
+
 def _do_send(
     *, input_path: str, template: str,
     token: str | None, token2: str | None, token3: str | None,
     token10: str | None, token20: str | None,
     workers: int, max_attempts: int, timeout: float, backoff_max: float,
     db_path: str, log_file: str,
-    smoke_test: bool, no_preflight: bool, rate: str | None,
+    smoke_test: bool, approval_test: bool, test_number: str | None,
+    no_preflight: bool, rate: str | None,
     notify_target: str | None,
     verbose: bool, quiet: bool,
 ) -> None:
@@ -132,7 +197,10 @@ def _do_send(
     except ValueError as e:
         raise click.UsageError(str(e)) from e
 
+    # `load_api_key` calls `load_dotenv`, which makes `.env`-set values
+    # (including SMS_SENDER_TEST_NUMBER) visible to `_resolve_test_number`.
     api_key = load_api_key()
+    approval_test_number = _resolve_test_number(approval_test, test_number)
     sender_cfg = SenderConfig(
         api_key=api_key,
         template=template,
@@ -146,6 +214,7 @@ def _do_send(
         input_path=input_path, db_path=db_path, sender_cfg=sender_cfg, workers=workers,
         preflight=not no_preflight, smoke_test=smoke_test,
         rate_per_sec=rate_per_sec,
+        approval_test_number=approval_test_number,
     )
     summary = runner.run()
 
@@ -177,6 +246,10 @@ def retry_failed(include_permanent: bool, **kwargs: Any) -> None:
 
     Sugar for: `sms-sender reset --status failed_retriable && sms-sender send …`
     With `--include-permanent`, also resets failed_permanent.
+
+    Note: the reset is DB-wide — every `failed_retriable` row in the state
+    DB is promoted, regardless of whether it appears in `--input`. The
+    subsequent `send` then claims them all (unless they were already sent).
     """
     store = StateStore(kwargs["db_path"])
     n = store.reset_status("failed_retriable")
@@ -222,19 +295,32 @@ def export_failed(db_path: str, out: str) -> None:
 
 
 @cli.command()
-@click.option("--state", "db_path", default="./sms_state.db", show_default=True)
+@click.option("--state", "db_path", default="./sms_state.db", show_default=True,
+              help="Path to the SQLite state DB.")
 @click.option(
     "--status", "from_status", default="failed_permanent", show_default=True,
     type=click.Choice(["failed_permanent", "failed_retriable", "sent"]),
     help="Which status to promote back to pending so it gets resent.",
 )
-def reset(db_path: str, from_status: str) -> None:
+@click.option("--yes", "-y", is_flag=True,
+              help="Skip the confirmation prompt for risky resets (e.g. --status sent).")
+def reset(db_path: str, from_status: str, yes: bool) -> None:
     """Promote rows in a given status back to pending so the next `send` retries them.
 
     Useful after fixing a template/token issue: rows that were marked
     `failed_permanent` won't be retried otherwise.
+
+    `--status sent` is a footgun — it will cause the next `send` to deliver
+    a second SMS to numbers that have already been sent to. We require an
+    explicit confirmation (or `--yes`) for that case.
     """
     store = StateStore(db_path)
+    if from_status == "sent" and not yes:
+        click.confirm(
+            "Resetting status=sent will cause the next `send` to deliver a "
+            "SECOND SMS to every already-sent recipient. Are you sure?",
+            abort=True,
+        )
     n = store.reset_status(from_status)
     click.echo(f"Reset {n} rows from {from_status} → pending")
 
@@ -285,11 +371,11 @@ def dry_run(input_path: str) -> None:
 
 @cli.command()
 @click.option("--template", required=True, help="Kavenegar template name.")
-@click.option("--token", default=None)
-@click.option("--token2", default=None)
-@click.option("--token3", default=None)
-@click.option("--token10", default=None)
-@click.option("--token20", default=None)
+@click.option("--token", default=None, callback=_validate_token)
+@click.option("--token2", default=None, callback=_validate_token)
+@click.option("--token3", default=None, callback=_validate_token)
+@click.option("--token10", default=None, callback=_validate_token)
+@click.option("--token20", default=None, callback=_validate_token)
 @click.option(
     "--phone", default=None,
     help="Single phone to preview (alternative to --input).",

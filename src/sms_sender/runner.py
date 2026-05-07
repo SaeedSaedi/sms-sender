@@ -9,11 +9,13 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 from tqdm import tqdm
 
 from . import input_loader
 from .rate import TokenBucket
+from .redact import redact_secrets
 from .sender import HaltError, PermanentSendError, SendError, Sender, SenderConfig
 from .state import StateStore
 
@@ -33,10 +35,34 @@ class RunSummary:
     elapsed_sec: float = 0.0
     sends_per_sec: float = 0.0
     top_errors: tuple[tuple[str, int], ...] = field(default_factory=tuple)
+    # Recipients that were claimed by a peer worker, were already `sent`, or
+    # otherwise lost the claim race. Useful for diagnosing resume runs.
+    already_done: int = 0
 
 
 class PreflightError(Exception):
     """Preflight check failed — abort before fanning out."""
+
+
+def _click_approval_prompt(test_number: str, recipient_count: int) -> bool:
+    """Default human-in-the-loop gate after a successful approval-test SMS.
+
+    Reads from stdin via Click. EOF / Ctrl-C / closed stdin (CI, piped) all
+    raise click.Abort, which we treat as 'declined' so the run aborts safely
+    instead of hanging or proceeding without confirmation.
+    """
+    import click
+    try:
+        return click.confirm(
+            f"\nTest SMS sent to {test_number}. Did you receive it correctly? "
+            f"Proceed with {recipient_count} recipient(s)?",
+            default=False,
+        )
+    except click.Abort:
+        return False
+
+
+ApprovalPrompt = Callable[[str, int], bool]
 
 
 class Runner:
@@ -50,6 +76,8 @@ class Runner:
         preflight: bool = True,
         smoke_test: bool = False,
         rate_per_sec: float = 0.0,
+        approval_test_number: str | None = None,
+        approval_prompt: ApprovalPrompt | None = None,
     ):
         self.input_path = Path(input_path)
         self.state = state
@@ -57,6 +85,8 @@ class Runner:
         self.workers = workers
         self.preflight = preflight
         self.smoke_test = smoke_test
+        self.approval_test_number = approval_test_number
+        self._approval_prompt: ApprovalPrompt = approval_prompt or _click_approval_prompt
         self._bucket = TokenBucket(rate_per_sec)
         self._stop = threading.Event()
         self._error_counter: Counter[str] = Counter()
@@ -64,7 +94,8 @@ class Runner:
 
     def _record_error(self, status_code: int | None, message: str) -> None:
         """Bucket failures by `[code] message` for the end-of-run report."""
-        key = f"[{status_code if status_code is not None else 'net'}] {message}"
+        safe = redact_secrets(message)
+        key = f"[{status_code if status_code is not None else 'net'}] {safe}"
         with self._error_lock:
             self._error_counter[key] += 1
 
@@ -101,6 +132,7 @@ class Runner:
             result = self.sender.send(phone)
         except HaltError as e:
             self.state.mark_failed(phone, e.status_code, e.message, permanent=False)
+            self._record_error(e.status_code, e.message)
             logger.error(
                 "halt",
                 extra={"phone": phone, "status": e.status_code, "detail": e.message},
@@ -146,12 +178,11 @@ class Runner:
             return ("sent", phone)
 
     def _preflight(self, phones: list[str]) -> None:
-        """Account check + optional smoke send. Raises PreflightError on failure.
+        """Account info check. Raises PreflightError on auth/quota failures.
 
-        - account_info: catches bad API key / disabled account before fan-out.
-        - smoke_test: sends synchronously to the first claimable phone. If it
-          raises HaltError or PermanentSendError, we abort instead of burning
-          credit on a wrong template across N workers.
+        Catches bad API key / disabled account / zero credit before fan-out.
+        Network blips on this endpoint are logged and ignored — the actual
+        sends will surface those if they persist.
         """
         if not self.preflight:
             return
@@ -171,29 +202,83 @@ class Runner:
         except SendError as e:
             # Network blip on the account endpoint — non-fatal, log and move on.
             logger.warning("preflight_account_unreachable", extra={"detail": e.message})
-        else:
-            logger.info(
-                "preflight_account_ok",
-                extra={
-                    "remaining_credit": info.remaining_credit,
-                    "expire_date": info.expire_date,
-                    "type": info.type,
-                },
-            )
-            if info.remaining_credit is not None:
-                tqdm.write(
-                    f"Account: credit={info.remaining_credit} "
-                    f"expires={info.expire_date or '?'} type={info.type or '?'}"
-                )
-                if phones and info.remaining_credit <= 0:
-                    raise PreflightError(
-                        f"remaining credit is {info.remaining_credit}; top up before sending"
-                    )
+            return
 
-        if not self.smoke_test or not phones:
+        logger.info(
+            "preflight_account_ok",
+            extra={
+                "remaining_credit": info.remaining_credit,
+                "expire_date": info.expire_date,
+                "type": info.type,
+            },
+        )
+        if info.remaining_credit is not None:
+            tqdm.write(
+                f"Account: credit={info.remaining_credit} "
+                f"expires={info.expire_date or '?'} type={info.type or '?'}"
+            )
+            if phones and info.remaining_credit <= 0:
+                raise PreflightError(
+                    f"remaining credit is {info.remaining_credit}; top up before sending"
+                )
+
+    def _approval_test(self, phones: list[str]) -> None:
+        """Send to the operator's own number out-of-band, then prompt y/N.
+
+        The send bypasses the state DB, the rate limiter, and the executor —
+        same model as `account_info`. It runs through `Sender.send`, so it
+        gets the normal retry policy and error classification.
+
+        On any send failure (Halt, Permanent, retries-exhausted) the run
+        aborts before the prompt — there's no point asking the operator to
+        approve something that didn't reach them. The approval prompt also
+        treats a closed stdin / EOF as 'declined' so CI is safe.
+        """
+        if not self.approval_test_number:
+            return
+
+        target = self.approval_test_number
+        logger.info("approval_test_target", extra={"phone": target})
+        tqdm.write(f"Approval test: sending to {target} synchronously …")
+
+        try:
+            result = self.sender.send(target)
+        except HaltError as e:
+            self._record_error(e.status_code, e.message)
+            raise PreflightError(
+                f"approval test send to {target} halted: [{e.status_code}] {e.message}"
+            ) from e
+        except SendError as e:
+            # PermanentSendError or retries-exhausted SendError — both fatal here.
+            self._record_error(e.status_code, e.message)
+            raise PreflightError(
+                f"approval test send to {target} failed: [{e.status_code}] {e.message}"
+            ) from e
+
+        logger.info(
+            "approval_test_sent",
+            extra={"phone": target, "msg_id": result.message_id},
+        )
+        approved = self._approval_prompt(target, len(phones))
+        if not approved:
+            logger.warning("approval_declined", extra={"phone": target})
+            raise PreflightError("approval declined by operator; aborting before fan-out")
+        logger.info("approval_granted", extra={"phone": target})
+        tqdm.write("Approval granted.")
+
+    def _smoke_test_run(self, phones: list[str]) -> None:
+        """Synchronous send to phones[0]. Raises PreflightError on non-success.
+
+        Gated by `self.smoke_test` AND `self.preflight` (preserves prior
+        behavior — `--no-preflight` disables this too). If it raises HaltError
+        or PermanentSendError, we abort instead of burning credit on a wrong
+        template across N workers.
+        """
+        if not (self.smoke_test and self.preflight) or not phones:
             return
 
         target = phones[0]
+        logger.info("smoke_test_target", extra={"phone": target})
         tqdm.write(f"Smoke test: sending to {target} synchronously …")
         outcome, _ = self._send_one(target)
         if outcome != "sent":
@@ -219,8 +304,10 @@ class Runner:
         )
 
         # 2. Seed state.
-        for inv in loaded.invalid:
-            self.state.record_invalid(inv.raw, inv.reason)
+        if loaded.invalid:
+            self.state.record_invalid_many(
+                [(inv.raw, inv.reason) for inv in loaded.invalid]
+            )
         new_count = self.state.upsert_pending([(r.phone, r.raw) for r in loaded.valid])
         reclaimed = self.state.reset_orphan_in_flight()
         if reclaimed:
@@ -237,13 +324,16 @@ class Runner:
             },
         )
 
-        sent = failed_permanent = failed_retriable = 0
+        sent = failed_permanent = failed_retriable = already_done = 0
         halted = False
         started = time.monotonic()
 
-        # 4. Preflight (account check + optional smoke send to phones[0]).
+        # 4. Preflight: account check → optional approval-test (manual gate)
+        #    → optional smoke-test (auto). Any failure aborts before fan-out.
         try:
             self._preflight(phones)
+            self._approval_test(phones)
+            self._smoke_test_run(phones)
         except PreflightError as e:
             logger.error("preflight_failed", extra={"detail": str(e)})
             tqdm.write(f"Preflight failed: {e}")
@@ -278,6 +368,8 @@ class Runner:
                                 failed_permanent += 1
                             elif outcome == "failed_retriable":
                                 failed_retriable += 1
+                            elif outcome in ("already_done", "skipped"):
+                                already_done += 1
                             bar.update(1)
                             processed = sent + failed_permanent + failed_retriable
                             ok_pct = (sent / processed * 100.0) if processed else 0.0
@@ -294,8 +386,8 @@ class Runner:
         summary = self._build_summary(
             loaded=loaded, new_count=new_count,
             sent=sent, failed_permanent=failed_permanent,
-            failed_retriable=failed_retriable, halted=halted,
-            started=started,
+            failed_retriable=failed_retriable, already_done=already_done,
+            halted=halted, started=started,
         )
         logger.info("run_end", extra=_summary_log_fields(summary))
         return summary
@@ -303,7 +395,7 @@ class Runner:
     def _build_summary(
         self, *, loaded, new_count: int,
         sent: int, failed_permanent: int, failed_retriable: int,
-        halted: bool, started: float,
+        already_done: int = 0, halted: bool, started: float,
     ) -> RunSummary:
         elapsed = max(0.0, time.monotonic() - started)
         rate = (sent / elapsed) if elapsed > 0 else 0.0
@@ -321,11 +413,14 @@ class Runner:
             elapsed_sec=round(elapsed, 3),
             sends_per_sec=round(rate, 3),
             top_errors=top,
+            already_done=already_done,
         )
 
 
 def _summary_log_fields(s: RunSummary) -> dict:
     """Flatten a RunSummary for the structured logger (no tuple/list values)."""
+    # Join up to the top 3 buckets so all of them appear in one greppable line.
+    top = " | ".join(f"{m} (x{c})" for m, c in s.top_errors) if s.top_errors else None
     return {
         "total_input": s.total_input,
         "new_recipients": s.new_recipients,
@@ -334,10 +429,11 @@ def _summary_log_fields(s: RunSummary) -> dict:
         "sent": s.sent,
         "failed_permanent": s.failed_permanent,
         "failed_retriable": s.failed_retriable,
+        "already_done": s.already_done,
         "halted": s.halted,
         "elapsed_sec": s.elapsed_sec,
         "sends_per_sec": s.sends_per_sec,
-        "top_error": s.top_errors[0][0] if s.top_errors else None,
+        "top_errors": top,
     }
 
 
@@ -345,12 +441,16 @@ def format_report(s: RunSummary) -> str:
     """Render a human-readable end-of-run report."""
     lines = [
         "─" * 60,
-        f"Run summary",
+        "Run summary",
         "─" * 60,
         f"  sent              {s.sent}",
         f"  failed_permanent  {s.failed_permanent}",
         f"  failed_retriable  {s.failed_retriable}",
         f"  invalid           {s.invalid}",
+    ]
+    if s.already_done:
+        lines.append(f"  already_done      {s.already_done}")
+    lines += [
         f"  halted            {s.halted}",
         f"  elapsed           {s.elapsed_sec:.2f}s ({s.sends_per_sec:.2f} sends/sec)",
     ]
@@ -371,6 +471,7 @@ def make_runner(
     preflight: bool = True,
     smoke_test: bool = False,
     rate_per_sec: float = 0.0,
+    approval_test_number: str | None = None,
 ) -> Runner:
     state = StateStore(db_path)
     sender = Sender(sender_cfg)
@@ -382,4 +483,5 @@ def make_runner(
         preflight=preflight,
         smoke_test=smoke_test,
         rate_per_sec=rate_per_sec,
+        approval_test_number=approval_test_number,
     )

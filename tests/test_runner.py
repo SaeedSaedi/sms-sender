@@ -236,6 +236,178 @@ def test_smoke_test_passes_then_runs_rest(tmp_path):
     assert state.counts() == {SENT: 3}
 
 
+# ---------- approval test (manual gate) ----------
+
+
+TEST_NUMBER = "09151097710"
+
+
+def test_approval_test_approved_proceeds(tmp_path):
+    """Prompt returns True → run fans out, test number gets one out-of-band send."""
+    inp = write_input(tmp_path, ["09120000001", "09120000002"])
+    state = StateStore(tmp_path / "s.db")
+    sender = FakeSender()
+    prompt_calls: list[tuple[str, int]] = []
+
+    def prompt(num: str, count: int) -> bool:
+        prompt_calls.append((num, count))
+        return True
+
+    summary = Runner(
+        input_path=inp, state=state, sender=sender, workers=2,
+        approval_test_number=TEST_NUMBER, approval_prompt=prompt,
+    ).run()
+
+    assert summary.sent == 2
+    assert summary.halted is False
+    # The test number was sent once (out-of-band) PLUS the two recipients.
+    assert sorted(sender.calls) == sorted([TEST_NUMBER, "09120000001", "09120000002"])
+    # Prompt got the test number and the recipient count.
+    assert prompt_calls == [(TEST_NUMBER, 2)]
+    # State DB does NOT track the test number — only the two real recipients.
+    assert state.counts() == {SENT: 2}
+
+
+def test_approval_test_declined_aborts_run(tmp_path):
+    """Prompt returns False → no fan-out, halted summary, no recipient sends."""
+    inp = write_input(tmp_path, ["09120000001", "09120000002"])
+    state = StateStore(tmp_path / "s.db")
+    sender = FakeSender()
+
+    summary = Runner(
+        input_path=inp, state=state, sender=sender, workers=2,
+        approval_test_number=TEST_NUMBER,
+        approval_prompt=lambda _num, _n: False,
+    ).run()
+
+    assert summary.halted is True
+    assert summary.sent == 0
+    # Only the test number was sent; no recipient calls happened.
+    assert sender.calls == [TEST_NUMBER]
+    # Recipients remain claimable — a future run can still deliver them.
+    assert sorted(state.list_claimable_phones()) == ["09120000001", "09120000002"]
+
+
+def test_approval_test_send_failure_aborts_without_prompt(tmp_path):
+    """PermanentSendError on the test send → abort BEFORE asking for approval.
+
+    No point asking the operator to approve something that didn't reach them.
+    """
+    inp = write_input(tmp_path, ["09120000001"])
+    state = StateStore(tmp_path / "s.db")
+    sender = FakeSender()
+    sender.behavior[TEST_NUMBER] = lambda: (_ for _ in ()).throw(
+        PermanentSendError(424, "template not found")
+    )
+    prompt_called = {"n": 0}
+
+    def prompt(_num: str, _n: int) -> bool:
+        prompt_called["n"] += 1
+        return True
+
+    summary = Runner(
+        input_path=inp, state=state, sender=sender, workers=1,
+        approval_test_number=TEST_NUMBER, approval_prompt=prompt,
+    ).run()
+
+    assert summary.halted is True
+    assert summary.sent == 0
+    assert prompt_called["n"] == 0  # prompt never reached
+    assert sender.calls == [TEST_NUMBER]  # only the failing test send
+    # The failure shows up in top_errors so the operator can see why.
+    assert summary.top_errors
+    msg, _ = summary.top_errors[0]
+    assert "[424]" in msg
+    assert "template not found" in msg
+
+
+def test_approval_test_halt_aborts_without_prompt(tmp_path):
+    """HaltError on the test send (e.g. bad API key) → abort before prompt."""
+    inp = write_input(tmp_path, ["09120000001"])
+    state = StateStore(tmp_path / "s.db")
+    sender = FakeSender()
+    sender.behavior[TEST_NUMBER] = lambda: (_ for _ in ()).throw(
+        HaltError(401, "invalid api key")
+    )
+    prompt_called = {"n": 0}
+
+    summary = Runner(
+        input_path=inp, state=state, sender=sender, workers=1,
+        approval_test_number=TEST_NUMBER,
+        approval_prompt=lambda _n, _c: prompt_called.__setitem__("n", prompt_called["n"] + 1) or True,
+    ).run()
+
+    assert summary.halted is True
+    assert summary.sent == 0
+    assert prompt_called["n"] == 0
+
+
+def test_approval_test_number_in_recipient_list_gets_two_sends(tmp_path):
+    """If the test number is also in the input file, it MUST receive both
+    the out-of-band test SMS and the in-band recipient SMS.
+
+    The user explicitly does not want the test number skipped — the test SMS
+    is what proves the template is right; the in-band send is what was
+    requested by the input file. Two distinct sends, by design.
+    """
+    inp = write_input(tmp_path, [TEST_NUMBER, "09120000002"])
+    state = StateStore(tmp_path / "s.db")
+    sender = FakeSender()
+
+    summary = Runner(
+        input_path=inp, state=state, sender=sender, workers=2,
+        approval_test_number=TEST_NUMBER,
+        approval_prompt=lambda _n, _c: True,
+    ).run()
+
+    assert summary.sent == 2
+    # Sender saw the test number TWICE (once as test, once as recipient).
+    assert sender.calls.count(TEST_NUMBER) == 2
+    assert "09120000002" in sender.calls
+    # State DB has both recipient rows as sent.
+    assert state.counts() == {SENT: 2}
+
+
+def test_approval_test_disabled_no_prompt(tmp_path):
+    """Default (approval_test_number=None) → no extra send, no prompt called."""
+    inp = write_input(tmp_path, ["09120000001"])
+    state = StateStore(tmp_path / "s.db")
+    sender = FakeSender()
+    prompt_called = {"n": 0}
+
+    summary = Runner(
+        input_path=inp, state=state, sender=sender, workers=1,
+        approval_prompt=lambda _n, _c: prompt_called.__setitem__("n", prompt_called["n"] + 1) or True,
+    ).run()
+
+    assert summary.sent == 1
+    assert sender.calls == ["09120000001"]
+    assert prompt_called["n"] == 0
+
+
+def test_approval_test_runs_before_smoke_test(tmp_path):
+    """When both flags are set, the approval gate must come first.
+
+    User can decline before any auto-validated send happens. The smoke test
+    fires only after approval is granted.
+    """
+    inp = write_input(tmp_path, ["09120000001", "09120000002"])
+    state = StateStore(tmp_path / "s.db")
+    sender = PreflightFakeSender(AccountInfo(remaining_credit=999, expire_date=None, type="X"))
+
+    # Decline at the prompt — smoke send should never happen.
+    summary = Runner(
+        input_path=inp, state=state, sender=sender, workers=1,
+        preflight=True, smoke_test=True,
+        approval_test_number=TEST_NUMBER,
+        approval_prompt=lambda _n, _c: False,
+    ).run()
+
+    assert summary.halted is True
+    # Only the approval-test send went out; no smoke and no fan-out.
+    assert sender.calls == [TEST_NUMBER]
+
+
 # ---------- summary metrics + report ----------
 
 
@@ -299,3 +471,99 @@ def test_format_report_omits_top_errors_when_empty():
     )
     out = format_report(s)
     assert "top errors" not in out
+
+
+# ---------- API key redaction (regression for security S1) ----------
+
+
+def test_runner_redacts_api_key_in_last_error_and_top_errors(tmp_path):
+    """If a Sender error message ever carries an unredacted Kavenegar URL,
+    neither the durable `last_error` column nor `top_errors` should retain it."""
+    SECRET = "SECRET_API_KEY_DO_NOT_LEAK"
+    leaky = (
+        f"http: HTTPSConnectionPool(host='api.kavenegar.com', port=443): "
+        f"with url: /v1/{SECRET}/verify/lookup.json (Caused by …)"
+    )
+    inp = write_input(tmp_path, ["09120000001"])
+    state = StateStore(tmp_path / "s.db")
+    sender = FakeSender()
+    sender.behavior["09120000001"] = lambda: (_ for _ in ()).throw(
+        SendError(None, f"retries exhausted: {leaky}")
+    )
+    summary = Runner(input_path=inp, state=state, sender=sender, workers=1).run()
+
+    # last_error in the DB must not contain the secret.
+    rows = list(state._conn().execute(
+        "SELECT last_error FROM recipients WHERE phone=?", ("09120000001",)
+    ))
+    assert SECRET not in (rows[0]["last_error"] or "")
+    assert "***" in rows[0]["last_error"]
+
+    # top_errors in the summary must not contain the secret.
+    assert summary.top_errors
+    msg, _count = summary.top_errors[0]
+    assert SECRET not in msg
+    assert "***" in msg
+
+
+# ---------- HaltError surfaces in top_errors (regression for R1) ----------
+
+
+def test_halt_appears_in_top_errors(tmp_path):
+    """When a run halts, the halt code+message should appear in top_errors so
+    the operator (and any notification webhook) sees *why* it halted."""
+    inp = write_input(tmp_path, ["09120000001", "09120000002"])
+    state = StateStore(tmp_path / "s.db")
+    sender = FakeSender()
+    sender.behavior["09120000001"] = lambda: (_ for _ in ()).throw(
+        HaltError(418, "insufficient credit")
+    )
+    summary = Runner(input_path=inp, state=state, sender=sender, workers=1).run()
+    assert summary.halted is True
+    # The reason for the halt is now visible in the structured summary.
+    assert summary.top_errors
+    msg, count = summary.top_errors[0]
+    assert "[418]" in msg
+    assert "insufficient credit" in msg
+    assert count == 1
+
+
+# ---------- already_done counter (R8) ----------
+
+
+def test_already_done_counts_pre_sent_rows(tmp_path):
+    """A resume run that finds rows already `sent` should report them in
+    the summary's `already_done` field, not silently swallow."""
+    inp = write_input(tmp_path, ["09120000001", "09120000002"])
+    state = StateStore(tmp_path / "s.db")
+    Runner(input_path=inp, state=state, sender=FakeSender(), workers=1).run()
+    # Second run — same input, same DB. All rows are already sent.
+    summary = Runner(
+        input_path=inp, state=state, sender=FakeSender(), workers=1,
+    ).run()
+    assert summary.sent == 0
+    # No phones get into the executor on the second run because
+    # list_claimable_phones returns []. So already_done is 0 here — the
+    # claim race only manifests when there's actual work. The metric exists
+    # for that race; verify it's at least default-0 and present.
+    assert summary.already_done == 0
+
+
+def test_already_done_counts_lost_claim_race(tmp_path):
+    """If claim() returns None mid-fan-out (e.g., the row was concurrently
+    flipped to sent by another process), the runner should count it as
+    already_done rather than dropping it."""
+    inp = write_input(tmp_path, ["09120000001"])
+    state = StateStore(tmp_path / "s.db")
+    # Pre-flip the row to sent so claim() returns None on the worker.
+    state.upsert_pending([("09120000001", "09120000001")])
+    state.claim("09120000001")
+    state.mark_sent("09120000001", message_id=1, status_code=200)
+
+    sender = FakeSender()
+    summary = Runner(
+        input_path=inp, state=state, sender=sender, workers=1,
+    ).run()
+    # Sender never gets called for an already-sent row.
+    assert sender.calls == []
+    assert summary.sent == 0

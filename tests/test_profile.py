@@ -100,6 +100,18 @@ def test_to_default_map_empty_input():
     assert to_default_map({}, ["send"]) == {}
 
 
+def test_to_default_map_renames_profile_keys_to_param_names():
+    """Click's default_map is keyed by parameter name, not flag.
+    `state` (flag) must translate to `db_path` (param name)."""
+    out = to_default_map({"state": "/tmp/x.db", "notify": "slack:..."}, ["send", "status"])
+    assert out["send"]["db_path"] == "/tmp/x.db"
+    assert out["send"]["notify_target"] == "slack:..."
+    # The original flag-named keys are NOT carried through (Click would ignore them).
+    assert "state" not in out["send"]
+    assert "notify" not in out["send"]
+    assert out["status"]["db_path"] == "/tmp/x.db"
+
+
 # ---------- CLI integration ----------
 
 
@@ -158,3 +170,23 @@ def test_unknown_profile_errors(tmp_path, monkeypatch):
     result = CliRunner().invoke(cli, ["--profile", "missing", "preview", "--phone", "0912"])
     assert result.exit_code != 0
     assert "not found" in result.output
+
+
+def test_profile_state_key_flows_to_status_command(tmp_path, monkeypatch):
+    """Regression: `[profile.default] state = "..."` must apply to `status`,
+    not just to send/retry-failed. The flag name is `state`, the python param
+    name is `db_path` — the profile loader must bridge the two."""
+    from sms_sender.state import StateStore
+
+    custom_db = tmp_path / "custom_state.db"
+    StateStore(custom_db).upsert_pending([("09120000001", "09120000001")])
+
+    _write(tmp_path, f"""
+        [profile.default]
+        state = "{custom_db.as_posix()}"
+    """)
+    monkeypatch.chdir(tmp_path)
+    # No --state on the command line — it must come from the profile.
+    result = CliRunner().invoke(cli, ["status"])
+    assert result.exit_code == 0, result.output
+    assert "pending" in result.output  # the row from the custom DB

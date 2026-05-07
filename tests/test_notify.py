@@ -143,3 +143,45 @@ def test_http_400_does_not_raise(monkeypatch):
 ])
 def test_redact(target, expected_prefix):
     assert _redact(target) == expected_prefix
+
+
+# ---------- regression: halt + leaked-key surfaces clean ----------
+
+
+def test_slack_payload_contains_halt_top_error(monkeypatch):
+    """A halted run with a halt entry in top_errors should put the halt
+    code+message in the Slack message body."""
+    fp = FakePost()
+    monkeypatch.setattr(notify_module.requests, "post", fp)
+    summary = RunSummary(
+        total_input=5, new_recipients=5, duplicates_collapsed=0, invalid=0,
+        sent=2, failed_permanent=0, failed_retriable=1, halted=True,
+        elapsed_sec=1.0, sends_per_sec=2.0,
+        top_errors=(("[418] insufficient credit", 1),),
+    )
+    notify("slack:https://hooks.slack.com/x", summary)
+    body = fp.calls[0]["json"]["text"]
+    assert "halt" in body.lower()
+    assert "[418] insufficient credit" in body
+
+
+def test_generic_payload_never_carries_api_key_when_summary_redacted(monkeypatch):
+    """If summary.top_errors entries are pre-redacted (which is what the
+    runner's _record_error guarantees), the JSON payload won't leak."""
+    SECRET = "SECRET_API_KEY_DO_NOT_LEAK"
+    fp = FakePost()
+    monkeypatch.setattr(notify_module.requests, "post", fp)
+    # Top-error message uses the *redacted* form, as the runner would store it.
+    summary = RunSummary(
+        total_input=3, new_recipients=3, duplicates_collapsed=0, invalid=0,
+        sent=1, failed_permanent=0, failed_retriable=2, halted=False,
+        elapsed_sec=0.5, sends_per_sec=2.0,
+        top_errors=(
+            ("[net] http: Max retries with url: /v1/***/verify/lookup.json", 2),
+        ),
+    )
+    notify("https://example.com/hook", summary)
+    payload = fp.calls[0]["json"]
+    serialized = str(payload)
+    assert SECRET not in serialized
+    assert "***" in serialized

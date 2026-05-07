@@ -12,6 +12,7 @@ pip install -e ".[dev]"
 # Run the CLI (entry point is `sms-sender = sms_sender.cli:cli`)
 sms-sender send --input ./numbers.csv --template my-template --token 12345
 sms-sender send --input … --template … --token … --smoke-test  # synchronous probe-send first
+sms-sender send --input … --approval-test --test-number 09…    # send to your own #, prompt y/N
 sms-sender preview --phone 09… --template … --token …           # show POST body, no API call
 sms-sender preview --phone 09… --template … --token … --send    # actually send the one number
 sms-sender retry-failed --input … --template … --token …        # reset failed_retriable + send
@@ -31,7 +32,7 @@ pytest tests/test_state.py::test_claim   # one test
 pytest -k "claim or in_flight"           # by name pattern
 ```
 
-`KAVENEGAR_API_KEY` must be set (env or `.env` in cwd) for `send`. Other commands work without it.
+`KAVENEGAR_API_KEY` must be set (env or `.env` in cwd) for `send`. Other commands work without it. `SMS_SENDER_TEST_NUMBER` (optional) provides the default phone for `--approval-test`; the `--test-number` flag overrides it.
 
 ## Architecture
 
@@ -70,14 +71,15 @@ cli.send → make_runner → Runner.run
 
 `load_profile(config_path, profile_name)` reads a TOML file with `[profile.<name>]` sections, merging `[profile.default]` with the named profile (named wins). `to_default_map(values, commands)` expands the flat dict into Click's per-command `default_map`, so the same profile feeds every subcommand. The `cli` group is decorated with `--config` and `--profile` and sets `ctx.default_map` before dispatching to subcommands. Resolution order is **CLI flag > named profile > [profile.default] > built-in default**, which falls out of how Click consults `default_map` only when an option wasn't explicitly passed.
 
-### Preflight (`Runner._preflight`)
+### Preflight (`Runner._preflight` → `_approval_test` → `_smoke_test_run`)
 
-Before fan-out, two best-effort checks:
+Before fan-out, three best-effort checks run in order. Any `PreflightError` aborts the run with `halted=True` and exit code 2.
 
-- **Account check** (`Sender.account_info`) — calls Kavenegar `account/info`. A `HaltError` (401/403/418/etc.) aborts the run *before* any send. A non-halt `SendError` (e.g., transient network) just logs a warning and continues. Zero remaining credit also halts.
-- **Smoke test** — opt-in via `--smoke-test`. The first claimable phone is sent **synchronously** through the same `_send_one` path. If the outcome is anything other than `sent` (e.g., `PermanentSendError` for a missing template), the run aborts. The smoke phone consumes its DB row exactly once; subsequent fan-out skips it.
+- **Account check** (`Sender.account_info`) — calls Kavenegar `account/info`. A `HaltError` (401/403/418/etc.) aborts the run *before* any send. A non-halt `SendError` (e.g., transient network) just logs a warning and continues. Zero remaining credit also halts. Gated by `Runner.preflight` (default true).
+- **Approval test** — opt-in via `--approval-test` + `--test-number 09…` (or `SMS_SENDER_TEST_NUMBER` env). Sends one SMS to the operator's own number out-of-band — bypassing the state DB, the rate limiter, and the executor (same model as `account_info`) — then prompts `y/N` at the terminal. Decline / EOF / closed stdin all abort. If the test send itself fails (Halt, Permanent, retries-exhausted), the run aborts *before* the prompt — there's no point asking the operator to approve something they didn't receive. Independent of `Runner.preflight`. **The test number is NOT removed from the recipient list** — if it appears in the input file it gets a normal in-band send too, by design.
+- **Smoke test** — opt-in via `--smoke-test`. The first claimable phone is sent **synchronously** through the same `_send_one` path. If the outcome is anything other than `sent` (e.g., `PermanentSendError` for a missing template), the run aborts. The smoke phone consumes its DB row exactly once; subsequent fan-out skips it. Gated by `Runner.preflight` AND `Runner.smoke_test`.
 
-Both are gated by `Runner.preflight` (default true). Tests pass `preflight=False` or use a `FakeSender` without `account_info` — `_preflight` soft-skips the account call when the sender doesn't expose one.
+The approval test runs *before* the smoke test on purpose: the operator gets a chance to manually decline before any auto-validated send happens. Tests inject a custom `approval_prompt` callable; the default uses `click.confirm` and treats `click.Abort` (closed stdin, Ctrl-C) as decline so CI is safe.
 
 ### State machine (owned by `state.py`)
 
@@ -117,7 +119,7 @@ Canonical form is `09XXXXXXXXX`. The normalizer accepts `+98…`, `0098…`, `98
 |---|---|
 | 0 | every recipient sent |
 | 1 | run finished with some `failed_permanent` or `failed_retriable` |
-| 2 | `HaltError` aborted the run — fix account/auth/quota, then re-run |
+| 2 | `HaltError`, preflight failure, or declined approval-test aborted the run |
 
 ## Conventions
 

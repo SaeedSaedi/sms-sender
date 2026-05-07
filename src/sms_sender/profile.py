@@ -122,13 +122,31 @@ def list_profiles(config_path: str | Path | None = None) -> list[str]:
     return names
 
 
+# Profile keys whose name differs from the underlying Click parameter name.
+# Click looks up `default_map[<command>][<param_name>]`, so a profile that
+# uses the flag name (e.g. `state =`) needs to be remapped to the python
+# identifier the option binds to (`db_path`). Keep this list in sync with
+# any `--flag, "param_name"` declarations in cli.py.
+_PROFILE_KEY_RENAMES: dict[str, str] = {
+    "state": "db_path",
+    "notify": "notify_target",
+}
+
+
 def to_default_map(values: dict[str, Any], commands: list[str]) -> dict[str, dict[str, Any]]:
     """Expand a flat profile dict into a Click `default_map` keyed by command.
 
     Each subcommand gets the same set of values; Click ignores keys that don't
     match an option of that command, so the same profile can serve `send`,
     `retry-failed`, `preview`, etc.
+
+    Profile keys that differ from the underlying parameter name (e.g. `state`
+    vs `db_path`) are translated via `_PROFILE_KEY_RENAMES` so the user can
+    write the flag name and have it apply across every subcommand.
     """
     if not values:
         return {}
-    return {cmd: dict(values) for cmd in commands}
+    translated = {
+        _PROFILE_KEY_RENAMES.get(k, k): v for k, v in values.items()
+    }
+    return {cmd: dict(translated) for cmd in commands}

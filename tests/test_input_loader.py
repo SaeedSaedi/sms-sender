@@ -53,3 +53,43 @@ def test_bom_handled(tmp_path):
     p.write_bytes("﻿09123456789\n".encode("utf-8"))
     r = load(p)
     assert [x.phone for x in r.valid] == ["09123456789"]
+
+
+# ---------- _extract_first_cell edge cases ----------
+
+
+def test_csv_quoted_first_cell(tmp_path):
+    """A CSV cell wrapped in double quotes (Excel default for cells with
+    commas/special chars) should still yield the inner value."""
+    p = write(tmp_path, "in.csv", '"09123456789",Ali\n"+989120000000",Sara\n')
+    r = load(p)
+    assert [x.phone for x in r.valid] == ["09123456789", "09120000000"]
+
+
+def test_csv_first_cell_blank_falls_through(tmp_path):
+    """If the first cell is blank, the next non-blank cell wins."""
+    p = write(tmp_path, "in.csv", ",,09123456789\n")
+    r = load(p)
+    assert [x.phone for x in r.valid] == ["09123456789"]
+
+
+def test_csv_all_blank_row_skipped(tmp_path):
+    p = write(tmp_path, "in.csv", ",,,\n09123456789\n")
+    r = load(p)
+    assert [x.phone for x in r.valid] == ["09123456789"]
+
+
+def test_csv_embedded_comma_in_quoted_cell(tmp_path):
+    """`"123,456",foo` → first cell is `123,456`, not `123`."""
+    p = write(tmp_path, "in.csv", '"123,456",foo\n09123456789,bar\n')
+    r = load(p)
+    # First row's first cell is invalid as a phone but well-formed as CSV.
+    assert {x.raw for x in r.invalid} == {"123,456"}
+    assert [x.phone for x in r.valid] == ["09123456789"]
+
+
+def test_txt_persian_digits_with_separators(tmp_path):
+    """Persian digits + dashes + parens — Excel exports often look like this."""
+    p = write(tmp_path, "in.txt", "(۰۹۱۲) ۳۴۵-۶۷۸۹\n")
+    r = load(p)
+    assert [x.phone for x in r.valid] == ["09123456789"]

@@ -12,7 +12,6 @@ HTTP form posts a structured JSON payload so it works as a generic webhook.
 from __future__ import annotations
 
 import logging
-from dataclasses import asdict, is_dataclass
 from typing import Any
 
 import requests
@@ -25,11 +24,21 @@ DEFAULT_TIMEOUT = 10.0
 
 
 def _summary_to_dict(s: RunSummary) -> dict[str, Any]:
-    if is_dataclass(s):
-        d = asdict(s)
-        d["top_errors"] = [{"message": m, "count": c} for m, c in s.top_errors]
-        return d
-    return dict(vars(s))
+    """Serialize a RunSummary to a webhook-friendly JSON shape."""
+    return {
+        "total_input": s.total_input,
+        "new_recipients": s.new_recipients,
+        "duplicates_collapsed": s.duplicates_collapsed,
+        "invalid": s.invalid,
+        "sent": s.sent,
+        "failed_permanent": s.failed_permanent,
+        "failed_retriable": s.failed_retriable,
+        "already_done": s.already_done,
+        "halted": s.halted,
+        "elapsed_sec": s.elapsed_sec,
+        "sends_per_sec": s.sends_per_sec,
+        "top_errors": [{"message": m, "count": c} for m, c in s.top_errors],
+    }
 
 
 def _build_text(s: RunSummary, error: str | None) -> str:

@@ -174,3 +174,452 @@ def test_preview_send_requires_phone(tmp_path):
     )
     assert result.exit_code != 0
     assert "--send requires --phone" in result.output
+
+
+# ---------- footgun guards ----------
+
+
+def test_reset_status_sent_requires_confirmation(tmp_path):
+    """`reset --status sent` is a footgun — it must prompt unless --yes is given."""
+    db = tmp_path / "s.db"
+    _seed_state(db)
+    # No --yes, and we send "n" to the prompt → should abort.
+    result = CliRunner().invoke(
+        cli,
+        ["reset", "--status", "sent", "--state", str(db)],
+        input="n\n",
+    )
+    assert result.exit_code != 0  # click.confirm(abort=True) returns non-zero
+    # The sent row must still be sent (not promoted to pending).
+    counts = StateStore(db).counts()
+    assert counts.get(SENT, 0) == 1
+
+
+def test_reset_status_sent_with_yes_flag_skips_prompt(tmp_path):
+    db = tmp_path / "s.db"
+    _seed_state(db)
+    result = CliRunner().invoke(
+        cli, ["reset", "--status", "sent", "--state", str(db), "--yes"],
+    )
+    assert result.exit_code == 0, result.output
+    counts = StateStore(db).counts()
+    assert counts.get(SENT, 0) == 0
+    assert counts.get(PENDING, 0) == 1  # the previously-sent row
+
+
+def test_reset_failed_does_not_prompt(tmp_path):
+    """Resetting failed_* statuses is the safe path — no confirmation required."""
+    db = tmp_path / "s.db"
+    _seed_state(db)
+    result = CliRunner().invoke(
+        cli, ["reset", "--status", "failed_retriable", "--state", str(db)],
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_send_rejects_token_with_spaces(tmp_path):
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(
+        cli,
+        [
+            "send",
+            "--input", str(inp),
+            "--template", "t",
+            "--token", "has spaces",
+            "--state", str(tmp_path / "s.db"),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "token" in result.output.lower()
+    assert "space" in result.output.lower()
+
+
+def test_send_accepts_token10_with_up_to_5_spaces(tmp_path, monkeypatch):
+    """token10 is the multi-word slot — 5 spaces is the documented max."""
+    monkeypatch.setattr(cli_module, "_do_send", lambda **_: None)
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(
+        cli,
+        [
+            "send",
+            "--input", str(inp),
+            "--template", "t",
+            "--token10", "five word phrase right here",   # 5 words → 4 spaces
+            "--state", str(tmp_path / "s.db"),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_send_rejects_token10_with_too_many_spaces(tmp_path):
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(
+        cli,
+        [
+            "send",
+            "--input", str(inp),
+            "--template", "t",
+            "--token10", "this has more than five spaces here please",   # 7 spaces
+            "--state", str(tmp_path / "s.db"),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "token10" in result.output.lower()
+
+
+# ---------- CLI smoke tests (full Click round-trip) ----------
+
+
+def test_dry_run_summarizes_input(tmp_path):
+    inp = tmp_path / "in.txt"
+    inp.write_text(
+        "09120000001\n"
+        "09120000002\n"
+        "+989120000002\n"   # duplicate
+        "junk\n",
+        encoding="utf-8",
+    )
+    result = CliRunner().invoke(cli, ["dry-run", "--input", str(inp)])
+    assert result.exit_code == 0, result.output
+    assert "valid=2" in result.output
+    assert "invalid=1" in result.output
+    assert "duplicates_collapsed=1" in result.output
+    assert "INVALID" in result.output
+
+
+def test_status_against_empty_db(tmp_path):
+    db = tmp_path / "fresh.db"
+    StateStore(db)  # creates schema, no rows
+    result = CliRunner().invoke(cli, ["status", "--state", str(db)])
+    assert result.exit_code == 0, result.output
+    assert "(empty)" in result.output
+
+
+def test_status_shows_counts(tmp_path):
+    db = tmp_path / "s.db"
+    _seed_state(db)
+    result = CliRunner().invoke(cli, ["status", "--state", str(db)])
+    assert result.exit_code == 0, result.output
+    # Each status line is: "<status>   <count>"
+    assert "sent" in result.output
+    assert "failed_permanent" in result.output
+    assert "failed_retriable" in result.output
+
+
+def test_purge_with_yes_flag_deletes_db(tmp_path):
+    db = tmp_path / "doomed.db"
+    StateStore(db)
+    assert db.exists()
+    result = CliRunner().invoke(cli, ["purge", "--state", str(db), "-y"])
+    assert result.exit_code == 0, result.output
+    assert "Deleted" in result.output
+    assert not db.exists()
+
+
+def test_purge_no_db_at_path(tmp_path):
+    result = CliRunner().invoke(
+        cli, ["purge", "--state", str(tmp_path / "nope.db"), "-y"],
+    )
+    assert result.exit_code == 0
+    assert "No state DB" in result.output
+
+
+def test_export_failed_writes_csv(tmp_path):
+    db = tmp_path / "s.db"
+    _seed_state(db)
+    out = tmp_path / "failed.csv"
+    result = CliRunner().invoke(
+        cli, ["export-failed", "--state", str(db), "--out", str(out)],
+    )
+    assert result.exit_code == 0, result.output
+    assert out.exists()
+    content = out.read_text(encoding="utf-8")
+    assert "phone_or_raw" in content                # header
+    assert "09120000003" in content                 # the failed_permanent row
+
+
+def test_preview_redacts_api_key_in_url():
+    """The preview command's URL prefix should print `<API_KEY>`, not the
+    user's real key (preview never loads the env unless --check-account/--send)."""
+    result = CliRunner().invoke(
+        cli,
+        [
+            "preview",
+            "--phone", "09123456789",
+            "--template", "t",
+            "--token", "x",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    # The literal placeholder appears, not a real key.
+    assert "<API_KEY>" in result.output
+
+
+def test_send_end_to_end_through_real_sender(tmp_path, monkeypatch):
+    """Real CLI → Click → Runner → Sender → _KavenegarHTTP → patched HTTP.
+
+    This exercises the full call graph (no FakeSender duck-typed shortcut),
+    verifying the wiring is intact: API key from env, real Sender retry loop,
+    state DB at the path the user passed, exit code 0 when all sent.
+    """
+    import sms_sender.sender as sender_mod
+
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n09120000002\n", encoding="utf-8")
+    db = tmp_path / "s.db"
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY_NOT_A_REAL_ONE")
+
+    posted: list[str] = []
+
+    class _Resp:
+        status_code = 200
+        def json(self):
+            return {
+                "return": {"status": 200, "message": "OK"},
+                "entries": [{"messageid": 12345, "status": 200}],
+            }
+
+    def fake_post(url, data=None, timeout=None, **_):
+        posted.append(url)
+        return _Resp()
+
+    # Patch the session.post inside _KavenegarHTTP. Both verify and account
+    # endpoints will return success.
+    monkeypatch.setattr(
+        sender_mod.requests.Session, "post",
+        lambda self, url, data=None, timeout=None, **kw: fake_post(url, data, timeout, **kw),
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "send",
+            "--input", str(inp),
+            "--template", "tpl",
+            "--token", "x",
+            "--state", str(db),
+            "--no-preflight",            # skip account_info call
+            "--workers", "2",
+            "--log-file", str(tmp_path / "test.log"),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    # Both phones posted to /verify/lookup.json.
+    assert len(posted) == 2
+    assert all("/verify/lookup.json" in u for u in posted)
+    # The state DB has both rows as sent.
+    assert StateStore(db).counts() == {SENT: 2}
+
+
+# ---------- approval test (manual gate) ----------
+
+
+def _stub_make_runner(captured: dict):
+    """Return a fake `make_runner` that records the kwargs it was called with
+    and yields a runner whose `.run()` produces a no-failure summary.
+
+    Used to verify the CLI wiring — what flags + env vars resolve to — without
+    actually running a Runner.
+    """
+    from sms_sender.runner import RunSummary
+
+    class _FakeRunner:
+        def run(self):
+            return RunSummary(
+                total_input=0, new_recipients=0, duplicates_collapsed=0,
+                invalid=0, sent=0, failed_permanent=0, failed_retriable=0,
+                halted=False,
+            )
+
+    def fake(**kwargs):
+        captured.update(kwargs)
+        return _FakeRunner()
+
+    return fake
+
+
+def test_send_approval_test_uses_env_var(tmp_path, monkeypatch):
+    """`--approval-test` with no flag value falls back to SMS_SENDER_TEST_NUMBER."""
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    monkeypatch.setenv(cli_module.TEST_NUMBER_ENV, "09151097710")
+    captured: dict = {}
+    monkeypatch.setattr(cli_module, "make_runner", _stub_make_runner(captured))
+
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "send",
+            "--input", str(inp),
+            "--template", "t",
+            "--token", "x",
+            "--state", str(tmp_path / "s.db"),
+            "--log-file", str(tmp_path / "test.log"),
+            "--no-preflight",
+            "--approval-test",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["approval_test_number"] == "09151097710"
+
+
+def test_send_test_number_overrides_env(tmp_path, monkeypatch):
+    """`--test-number` on the CLI wins over the env var."""
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    monkeypatch.setenv(cli_module.TEST_NUMBER_ENV, "09151111111")
+    captured: dict = {}
+    monkeypatch.setattr(cli_module, "make_runner", _stub_make_runner(captured))
+
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "send",
+            "--input", str(inp),
+            "--template", "t",
+            "--token", "x",
+            "--state", str(tmp_path / "s.db"),
+            "--log-file", str(tmp_path / "test.log"),
+            "--no-preflight",
+            "--approval-test",
+            "--test-number", "09152222222",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["approval_test_number"] == "09152222222"
+
+
+def test_send_test_number_normalized(tmp_path, monkeypatch):
+    """Non-canonical forms (+98…, Persian digits, spaces) are accepted and
+    normalized to canonical 09… before reaching the runner."""
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    captured: dict = {}
+    monkeypatch.setattr(cli_module, "make_runner", _stub_make_runner(captured))
+
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "send",
+            "--input", str(inp),
+            "--template", "t",
+            "--token", "x",
+            "--state", str(tmp_path / "s.db"),
+            "--log-file", str(tmp_path / "test.log"),
+            "--no-preflight",
+            "--approval-test",
+            "--test-number", "+98 915 109 7710",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["approval_test_number"] == "09151097710"
+
+
+def test_send_approval_test_without_number_errors(tmp_path, monkeypatch):
+    """`--approval-test` set but no flag and no env var → UsageError."""
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    # `load_api_key` runs `load_dotenv` which finds the project's real `.env`
+    # by walking up from config.py (cwd-independent). Setting the var to ""
+    # blocks load_dotenv from overwriting it (default override=False) so the
+    # "no value" code path can be exercised here.
+    monkeypatch.setenv(cli_module.TEST_NUMBER_ENV, "")
+
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "send",
+            "--input", str(inp),
+            "--template", "t",
+            "--token", "x",
+            "--state", str(tmp_path / "s.db"),
+            "--log-file", str(tmp_path / "test.log"),
+            "--no-preflight",
+            "--approval-test",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "--approval-test" in result.output
+    assert cli_module.TEST_NUMBER_ENV in result.output
+
+
+def test_send_invalid_test_number_errors(tmp_path, monkeypatch):
+    """A garbage --test-number fails fast, before any send is attempted."""
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "send",
+            "--input", str(inp),
+            "--template", "t",
+            "--token", "x",
+            "--state", str(tmp_path / "s.db"),
+            "--log-file", str(tmp_path / "test.log"),
+            "--no-preflight",
+            "--approval-test",
+            "--test-number", "not-a-phone",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "invalid test number" in result.output
+
+
+def test_send_no_approval_test_does_not_require_number(tmp_path, monkeypatch):
+    """Default behavior — no --approval-test, no env var needed, no error."""
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    monkeypatch.delenv(cli_module.TEST_NUMBER_ENV, raising=False)
+    captured: dict = {}
+    monkeypatch.setattr(cli_module, "make_runner", _stub_make_runner(captured))
+
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "send",
+            "--input", str(inp),
+            "--template", "t",
+            "--token", "x",
+            "--state", str(tmp_path / "s.db"),
+            "--log-file", str(tmp_path / "test.log"),
+            "--no-preflight",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["approval_test_number"] is None
+
+
+def test_send_verbose_quiet_mutually_exclusive(tmp_path):
+    """Conflict between --verbose and --quiet should fail at usage level."""
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(
+        cli,
+        [
+            "send",
+            "--input", str(inp),
+            "--template", "t",
+            "--token", "x",
+            "--state", str(tmp_path / "s.db"),
+            "--verbose",
+            "--quiet",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "mutually exclusive" in result.output
