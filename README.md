@@ -1,5 +1,9 @@
 # sms-sender
 
+[![Release](https://img.shields.io/github/v/release/SaeedSaedi/sms-sender)](https://github.com/SaeedSaedi/sms-sender/releases)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![License](https://img.shields.io/github/license/SaeedSaedi/sms-sender)](LICENSE)
+
 Reliable bulk SMS sender for the **Kavenegar `verify/lookup`** endpoint.
 
 - **No double sends.** A SQLite state DB tracks every recipient — re-running
