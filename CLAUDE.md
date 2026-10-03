@@ -22,7 +22,8 @@ sms-sender send --input … --notify slack:https://hooks.slack.com/… # post ru
 sms-sender send --input trades.csv --template … \
     --token-column token10=first_name --token-column token=trade_side \
     --value-map trade_side:Buy=خرید --value-map trade_side:Sell=فروش  # per-recipient tokens from CSV columns
-sms-sender status            # row counts by status
+sms-sender send --campaign coin-price-7 --input …   # own DB: data/db/coin-price-7.db
+sms-sender status            # row counts by status (+ campaign, template, last run)
 sms-sender export-failed     # dump failed_permanent to CSV
 sms-sender dry-run --input … # parse + normalize, no API calls
 sms-sender reset --status failed_permanent   # promote rows back to pending
@@ -60,6 +61,12 @@ cli.send → make_runner → Runner.run
 ```
 
 `Runner` is the only place that knows about the state machine *and* the sender — the two are otherwise independent.
+
+### Campaigns ([state.py](src/sms_sender/state.py) `meta`, [cli.py](src/sms_sender/cli.py) `_resolve_db_path`)
+
+One state DB is one campaign. `--campaign <slug>` (every command that takes `--state`) picks `data/db/<slug>.db`; an explicit `--state` — flag or profile — wins, decided with Click's `get_parameter_source`. The `meta` table (schema v3) holds the campaign name, its settings, and the last run's numbers (`status` prints them; `status` never creates a DB).
+
+Settings are what the campaign *sends* — `runner.campaign_settings`: template, static tokens, token columns, value maps — not workers, rate, timeouts or the input file (one campaign can be fed several segments). `StateStore.bind_campaign`, called first thing in `Runner._prepare`, records them on the first run. Later, different settings are accepted only while nothing can have gone out (no `sent` / `in_flight` / `unknown` / `needs_review` rows) — that's how a wrong template gets fixed — and otherwise only with `--allow-settings-change`. A mismatch raises `CampaignMismatchError` before any row is touched (CLI exit 2).
 
 ### Driving the runner without a terminal ([runner.py](src/sms_sender/runner.py))
 
@@ -147,7 +154,7 @@ Canonical form is `09XXXXXXXXX`. The normalizer accepts `+98…`, `0098…`, `98
 |---|---|
 | 0 | every recipient sent |
 | 1 | run finished with some `failed_permanent`, `failed_retriable`, `unknown` or `needs_review` |
-| 2 | `HaltError`, preflight failure, or declined approval-test aborted the run; or another process holds the state DB |
+| 2 | `HaltError`, preflight failure, or declined approval-test aborted the run; another process holds the state DB; or the DB belongs to another campaign / was sent with other settings |
 
 ## Conventions
 

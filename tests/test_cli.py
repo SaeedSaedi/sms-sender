@@ -622,6 +622,89 @@ def _stub_make_runner(captured: dict):
     return fake
 
 
+def _send_args(*extra: str) -> list[str]:
+    return ["send", "--input", "in.txt", "--template", "t", "--log-file", "test.log", *extra]
+
+
+def test_campaign_gets_its_own_db_under_data(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    captured: dict = {}
+    monkeypatch.setattr(cli_module, "make_runner", _stub_make_runner(captured))
+    Path("in.txt").write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(cli, _send_args("--campaign", "coin-price-7"))
+    assert result.exit_code == 0, result.output
+    assert captured["db_path"] == str(Path("data/db/coin-price-7.db"))
+    assert captured["campaign"] == "coin-price-7"
+    assert Path("data/db").is_dir()
+
+
+def test_explicit_state_wins_over_campaign(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    captured: dict = {}
+    monkeypatch.setattr(cli_module, "make_runner", _stub_make_runner(captured))
+    Path("in.txt").write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(
+        cli, _send_args("--campaign", "x", "--state", "mine.db", "--allow-settings-change"),
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["db_path"] == "mine.db"
+    assert captured["allow_settings_change"] is True
+
+
+def test_invalid_campaign_name_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    Path("in.txt").write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(cli, _send_args("--campaign", "Bad Name"))
+    assert result.exit_code == 2
+    assert "--campaign" in result.output
+
+
+def test_send_with_changed_settings_after_sending_exits_2(tmp_path, monkeypatch):
+    """Real runner path; it stops at the campaign check, before any network."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    store = StateStore("s.db")
+    store.bind_campaign(None, {"template": "old", "tokens": {}, "token_columns": {},
+                               "value_maps": {}})
+    store.upsert_pending([("09120000001", "09120000001")])
+    store.claim("09120000001")
+    store.mark_sent("09120000001", message_id=1, status_code=200)
+    Path("in.txt").write_text("09120000002\n", encoding="utf-8")
+    result = CliRunner().invoke(cli, _send_args("--template", "new", "--state", "s.db"))
+    assert result.exit_code == 2, result.output
+    assert "different settings" in result.output
+
+
+def test_status_shows_campaign_template_and_last_run(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.chdir(tmp_path)
+    Path("data/db").mkdir(parents=True)
+    store = StateStore("data/db/promo.db")
+    store.bind_campaign("promo", {"template": "coin-price"})
+    store.set_meta("last_run", json.dumps({
+        "at": 0, "sent": 5, "failed_permanent": 1, "failed_retriable": 0,
+        "halted": False, "stopped": True,
+    }))
+    store.upsert_pending([("09120000001", "09120000001")])
+    result = CliRunner().invoke(cli, ["status", "--campaign", "promo"])
+    assert result.exit_code == 0, result.output
+    assert "campaign   promo" in result.output
+    assert "template   coin-price" in result.output
+    assert "sent 5, failed 1, stopped" in result.output
+    assert "pending" in result.output
+
+
+def test_status_never_creates_a_db(tmp_path):
+    result = CliRunner().invoke(cli, ["status", "--state", str(tmp_path / "nope.db")])
+    assert result.exit_code == 0
+    assert "no state DB" in result.output
+    assert not (tmp_path / "nope.db").exists()
+
+
 def test_stopped_run_exits_1_and_says_how_to_continue(tmp_path, monkeypatch):
     """Ctrl-C used to exit 0 when nothing had failed, although recipients
     were left unsent."""

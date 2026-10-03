@@ -143,6 +143,47 @@ def test_an_embedding_process_keeps_its_signal_handlers(tmp_path):
     assert seen == [before]
 
 
+def test_campaign_settings_capture_what_is_sent_not_how_fast():
+    from sms_sender.runner import campaign_settings
+    from sms_sender.sender import SenderConfig
+
+    columns = TokenColumns(columns={"token20": "coin"}, value_maps={"coin": {"BTC": "بیت‌کوین"}})
+    cfg = SenderConfig(api_key="k", template="transaction-1", token="x", token10="y")
+    assert campaign_settings(cfg, columns) == {
+        "template": "transaction-1",
+        "tokens": {"token": "x", "token10": "y"},
+        "token_columns": {"token20": "coin"},
+        "value_maps": {"coin": {"BTC": "بیت‌کوین"}},
+    }
+    faster = SenderConfig(api_key="other", template="transaction-1", token="x", token10="y",
+                          timeout=99, max_attempts=1)
+    assert campaign_settings(faster, columns) == campaign_settings(cfg, columns)
+
+
+def test_rerun_with_other_settings_refuses_before_touching_rows(tmp_path):
+    import json
+
+    import pytest
+
+    from sms_sender.state import CampaignMismatchError
+
+    db = tmp_path / "s.db"
+    Runner(
+        input_path=write_input(tmp_path, ["09120000001"]), state=StateStore(db),
+        sender=FakeSender(), workers=1, campaign="promo", settings={"template": "a"},
+    ).run()
+    assert json.loads(StateStore(db).get_meta("last_run"))["sent"] == 1
+
+    later = FakeSender()
+    with pytest.raises(CampaignMismatchError):
+        Runner(
+            input_path=write_input(tmp_path, ["09120000002"]), state=StateStore(db),
+            sender=later, workers=1, campaign="promo", settings={"template": "b"},
+        ).run()
+    assert later.calls == []
+    assert StateStore(db).counts() == {SENT: 1}  # the new phone wasn't even seeded
+
+
 def test_run_start_logs_the_template(tmp_path, caplog):
     """The log is the campaign history today, so each run records its template."""
     from types import SimpleNamespace

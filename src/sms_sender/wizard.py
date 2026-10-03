@@ -24,7 +24,23 @@ from . import input_loader
 from .config import ENV_API_KEY
 from .profile import DEFAULT_CONFIG_NAME, list_profiles, load_profile
 from .rate import parse_rate
-from .state import SENT, FAILED_PERMANENT, FAILED_RETRIABLE, PENDING, StateStore
+from .state import (
+    FAILED_PERMANENT,
+    FAILED_RETRIABLE,
+    PENDING,
+    SENT,
+    StateStore,
+    campaign_db_path,
+)
+
+
+def _profile_db_path(profile_values: dict[str, Any]) -> str:
+    """Same rule as the CLI: `state` wins, then `campaign` → data/db/<it>.db."""
+    if profile_values.get("state"):
+        return str(profile_values["state"])
+    if profile_values.get("campaign"):
+        return str(campaign_db_path(profile_values["campaign"]))
+    return "./sms_state.db"
 
 
 # ---------- top-level entry ----------
@@ -96,7 +112,7 @@ def _wizard_send() -> None:
                 click.echo(f"  line {inv.line_no}: {inv.raw!r} — {inv.reason}")
 
     # 4. Read-only DB peek so the user sees "X new vs Y already sent".
-    db_path = profile_values.get("state", "./sms_state.db")
+    db_path = _profile_db_path(profile_values)
     new_count, already_sent, prior_failed = _peek_state(db_path, loaded.valid)
     click.echo(
         f"State DB ({db_path}): {new_count} new, "
@@ -283,7 +299,7 @@ def _advanced_defaults(profile_values: dict[str, Any]) -> dict[str, Any]:
         "max_attempts": int(profile_values.get("max_attempts", 5)),
         "timeout": float(profile_values.get("timeout", 15.0)),
         "backoff_max": float(profile_values.get("backoff_max", 30.0)),
-        "db_path": str(profile_values.get("state", "./sms_state.db")),
+        "db_path": _profile_db_path(profile_values),
         "log_file": str(profile_values.get("log_file", "./logs/sms-sender.log")),
         "smoke_test": bool(profile_values.get("smoke_test", False)),
         "no_preflight": bool(profile_values.get("no_preflight", False)),

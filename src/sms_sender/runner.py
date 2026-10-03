@@ -8,6 +8,7 @@ afterwards.
 """
 from __future__ import annotations
 
+import json
 import logging
 import signal
 import threading
@@ -28,6 +29,7 @@ from .rate import TokenBucket
 from .reconcile import DEFAULT_MIN_AGE_SEC, REQUEUE_NOT_FOUND, reconcile_unknown
 from .redact import redact_secrets
 from .sender import (
+    TOKEN_MAX_SPACES,
     Attempt,
     HaltError,
     PermanentSendError,
@@ -164,8 +166,16 @@ class Runner:
         reconcile_requeue_not_found: bool = REQUEUE_NOT_FOUND,
         reporter: Reporter | None = None,
         install_signal_handlers: bool = True,
+        campaign: str | None = None,
+        settings: dict | None = None,
+        allow_settings_change: bool = False,
     ):
         self.input_path = Path(input_path)
+        # Campaign identity: the DB is bound to this name and to `settings`
+        # (what it sends, see `campaign_settings`) on the first run.
+        self.campaign = campaign
+        self.settings = settings
+        self.allow_settings_change = allow_settings_change
         self.reconcile_min_age_sec = reconcile_min_age_sec
         self.reconcile_requeue_not_found = reconcile_requeue_not_found
         self.state = state
@@ -474,10 +484,12 @@ class Runner:
         except PreflightError as e:
             logger.error("preflight_failed", extra={"detail": str(e)})
             self._reporter.note(f"Preflight failed: {e}")
-            return self._build_summary(
+            summary = self._build_summary(
                 loaded=loaded, new_count=new_count, counts=SendCounts(),
                 halted=True, started=started,
             )
+            self._record_last_run(summary)
+            return summary
 
         counts, halted = self._fan_out(phones)
         counts.sent += smoke_sent
@@ -491,11 +503,26 @@ class Runner:
             halted=halted, started=started,
         )
         logger.info("run_end", extra=_summary_log_fields(summary))
+        self._record_last_run(summary)
         return summary
 
+    def _record_last_run(self, summary: RunSummary) -> None:
+        """Keep the latest run's numbers with the campaign (`status`, dashboard)."""
+        self.state.set_meta(
+            "last_run", json.dumps({"at": time.time(), **_summary_log_fields(summary)}),
+        )
+
     def _prepare(self) -> tuple[LoadResult, int, list[str]]:
-        """Load the input, seed the state DB, settle leftovers from earlier
-        runs, and return (input, new rows, phones to send in order)."""
+        """Bind the campaign, load the input, seed the state DB, settle
+        leftovers from earlier runs, and return (input, new rows, phones to
+        send in order). Raises CampaignMismatchError before touching rows."""
+        if self.campaign or self.settings is not None:
+            changed = self.state.bind_campaign(
+                self.campaign, self.settings, allow_change=self.allow_settings_change,
+            )
+            if changed:
+                logger.warning("campaign_settings_changed", extra={"changed": ", ".join(changed)})
+                self._reporter.note(f"Campaign settings changed: {', '.join(changed)}.")
         loaded = input_loader.load(self.input_path, self.token_columns)
         if self.token_columns is not None:
             self._row_tokens = {r.phone: r.tokens for r in loaded.valid}
@@ -693,6 +720,24 @@ def _attempt_recorder(state: StateStore) -> Callable[[Attempt], None]:
     return record
 
 
+def campaign_settings(cfg: SenderConfig, token_columns: TokenColumns | None) -> dict:
+    """What a campaign sends — the part that must stay the same across its
+    runs. Throughput knobs (workers, rate, timeouts) and the input file are
+    not part of it: one campaign can be fed several inputs (segments)."""
+    return {
+        "template": cfg.template,
+        "tokens": {
+            name: getattr(cfg, name)
+            for name in TOKEN_MAX_SPACES if getattr(cfg, name) is not None
+        },
+        "token_columns": dict(token_columns.columns) if token_columns else {},
+        "value_maps": (
+            {col: dict(m) for col, m in token_columns.value_maps.items()}
+            if token_columns else {}
+        ),
+    }
+
+
 def make_runner(
     *,
     input_path: str | Path,
@@ -704,6 +749,8 @@ def make_runner(
     rate_per_sec: float = 0.0,
     approval_test_number: str | None = None,
     token_columns: TokenColumns | None = None,
+    campaign: str | None = None,
+    allow_settings_change: bool = False,
 ) -> Runner:
     state = StateStore(db_path)
     sender = Sender(sender_cfg, on_attempt=_attempt_recorder(state))
@@ -717,4 +764,7 @@ def make_runner(
         rate_per_sec=rate_per_sec,
         approval_test_number=approval_test_number,
         token_columns=token_columns,
+        campaign=campaign,
+        settings=campaign_settings(sender_cfg, token_columns),
+        allow_settings_change=allow_settings_change,
     )

@@ -7,6 +7,7 @@ release the row.
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 import time
@@ -58,13 +59,27 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         """,
         "CREATE INDEX idx_attempts_phone ON attempts(phone)",
     ),
+    (  # 2 → 3: which campaign this DB is, what it sends with, last run
+        "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+    ),
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)
 
+# `--campaign <slug>` keeps each campaign's state DB here (gitignored).
+CAMPAIGN_DB_DIR = Path("data/db")
+
+
+def campaign_db_path(campaign: str) -> Path:
+    return CAMPAIGN_DB_DIR / f"{campaign}.db"
+
 
 class StateSchemaError(RuntimeError):
     """The DB was written by a newer sms-sender than this one."""
+
+
+class CampaignMismatchError(ValueError):
+    """The DB belongs to another campaign, or was sent with other settings."""
 
 
 # Status values
@@ -321,6 +336,67 @@ class StateStore:
         return self._conn().execute(
             "SELECT * FROM attempts WHERE phone=? ORDER BY id", (phone,)
         ).fetchall()
+
+    # ---------- campaign identity (meta) ----------
+
+    def get_meta(self, key: str) -> str | None:
+        row = self._conn().execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self._tx() as conn:
+            conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value))
+
+    def bind_campaign(
+        self, name: str | None, settings: dict | None, *, allow_change: bool = False,
+    ) -> list[str]:
+        """Tie this DB to one campaign and to what it sends.
+
+        The first run records both. Later runs must match: one DB is one
+        campaign, and two message versions in it would make its history
+        meaningless. Settings may still change while nothing can have gone
+        out yet — that's how a wrong template gets fixed — and later only
+        with `allow_change`. Returns the names of changed settings.
+        """
+        with self._tx() as conn:
+            def get(key: str) -> str | None:
+                row = conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+                return row["value"] if row else None
+
+            def put(key: str, value: str) -> None:
+                conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value))
+
+            stored_name = get("campaign")
+            if name and stored_name and stored_name != name:
+                raise CampaignMismatchError(
+                    f"{self.db_path} belongs to campaign {stored_name!r}, not {name!r}"
+                )
+            if name and not stored_name:
+                put("campaign", name)
+            if settings is None:
+                return []
+
+            encoded = json.dumps(settings, sort_keys=True, ensure_ascii=False)
+            raw = get("settings")
+            if raw is None:
+                put("settings", encoded)
+                return []
+            stored = json.loads(raw)
+            changed = sorted(k for k in set(stored) | set(settings) if stored.get(k) != settings.get(k))
+            if not changed:
+                return []
+            may_have_gone_out = conn.execute(
+                "SELECT 1 FROM recipients WHERE status IN (?, ?, ?, ?) LIMIT 1",
+                (SENT, IN_FLIGHT, UNKNOWN, NEEDS_REVIEW),
+            ).fetchone()
+            if may_have_gone_out and not allow_change:
+                raise CampaignMismatchError(
+                    f"{self.db_path} already sent with different settings "
+                    f"({', '.join(changed)} changed). Use a new campaign, or pass "
+                    "--allow-settings-change if mixing both versions is intended."
+                )
+            put("settings", encoded)
+            return changed
 
     # ---------- settling `unknown` rows (see reconcile.py) ----------
 

@@ -1,9 +1,11 @@
+import json
 import sqlite3
 import threading
 
 import pytest
 
 from sms_sender.state import (
+    CampaignMismatchError,
     FAILED_PERMANENT,
     FAILED_RETRIABLE,
     PENDING,
@@ -156,6 +158,33 @@ def test_orphans_become_unknown_not_pending(tmp_path):
     assert s2.list_claimable_phones() == []
     [row] = s2.attempts_for("09123456789")
     assert (row["kind"], row["outcome"]) == ("recovery", UNKNOWN)
+
+
+def test_bind_campaign_records_then_enforces_the_name(tmp_path):
+    s = make(tmp_path)
+    settings = {"template": "a", "tokens": {"token": "x"}}
+    assert s.bind_campaign("promo-1", settings) == []
+    assert s.get_meta("campaign") == "promo-1"
+    assert s.bind_campaign("promo-1", settings) == []  # same campaign, same settings
+    with pytest.raises(CampaignMismatchError):
+        s.bind_campaign("promo-2", settings)  # another campaign's DB
+
+
+def test_settings_may_change_until_something_could_have_gone_out(tmp_path):
+    s = make(tmp_path)
+    s.bind_campaign(None, {"template": "wrong"})
+    s.upsert_pending([("09120000001", "09120000001"), ("09120000002", "09120000002")])
+    # Nothing sent yet: fixing a wrong template is allowed.
+    assert s.bind_campaign(None, {"template": "right"}) == ["template"]
+
+    s.claim("09120000001")
+    s.mark_unknown("09120000001", "outcome unknown")  # may have gone out
+    with pytest.raises(CampaignMismatchError) as exc:
+        s.bind_campaign(None, {"template": "other"})
+    assert "template" in str(exc.value)
+
+    assert s.bind_campaign(None, {"template": "other"}, allow_change=True) == ["template"]
+    assert json.loads(s.get_meta("settings")) == {"template": "other"}
 
 
 def test_unknown_rows_are_never_claimed(tmp_path):

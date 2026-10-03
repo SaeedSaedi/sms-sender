@@ -69,6 +69,23 @@ sms-sender send \
 Re-run the same command after a crash, network outage, or credit top-up — it
 picks up exactly where it left off.
 
+### One campaign, one state DB
+
+Give each campaign a name and it gets its own state DB, `data/db/<name>.db`.
+There's nothing to purge between campaigns, and each one keeps its history:
+
+```bash
+sms-sender send --campaign coin-price-7 --input data/segments/seg2.csv --template coin-price ...
+sms-sender status --campaign coin-price-7   # template, last run, counts
+```
+
+The DB remembers what the campaign sends (template, static tokens, token
+columns). A later run with different settings is refused once anything may
+have gone out, so one campaign never mixes two message versions; before that,
+fixing a wrong template is fine. `--allow-settings-change` overrides it.
+`--state` (or `state` in a profile) still picks a DB explicitly and wins over
+`--campaign`; in a profile, write `campaign = "coin-price-7"`.
+
 ### Per-recipient tokens
 
 When each recipient needs their own values (name, coin, …), take the tokens
@@ -228,7 +245,7 @@ sms-sender dry-run --input ./numbers.csv          # parse + normalize only, no A
 |---|---|
 | 0 | All recipients sent successfully. |
 | 1 | Run finished but some rows failed (permanent or retriable), or are `unknown` / `needs_review`. |
-| 2 | Run halted on an account-level error (no credit, bad API key, plan), or another `sms-sender` is already using the same state DB. Fix and re-run. |
+| 2 | Run halted on an account-level error (no credit, bad API key, plan), another `sms-sender` is already using the same state DB, or the DB belongs to another campaign / was sent with other settings. Fix and re-run. |
 
 ## Architecture
 
