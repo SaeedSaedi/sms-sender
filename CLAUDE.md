@@ -19,6 +19,9 @@ sms-sender retry-failed --input … --template … --token …        # reset fa
 sms-sender --profile verify send --input …                        # load defaults from sms-sender.toml
 sms-sender send --input … --rate 10/s                             # cap throughput (also 60/m, 3600/h)
 sms-sender send --input … --notify slack:https://hooks.slack.com/… # post run summary on completion
+sms-sender send --input trades.csv --template … \
+    --token-column token10=first_name --token-column token=trade_side \
+    --value-map trade_side:Buy=خرید --value-map trade_side:Sell=فروش  # per-recipient tokens from CSV columns
 sms-sender status            # row counts by status
 sms-sender export-failed     # dump failed_permanent to CSV
 sms-sender dry-run --input … # parse + normalize, no API calls
@@ -71,6 +74,10 @@ cli.send → make_runner → Runner.run
 
 `load_profile(config_path, profile_name)` reads a TOML file with `[profile.<name>]` sections, merging `[profile.default]` with the named profile (named wins). `to_default_map(values, commands)` expands the flat dict into Click's per-command `default_map`, so the same profile feeds every subcommand. The `cli` group is decorated with `--config` and `--profile` and sets `ctx.default_map` before dispatching to subcommands. Resolution order is **CLI flag > named profile > [profile.default] > built-in default**, which falls out of how Click consults `default_map` only when an option wasn't explicitly passed.
 
+### Per-recipient tokens ([input_loader.py](src/sms_sender/input_loader.py))
+
+`--token-column TOKEN=COLUMN` (repeatable) switches the loader to header-CSV mode: the first column is the phone, and each mapped column becomes that recipient's token (`LoadedRow.tokens`). `--value-map COLUMN:FROM=TO` translates values before sending. An empty cell, a value missing from its column's value map, or too many spaces for the token (`TOKEN_MAX_SPACES` in `sender.py`) makes the row invalid — raw text is never sent. `Runner` keeps `phone → tokens` from the input and passes them to `Sender.send(phone, tokens=…)`, where they layer over the static `SenderConfig` tokens; the CLI rejects a token set both ways. Tokens are **not** stored in the state DB, so a claimable DB row that isn't in the current input is skipped rather than sent without its tokens. The approval test borrows the tokens of the test number's own row, else the first recipient's. In a profile, use TOML lists: `token_column = ["token10=first_name"]`.
+
 ### Preflight (`Runner._preflight` → `_approval_test` → `_smoke_test_run`)
 
 Before fan-out, three best-effort checks run in order. Any `PreflightError` aborts the run with `halted=True` and exit code 2.
@@ -103,7 +110,7 @@ Statuses: `pending`, `in_flight`, `sent`, `failed_permanent`, `failed_retriable`
 
 Unknown codes default to `PERMANENT` deliberately — don't burn credit looping on something we don't understand.
 
-`tenacity` only retries `_RetriableSendError` (notice the leading underscore — it never escapes `Sender`). `HaltError` and `PermanentSendError` bypass retry by design.
+`tenacity` only retries `_RetriableSendError` (notice the leading underscore — it never escapes `Sender`). `HaltError` and `PermanentSendError` bypass retry by design. Each retry logs `send_retry` with the phone: `status=None` is a network-level failure (e.g. read timeout) that Kavenegar may still have delivered, so grep those to find possible double sends; a retried Kavenegar code (409/414/419) was rejected and never sent.
 
 ### Why `_KavenegarHTTP` exists ([sender.py:92](src/sms_sender/sender.py#L92))
 

@@ -145,6 +145,28 @@ def test_build_params_is_pure_no_io():
     assert sdk.calls == []  # no API calls
 
 
+def test_retries_are_logged_per_phone(caplog):
+    """A timed-out request may still have been delivered, so every retry must
+    leave a per-phone trace in the log."""
+    sdk = FakeSDK([HTTPException("read timed out"), [{"messageid": 7, "status": 200}]])
+    s = Sender(cfg(), sdk=sdk)
+    with caplog.at_level("WARNING", logger="sms_sender.sender"):
+        s.send("09123456789")
+    retries = [r for r in caplog.records if r.getMessage() == "send_retry"]
+    assert [(r.phone, r.attempt, r.status) for r in retries] == [("09123456789", 1, None)]
+    assert "read timed out" in retries[0].detail
+
+
+def test_per_recipient_tokens_layer_over_static_ones():
+    sdk = FakeSDK([[{"messageid": 7, "status": 200}]])
+    s = Sender(cfg(token="static", token2="y"), sdk=sdk)
+    s.send("09123456789", tokens={"token": "خرید", "token10": "علی"})
+    assert sdk.calls == [{
+        "receptor": "09123456789", "template": "t",
+        "token": "خرید", "token2": "y", "token10": "علی",
+    }]
+
+
 # ---------- _KavenegarHTTP redaction (regression for API key leak) ----------
 
 

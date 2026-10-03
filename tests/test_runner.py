@@ -6,6 +6,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
+from sms_sender.input_loader import TokenColumns
 from sms_sender.runner import Runner, format_report
 from sms_sender.sender import (
     AccountInfo,
@@ -14,18 +15,20 @@ from sms_sender.sender import (
     SendError,
     SendResult,
 )
-from sms_sender.state import SENT, StateStore
+from sms_sender.state import PENDING, SENT, StateStore
 
 
 class FakeSender:
     def __init__(self):
         self.calls: list[str] = []
+        self.tokens: dict[str, dict[str, str] | None] = {}  # phone -> per-row tokens sent
         self._lock = threading.Lock()
         self.behavior = {}  # phone -> callable returning SendResult or raising
 
-    def send(self, phone: str) -> SendResult:
+    def send(self, phone: str, tokens: dict[str, str] | None = None) -> SendResult:
         with self._lock:
             self.calls.append(phone)
+            self.tokens[phone] = tokens
         if phone in self.behavior:
             return self.behavior[phone]()
         return SendResult(message_id=hash(phone) & 0xffff, status_code=200)
@@ -567,3 +570,58 @@ def test_already_done_counts_lost_claim_race(tmp_path):
     # Sender never gets called for an already-sent row.
     assert sender.calls == []
     assert summary.sent == 0
+
+
+# ---------- per-recipient token columns ----------
+
+SIDE_SPEC = TokenColumns(
+    columns={"token": "side", "token10": "name"},
+    value_maps={"side": {"Buy": "خرید", "Sell": "فروش"}},
+)
+
+
+def write_csv(tmp_path: Path, rows: list[str]) -> Path:
+    p = tmp_path / "in.csv"
+    p.write_text("phone,name,side\n" + "\n".join(rows) + "\n", encoding="utf-8")
+    return p
+
+
+def test_token_columns_send_each_rows_own_tokens(tmp_path):
+    inp = write_csv(tmp_path, ["09120000001,علی,Buy", "09120000002,سارا,Sell"])
+    state = StateStore(tmp_path / "s.db")
+    sender = FakeSender()
+    summary = Runner(
+        input_path=inp, state=state, sender=sender, workers=2, token_columns=SIDE_SPEC,
+    ).run()
+    assert summary.sent == 2
+    assert sender.tokens == {
+        "09120000001": {"token": "خرید", "token10": "علی"},
+        "09120000002": {"token": "فروش", "token10": "سارا"},
+    }
+
+
+def test_token_columns_leave_db_rows_missing_from_input(tmp_path):
+    """A pending row seeded by some other input has no tokens to send — it
+    must be left alone rather than sent with the static tokens only."""
+    state = StateStore(tmp_path / "s.db")
+    state.upsert_pending([("09120000009", "09120000009")])
+    inp = write_csv(tmp_path, ["09120000001,علی,Buy"])
+    sender = FakeSender()
+    summary = Runner(
+        input_path=inp, state=state, sender=sender, workers=1, token_columns=SIDE_SPEC,
+    ).run()
+    assert sender.calls == ["09120000001"]
+    assert summary.sent == 1
+    assert state.status_for_phones(["09120000009"]) == {"09120000009": PENDING}
+
+
+def test_token_columns_approval_test_borrows_first_recipients_tokens(tmp_path):
+    inp = write_csv(tmp_path, ["09120000001,علی,Buy", "09120000002,سارا,Sell"])
+    state = StateStore(tmp_path / "s.db")
+    sender = FakeSender()
+    summary = Runner(
+        input_path=inp, state=state, sender=sender, workers=1, token_columns=SIDE_SPEC,
+        approval_test_number="09150000000", approval_prompt=lambda *_: True,
+    ).run()
+    assert summary.sent == 2
+    assert sender.tokens["09150000000"] == {"token": "خرید", "token10": "علی"}

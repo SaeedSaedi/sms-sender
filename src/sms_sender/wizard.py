@@ -175,6 +175,8 @@ def _wizard_send() -> None:
         "no_preflight": advanced["no_preflight"],
         "rate": advanced["rate"],
         "notify_target": advanced["notify_target"],
+        "approval_test": False,
+        "test_number": None,
         "verbose": False,
         "quiet": False,
     }

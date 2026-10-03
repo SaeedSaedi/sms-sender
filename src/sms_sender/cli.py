@@ -10,14 +10,15 @@ from typing import Any, Callable, TypeVar
 
 import click
 
-from . import logging_config
+from . import input_loader, logging_config
 from .config import load_api_key
+from .input_loader import InputError, TokenColumns
 from .notify import notify
 from .phone import InvalidPhoneError, normalize as normalize_phone
 from .profile import ProfileError, load_profile, to_default_map
 from .rate import parse_rate
 from .runner import format_report, make_runner
-from .sender import Sender, SenderConfig
+from .sender import TOKEN_MAX_SPACES, Sender, SenderConfig
 from .state import StateStore
 
 TEST_NUMBER_ENV = "SMS_SENDER_TEST_NUMBER"
@@ -26,17 +27,14 @@ logger = logging.getLogger(__name__)
 
 F = TypeVar("F", bound=Callable[..., Any])
 
-# Kavenegar's token-format rules. token/2/3 reject spaces entirely; token10
-# allows up to 5; token20 up to 8. Validating at the CLI saves a wasted
-# preflight round-trip on misuse.
-_TOKEN_MAX_SPACES = {"token": 0, "token2": 0, "token3": 0, "token10": 5, "token20": 8}
-
 
 def _validate_token(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
+    # Kavenegar's space limits (see TOKEN_MAX_SPACES). Validating at the CLI
+    # saves a wasted preflight round-trip on misuse.
     if value is None:
         return None
     name = param.name or ""
-    limit = _TOKEN_MAX_SPACES.get(name)
+    limit = TOKEN_MAX_SPACES.get(name)
     if limit is None:
         return value
     spaces = value.count(" ")
@@ -46,6 +44,76 @@ def _validate_token(ctx: click.Context, param: click.Parameter, value: str | Non
             ctx=ctx, param=param,
         )
     return value
+
+
+# Per-recipient token flags, shared by `send`, `retry-failed`, `preview`, `dry-run`.
+_token_column_option = click.option(
+    "--token-column", "token_column", multiple=True, metavar="TOKEN=COLUMN",
+    help="Fill TOKEN per recipient from a CSV column, e.g. 'token10=first_name'. "
+         "Repeatable. The input must be a CSV with a header row whose first "
+         "column is the phone.",
+)
+_value_map_option = click.option(
+    "--value-map", "value_map", multiple=True, metavar="COLUMN:FROM=TO",
+    help="Translate a --token-column value before sending, e.g. "
+         "'trade_side:Buy=خرید'. Repeatable. A row whose value has no entry "
+         "is recorded as invalid instead of being sent untranslated.",
+)
+
+
+def _parse_token_columns(
+    token_column: tuple[str, ...], value_map: tuple[str, ...],
+    static_tokens: dict[str, str | None],
+) -> TokenColumns | None:
+    """Turn `--token-column` / `--value-map` flags into a TokenColumns spec.
+
+    Returns None when no --token-column is given (static tokens only).
+    """
+    if not token_column:
+        if value_map:
+            raise click.UsageError("--value-map only applies together with --token-column")
+        return None
+    columns: dict[str, str] = {}
+    for spec in token_column:
+        name, sep, column = (s.strip() for s in spec.partition("="))
+        if not (sep and name and column):
+            raise click.UsageError(
+                f"--token-column expects TOKEN=COLUMN (e.g. token10=first_name); got {spec!r}"
+            )
+        if name not in TOKEN_MAX_SPACES:
+            raise click.UsageError(
+                f"--token-column: unknown token {name!r}; "
+                f"expected one of {', '.join(TOKEN_MAX_SPACES)}"
+            )
+        if name in columns:
+            raise click.UsageError(f"--token-column: {name} is given more than once")
+        if static_tokens.get(name) is not None:
+            raise click.UsageError(
+                f"{name} is set both statically (--{name} or profile) and by "
+                f"--token-column; pick one"
+            )
+        columns[name] = column
+    value_maps: dict[str, dict[str, str]] = {}
+    for spec in value_map:
+        column, sep_col, pair = (s.strip() for s in spec.partition(":"))
+        source, sep_eq, target = (s.strip() for s in pair.partition("="))
+        if not (sep_col and sep_eq and column and source and target):
+            raise click.UsageError(
+                f"--value-map expects COLUMN:FROM=TO (e.g. trade_side:Buy=خرید); got {spec!r}"
+            )
+        if column not in columns.values():
+            raise click.UsageError(
+                f"--value-map: column {column!r} isn't used by any --token-column"
+            )
+        value_maps.setdefault(column, {})[source] = target
+    return TokenColumns(columns=columns, value_maps=value_maps)
+
+
+def _load_input(input_path: str, token_columns: TokenColumns | None) -> input_loader.LoadResult:
+    try:
+        return input_loader.load(input_path, token_columns)
+    except InputError as e:
+        raise click.UsageError(str(e)) from e
 
 
 @click.group(invoke_without_command=True)
@@ -96,6 +164,8 @@ def _send_options(f: F) -> F:
                      help="Static token10 value (up to 5 spaces)."),
         click.option("--token20", default=None, callback=_validate_token,
                      help="Static token20 value (up to 8 spaces)."),
+        _token_column_option,
+        _value_map_option,
         click.option("--workers", default=5, show_default=True, type=int),
         click.option("--max-attempts", default=5, show_default=True, type=int),
         click.option("--timeout", default=15.0, show_default=True, type=float),
@@ -184,6 +254,8 @@ def _do_send(
     no_preflight: bool, rate: str | None,
     notify_target: str | None,
     verbose: bool, quiet: bool,
+    # Defaulted so the wizard (static tokens only) needn't pass them.
+    token_column: tuple[str, ...] = (), value_map: tuple[str, ...] = (),
 ) -> None:
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
@@ -196,6 +268,11 @@ def _do_send(
         rate_per_sec = parse_rate(rate)
     except ValueError as e:
         raise click.UsageError(str(e)) from e
+    token_columns = _parse_token_columns(
+        token_column, value_map,
+        {"token": token, "token2": token2, "token3": token3,
+         "token10": token10, "token20": token20},
+    )
 
     # `load_api_key` calls `load_dotenv`, which makes `.env`-set values
     # (including SMS_SENDER_TEST_NUMBER) visible to `_resolve_test_number`.
@@ -215,8 +292,12 @@ def _do_send(
         preflight=not no_preflight, smoke_test=smoke_test,
         rate_per_sec=rate_per_sec,
         approval_test_number=approval_test_number,
+        token_columns=token_columns,
     )
-    summary = runner.run()
+    try:
+        summary = runner.run()
+    except InputError as e:
+        raise click.UsageError(str(e)) from e
 
     click.echo("\n" + format_report(summary))
     notify(notify_target, summary)
@@ -354,15 +435,16 @@ def purge(db_path: str, yes: bool) -> None:
 
 @cli.command("dry-run")
 @click.option("--input", "input_path", required=True, type=click.Path(exists=True, dir_okay=False))
-def dry_run(input_path: str) -> None:
+@_token_column_option
+@_value_map_option
+def dry_run(input_path: str, token_column: tuple[str, ...], value_map: tuple[str, ...]) -> None:
     """Parse + normalize + dedup, print what would be sent. No API calls."""
-    from . import input_loader
-
-    result = input_loader.load(input_path)
+    result = _load_input(input_path, _parse_token_columns(token_column, value_map, {}))
     click.echo(f"valid={len(result.valid)} invalid={len(result.invalid)} "
                f"duplicates_collapsed={result.duplicates_collapsed}")
     for r in result.valid[:10]:
-        click.echo(f"  {r.phone}  (raw={r.raw!r})")
+        tokens = "".join(f"  {k}={v}" for k, v in r.tokens.items())
+        click.echo(f"  {r.phone}  (raw={r.raw!r}){tokens}")
     if len(result.valid) > 10:
         click.echo(f"  ... and {len(result.valid) - 10} more")
     for inv in result.invalid:
@@ -376,9 +458,12 @@ def dry_run(input_path: str) -> None:
 @click.option("--token3", default=None, callback=_validate_token)
 @click.option("--token10", default=None, callback=_validate_token)
 @click.option("--token20", default=None, callback=_validate_token)
+@_token_column_option
+@_value_map_option
 @click.option(
     "--phone", default=None,
-    help="Single phone to preview (alternative to --input).",
+    help="Single phone to preview (alternative to --input). With "
+         "--token-column, picks that recipient's row out of --input.",
 )
 @click.option(
     "--input", "input_path", default=None,
@@ -399,6 +484,7 @@ def dry_run(input_path: str) -> None:
 def preview(
     template: str, token: str | None, token2: str | None, token3: str | None,
     token10: str | None, token20: str | None,
+    token_column: tuple[str, ...], value_map: tuple[str, ...],
     phone: str | None, input_path: str | None, limit: int,
     check_account: bool, do_send: bool, timeout: float,
 ) -> None:
@@ -407,22 +493,36 @@ def preview(
     Useful as a 'show me what I'm about to do before I do it across 10k rows'
     check. With --send, sends to a single --phone for real (no state DB changes).
     """
-    from . import input_loader
     from .phone import InvalidPhoneError, normalize
 
     if not phone and not input_path:
         raise click.UsageError("Pass --phone or --input.")
     if do_send and not phone:
         raise click.UsageError("--send requires --phone (single number).")
+    token_columns = _parse_token_columns(
+        token_column, value_map,
+        {"token": token, "token2": token2, "token3": token3,
+         "token10": token10, "token20": token20},
+    )
+    if token_columns is not None and not input_path:
+        raise click.UsageError("--token-column needs --input: the tokens come from its columns.")
 
+    # phone → per-recipient tokens; stays empty without --token-column.
+    row_tokens: dict[str, dict[str, str]] = {}
     if phone:
         try:
             phones = [normalize(phone)]
         except InvalidPhoneError as e:
             raise click.UsageError(f"invalid phone {phone!r}: {e}") from e
+        if token_columns is not None:
+            assert input_path is not None
+            row_tokens = {r.phone: r.tokens for r in _load_input(input_path, token_columns).valid}
+            if phones[0] not in row_tokens:
+                raise click.UsageError(f"{phones[0]} has no valid row in {input_path}")
     else:
         assert input_path is not None
-        loaded = input_loader.load(input_path)
+        loaded = _load_input(input_path, token_columns)
+        row_tokens = {r.phone: r.tokens for r in loaded.valid}
         phones = [r.phone for r in loaded.valid[:limit]]
         click.echo(
             f"Loaded {len(loaded.valid)} valid, {len(loaded.invalid)} invalid; "
@@ -447,14 +547,14 @@ def preview(
 
     base_url = f"https://api.kavenegar.com/v1/{api_key}/verify/lookup.json"
     for p in phones:
-        params = sender.build_params(p)
+        params = sender.build_params(p, row_tokens.get(p))
         click.echo(f"\nPOST {base_url}")
         for k, v in params.items():
             click.echo(f"  {k}={v}")
 
     if do_send:
         click.echo("\nSending …")
-        result = sender.send(phones[0])
+        result = sender.send(phones[0], tokens=row_tokens.get(phones[0]))
         click.echo(f"OK: message_id={result.message_id} status={result.status_code}")
 
 

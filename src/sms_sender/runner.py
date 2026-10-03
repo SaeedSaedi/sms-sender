@@ -14,6 +14,7 @@ from typing import Callable
 from tqdm import tqdm
 
 from . import input_loader
+from .input_loader import TokenColumns
 from .rate import TokenBucket
 from .redact import redact_secrets
 from .sender import HaltError, PermanentSendError, SendError, Sender, SenderConfig
@@ -78,6 +79,7 @@ class Runner:
         rate_per_sec: float = 0.0,
         approval_test_number: str | None = None,
         approval_prompt: ApprovalPrompt | None = None,
+        token_columns: TokenColumns | None = None,
     ):
         self.input_path = Path(input_path)
         self.state = state
@@ -87,6 +89,10 @@ class Runner:
         self.smoke_test = smoke_test
         self.approval_test_number = approval_test_number
         self._approval_prompt: ApprovalPrompt = approval_prompt or _click_approval_prompt
+        self.token_columns = token_columns
+        # phone → per-recipient tokens, filled from the input by `run()`.
+        # None means every recipient gets the static tokens in SenderConfig.
+        self._row_tokens: dict[str, dict[str, str]] | None = None
         self._bucket = TokenBucket(rate_per_sec)
         self._stop = threading.Event()
         self._error_counter: Counter[str] = Counter()
@@ -128,8 +134,9 @@ class Runner:
         if recipient is None:
             # Already sent or claimed by someone else.
             return ("already_done", phone)
+        tokens = self._row_tokens.get(phone) if self._row_tokens is not None else None
         try:
-            result = self.sender.send(phone)
+            result = self.sender.send(phone, tokens=tokens)
         except HaltError as e:
             self.state.mark_failed(phone, e.status_code, e.message, permanent=False)
             self._record_error(e.status_code, e.message)
@@ -238,11 +245,20 @@ class Runner:
             return
 
         target = self.approval_test_number
+        tokens = None
+        if self._row_tokens is not None:
+            # Per-recipient tokens: show the operator a real recipient's
+            # message — their own row if they're in the file, else the first.
+            sample = target if target in self._row_tokens else (phones[0] if phones else None)
+            if sample is None:
+                raise PreflightError("approval test needs a recipient row to borrow tokens from")
+            tokens = self._row_tokens[sample]
+            tqdm.write(f"Approval test uses the tokens of {sample}.")
         logger.info("approval_test_target", extra={"phone": target})
         tqdm.write(f"Approval test: sending to {target} synchronously …")
 
         try:
-            result = self.sender.send(target)
+            result = self.sender.send(target, tokens=tokens)
         except HaltError as e:
             self._record_error(e.status_code, e.message)
             raise PreflightError(
@@ -292,7 +308,9 @@ class Runner:
         self._install_signal_handlers()
 
         # 1. Load input.
-        loaded = input_loader.load(self.input_path)
+        loaded = input_loader.load(self.input_path, self.token_columns)
+        if self.token_columns is not None:
+            self._row_tokens = {r.phone: r.tokens for r in loaded.valid}
         logger.info(
             "input_loaded",
             extra={
@@ -315,6 +333,17 @@ class Runner:
 
         # 3. Snapshot work to do.
         phones = self.state.list_claimable_phones()
+        if self._row_tokens is not None:
+            # Per-recipient tokens live in the input file, so a claimable row
+            # left in the DB by a different input has nothing to send — leave it.
+            not_in_input = sum(1 for p in phones if p not in self._row_tokens)
+            if not_in_input:
+                logger.warning("skipped_not_in_input", extra={"n": not_in_input})
+                tqdm.write(
+                    f"Skipping {not_in_input} claimable row(s) that aren't in "
+                    f"{self.input_path.name} (no per-recipient tokens for them)."
+                )
+                phones = [p for p in phones if p in self._row_tokens]
         logger.info(
             "run_start",
             extra={
@@ -472,6 +501,7 @@ def make_runner(
     smoke_test: bool = False,
     rate_per_sec: float = 0.0,
     approval_test_number: str | None = None,
+    token_columns: TokenColumns | None = None,
 ) -> Runner:
     state = StateStore(db_path)
     sender = Sender(sender_cfg)
@@ -484,4 +514,5 @@ def make_runner(
         smoke_test=smoke_test,
         rate_per_sec=rate_per_sec,
         approval_test_number=approval_test_number,
+        token_columns=token_columns,
     )

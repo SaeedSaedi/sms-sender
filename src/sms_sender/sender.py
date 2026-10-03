@@ -9,6 +9,7 @@ from typing import Protocol
 import requests
 from kavenegar import APIException, HTTPException
 from tenacity import (
+    RetryCallState,
     RetryError,
     Retrying,
     retry_if_exception_type,
@@ -26,6 +27,12 @@ logger = logging.getLogger(__name__)
 #   bracketed (legacy):          "APIException[418 insufficient credit]"
 _API_EXC_RE_OUTSIDE = re.compile(r"\[(\d+)\]\s*(.*)")
 _API_EXC_RE_INSIDE = re.compile(r"\[(\d+)\s+(.+?)\]")
+
+# Kavenegar's token-format rules: token/2/3 reject spaces entirely; token10
+# allows up to 5; token20 up to 8. Key order is the order params are sent in.
+TOKEN_MAX_SPACES: dict[str, int] = {
+    "token": 0, "token2": 0, "token3": 0, "token10": 5, "token20": 8,
+}
 
 
 class SendError(Exception):
@@ -166,18 +173,22 @@ class Sender:
         self.cfg = cfg
         self._sdk: _SDK = sdk or _KavenegarHTTP(cfg.api_key, cfg.timeout)
 
-    def build_params(self, phone: str) -> dict:
-        """Return the exact POST body that would be sent for `phone`. No I/O."""
+    def build_params(self, phone: str, tokens: dict[str, str] | None = None) -> dict:
+        """Return the exact POST body that would be sent for `phone`. No I/O.
+
+        `tokens` carries per-recipient values (from CSV columns); they take
+        precedence over the static tokens in `SenderConfig`.
+        """
         params: dict = {"receptor": phone, "template": self.cfg.template}
-        for name in ("token", "token2", "token3", "token10", "token20"):
-            value = getattr(self.cfg, name)
+        for name in TOKEN_MAX_SPACES:
+            value = tokens[name] if tokens and name in tokens else getattr(self.cfg, name)
             if value is not None:
                 params[name] = value
         return params
 
-    def _do_call(self, phone: str) -> SendResult:
+    def _do_call(self, phone: str, tokens: dict[str, str] | None) -> SendResult:
         try:
-            response = self._sdk.verify_lookup(self.build_params(phone))
+            response = self._sdk.verify_lookup(self.build_params(phone, tokens))
         except HTTPException as e:
             # Network / timeout — always retriable.
             raise _RetriableSendError(None, f"http: {e}") from e
@@ -200,9 +211,10 @@ class Sender:
             status_code=int(first.get("status", 200)),
         )
 
-    def send(self, phone: str) -> SendResult:
+    def send(self, phone: str, tokens: dict[str, str] | None = None) -> SendResult:
         """Send one SMS, with retries on transient failures.
 
+        `tokens` are per-recipient values layered over the static config.
         Raises HaltError for account/auth/quota issues (caller aborts the run).
         Raises PermanentSendError for per-recipient issues (caller marks failed).
         Raises _RetriableSendError-wrapped RetryError after retries are exhausted.
@@ -211,12 +223,13 @@ class Sender:
             stop=stop_after_attempt(self.cfg.max_attempts),
             wait=wait_random_exponential(multiplier=1, max=self.cfg.backoff_max),
             retry=retry_if_exception_type(_RetriableSendError),
+            before_sleep=lambda state: _log_retry(phone, state),
             reraise=False,
         )
         try:
             for attempt in retryer:
                 with attempt:
-                    return self._do_call(phone)
+                    return self._do_call(phone, tokens)
         except RetryError as e:
             inner = e.last_attempt.exception()
             if isinstance(inner, _RetriableSendError):
@@ -248,6 +261,23 @@ class Sender:
             expire_date=data.get("expiredate"),
             type=data.get("type"),
         )
+
+
+def _log_retry(phone: str, state: RetryCallState) -> None:
+    """Leave a per-phone trace of every retry. A network-level failure
+    (status=None, e.g. a read timeout) may still have been delivered, so these
+    lines are how to find recipients that might have received the SMS twice.
+    A retried Kavenegar code (409/414/419) was rejected and never sent."""
+    exc = state.outcome.exception() if state.outcome else None
+    logger.warning(
+        "send_retry",
+        extra={
+            "phone": phone,
+            "attempt": state.attempt_number,
+            "status": getattr(exc, "status_code", None),
+            "detail": getattr(exc, "message", repr(exc)),
+        },
+    )
 
 
 def _safe_int(value: object) -> int | None:

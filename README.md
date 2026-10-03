@@ -61,6 +61,34 @@ sms-sender send \
 Re-run the same command after a crash, network outage, or credit top-up — it
 picks up exactly where it left off.
 
+### Per-recipient tokens
+
+When each recipient needs their own values (name, coin, …), take the tokens
+from CSV columns instead of passing them statically. The CSV needs a header
+row, and its first column is the phone:
+
+```csv
+phone_number,first_name,last_token,trade_side
+09123456789,علی,ترون,Buy
+```
+
+```bash
+sms-sender send --input trades.csv --template transaction-1 \
+  --token-column token=trade_side \
+  --token-column token10=first_name \
+  --token-column token20=last_token \
+  --value-map trade_side:Buy=خرید \
+  --value-map trade_side:Sell=فروش
+```
+
+`--value-map COLUMN:FROM=TO` translates a column's values before sending.
+Rows that can't be sent as-is — an empty cell, a value with no `--value-map`
+entry, or more spaces than the token allows — are recorded as invalid
+(see `export-failed`) rather than sent. `dry-run` and `preview` accept the same
+flags, so you can check every row and the exact POST bodies first. In a
+profile, write the flags as lists:
+`token_column = ["token=trade_side", "token10=first_name"]`.
+
 ### Safer first runs
 
 Two flags catch the common mistakes (wrong template, expired credit) **before**

@@ -33,7 +33,7 @@ class FakeSender:
         self._lock = threading.Lock()
         self.behavior = {}  # phone -> callable
 
-    def send(self, phone: str) -> SendResult:
+    def send(self, phone: str, tokens: dict[str, str] | None = None) -> SendResult:
         with self._lock:
             self.calls.append(phone)
         if phone in self.behavior:
