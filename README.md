@@ -294,7 +294,7 @@ sms-sender dry-run --input ./numbers.csv          # parse + normalize only, no A
 | Code | Meaning |
 |---|---|
 | 0 | All recipients sent successfully. |
-| 1 | Run finished but some rows failed (permanent or retriable), or are `unknown` / `needs_review`. |
+| 1 | Some rows failed (permanent or retriable) or are `unknown` / `needs_review`; or the run stopped early (Ctrl-C, or the sending window closed) and the same command continues it. |
 | 2 | Run halted on an account-level error (no credit, bad API key, plan), outside the sending window, another `sms-sender` is already using the same state DB, or the DB belongs to another campaign / was sent with other settings. Fix and re-run. |
 
 ## Architecture
@@ -313,16 +313,25 @@ CLI ──► InputLoader ──► StateStore (SQLite, WAL, immediate commit)
 State machine per recipient:
 
 ```
-            upsert
-   (input) ────────► pending ──claim──► in_flight ──ok──► sent
-                       ▲                      │
-                       │                      ├──permanent──► failed_permanent
-                       └────retriable─────────┴──halt/retries-exhausted──► failed_retriable
+(input) ─► pending ─claim─► in_flight ─┬─ accepted ───────────► sent
+                                       ├─ rejected ───────────► failed_permanent
+                                       ├─ not sent ───────────► failed_retriable
+                                       └─ may have been sent ─► unknown
 ```
 
-Re-runs reclaim `in_flight` (orphaned by crash) and `failed_retriable` rows.
-`sent` and `failed_permanent` rows are never touched again unless the DB
-is deleted.
+| Status | Meaning | Sent again? |
+|---|---|---|
+| `pending` | not sent yet | yes, by the next `send` |
+| `in_flight` | being sent right now | — one left behind by a crash becomes `unknown` |
+| `sent` | Kavenegar accepted it | never |
+| `failed_retriable` | definitely not sent: no credit, the request never reached Kavenegar, or retries ran out | yes, by the next `send` |
+| `failed_permanent` | Kavenegar rejected it: bad template, invalid number | only after `retry-failed --include-permanent` or `reset` |
+| `unknown` | may have been sent: a timeout after the request, a crash mid-send | never automatically; `reconcile` asks Kavenegar |
+| `needs_review` | `reconcile` couldn't decide | only after `reset --status needs_review` |
+| `suppressed` | on the opt-out list | only after `reset --status suppressed`, and only once it's off the list |
+
+Only `pending` and `failed_retriable` rows are ever claimed, so a `send` can
+never reach a row that has, or may have, the SMS.
 
 ## Testing
 

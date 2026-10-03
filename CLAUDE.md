@@ -149,7 +149,7 @@ Unknown codes default to `PERMANENT` deliberately — don't burn credit looping 
 
 `tenacity` only retries `_RetriableSendError` (notice the leading underscore — it never escapes `Sender`). `HaltError`, `PermanentSendError` and `UncertainSendError` bypass retry by design. Which network errors count as "never sent" is decided in one place, `sender._never_sent`: only a failed TCP connection (possibly through the proxy). Everything later — and any bare `HTTPException` from an SDK — is uncertain. Each retry logs `send_retry` with the phone; since only never-sent calls and 409/451 are retried, these are not possible double sends.
 
-### Why `_KavenegarHTTP` exists ([sender.py:92](src/sms_sender/sender.py#L92))
+### Why `_KavenegarHTTP` exists ([sender.py:202](src/sms_sender/sender.py#L202))
 
 The packaged `kavenegar` SDK calls `requests.post()` with no timeout, so a hung connection would hang the worker forever. We POST directly via `requests` and re-raise the SDK's `APIException` / `HTTPException` types so the rest of the code is unchanged. If you swap or upgrade the SDK, preserve this wrapper.
 
@@ -162,7 +162,7 @@ Canonical form is `09XXXXXXXXX`. The normalizer accepts `+98…`, `0098…`, `98
 | Code | Meaning |
 |---|---|
 | 0 | every recipient sent |
-| 1 | run finished with some `failed_permanent`, `failed_retriable`, `unknown` or `needs_review` |
+| 1 | run finished with some `failed_permanent`, `failed_retriable`, `unknown` or `needs_review`; or it stopped early (`RunSummary.stopped`: Ctrl-C / SIGTERM / `Runner.cancel()`, or the sending window closed) |
 | 2 | `HaltError`, preflight failure, or declined approval-test aborted the run; another process holds the state DB; or the DB belongs to another campaign / was sent with other settings |
 
 ## Conventions
