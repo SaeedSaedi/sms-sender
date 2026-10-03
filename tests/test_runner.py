@@ -73,6 +73,47 @@ def test_second_run_on_a_busy_db_refuses_and_touches_nothing(tmp_path):
     assert state.counts() == {"in_flight": 1, PENDING: 1}
 
 
+def test_uncertain_send_is_parked_as_unknown_and_never_resent(tmp_path):
+    from sms_sender.sender import UncertainSendError
+    from sms_sender.state import UNKNOWN
+
+    inp = write_input(tmp_path, ["09120000001", "09120000002"])
+    state = StateStore(tmp_path / "s.db")
+    sender = FakeSender()
+    sender.behavior["09120000001"] = lambda: (_ for _ in ()).throw(
+        UncertainSendError(None, "outcome unknown: read timed out")
+    )
+    summary = Runner(input_path=inp, state=state, sender=sender, workers=1).run()
+    assert summary.sent == 1
+    assert summary.unknown == 1
+    assert state.counts() == {SENT: 1, UNKNOWN: 1}
+    assert "unknown" in format_report(summary)
+
+    # A later run with a healthy provider still doesn't touch it.
+    healthy = FakeSender()
+    Runner(input_path=inp, state=state, sender=healthy, workers=1).run()
+    assert healthy.calls == []
+
+
+def test_make_runner_records_each_call_in_the_db(tmp_path):
+    from sms_sender.runner import make_runner
+    from sms_sender.sender import Attempt, SenderConfig
+
+    inp = write_input(tmp_path, ["09120000001"])
+    runner = make_runner(
+        input_path=inp, db_path=tmp_path / "s.db",
+        sender_cfg=SenderConfig(api_key="k", template="t"),
+    )
+    runner.sender._on_attempt(Attempt(
+        phone="09120000001", outcome="accepted", started_at=1.0, finished_at=2.0,
+        status_code=200, message_id=7, cost=1100,
+    ))
+    rows = runner.state.attempts_for("09120000001")
+    assert [(r["kind"], r["outcome"], r["message_id"], r["cost"]) for r in rows] == [
+        ("send", "accepted", 7, 1100),
+    ]
+
+
 def test_happy_path_marks_all_sent(tmp_path):
     inp = write_input(tmp_path, ["09120000001", "09120000002", "09120000003"])
     state = StateStore(tmp_path / "s.db")

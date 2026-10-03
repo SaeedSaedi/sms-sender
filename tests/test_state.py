@@ -9,6 +9,7 @@ from sms_sender.state import (
     PENDING,
     SCHEMA_VERSION,
     SENT,
+    UNKNOWN,
     StateSchemaError,
     StateStore,
 )
@@ -71,6 +72,11 @@ def test_legacy_db_is_upgraded_in_place(tmp_path):
     assert user_version(db) == SCHEMA_VERSION
     assert s.counts() == {SENT: 1, PENDING: 1}
     assert s.list_claimable_phones() == ["09120000002"]
+    # The new columns and tables work on the upgraded DB.
+    s.claim("09120000002")
+    s.mark_sent("09120000002", message_id=8, status_code=200, cost=1100)
+    s.record_attempt(phone="09120000002", kind="send", outcome="accepted", started_at=3.0)
+    assert len(s.attempts_for("09120000002")) == 1
 
 
 def test_db_from_a_newer_version_is_refused(tmp_path):
@@ -132,19 +138,55 @@ def test_mark_sent_then_resume_skips(tmp_path):
     s.mark_sent("09123456789", message_id=42, status_code=200)
     counts = s.counts()
     assert counts == {SENT: 1}
-    # New "run" — orphan reset doesn't touch sent rows.
-    assert s.reset_orphan_in_flight() == 0
+    # New "run" — the orphan sweep doesn't touch sent rows.
+    assert s.mark_orphans_unknown() == 0
     assert s.list_claimable_phones() == []
 
 
-def test_orphan_reset_brings_back_in_flight(tmp_path):
+def test_orphans_become_unknown_not_pending(tmp_path):
+    """A row left in_flight by a crash may already have been accepted by
+    Kavenegar. Making it claimable again would resend it blindly."""
     s = make(tmp_path)
     s.upsert_pending([("09123456789", "09123456789")])
     s.claim("09123456789")
     # simulate crash: nothing was committed past in_flight
     s2 = StateStore(tmp_path / "s.db")  # reopen
-    assert s2.reset_orphan_in_flight() == 1
-    assert s2.list_claimable_phones() == ["09123456789"]
+    assert s2.mark_orphans_unknown() == 1
+    assert s2.counts() == {UNKNOWN: 1}
+    assert s2.list_claimable_phones() == []
+    [row] = s2.attempts_for("09123456789")
+    assert (row["kind"], row["outcome"]) == ("recovery", UNKNOWN)
+
+
+def test_unknown_rows_are_never_claimed(tmp_path):
+    s = make(tmp_path)
+    s.upsert_pending([("09123456789", "09123456789")])
+    s.claim("09123456789")
+    s.mark_unknown("09123456789", "outcome unknown: read timed out")
+    assert s.claim("09123456789") is None
+    assert s.list_claimable_phones() == []
+
+
+def test_mark_sent_stores_the_cost(tmp_path):
+    s = make(tmp_path)
+    s.upsert_pending([("09123456789", "09123456789")])
+    s.claim("09123456789")
+    s.mark_sent("09123456789", message_id=42, status_code=200, cost=1100)
+    conn = sqlite3.connect(tmp_path / "s.db")
+    assert conn.execute("SELECT cost FROM recipients").fetchone() == (1100,)
+    conn.close()
+
+
+def test_attempts_are_recorded_in_order_with_secrets_scrubbed(tmp_path):
+    s = make(tmp_path)
+    s.record_attempt(phone="09123456789", kind="send", outcome="retry", started_at=1.0,
+                     detail="http: GET /v1/SECRET_KEY/verify/lookup.json refused")
+    s.record_attempt(phone="09123456789", kind="send", outcome="accepted", started_at=2.0,
+                     finished_at=2.5, status_code=200, message_id=7, cost=1100)
+    rows = s.attempts_for("09123456789")
+    assert [r["outcome"] for r in rows] == ["retry", "accepted"]
+    assert "SECRET_KEY" not in rows[0]["detail"]
+    assert (rows[1]["message_id"], rows[1]["cost"]) == (7, 1100)
 
 
 def test_mark_failed_permanent_vs_retriable(tmp_path):

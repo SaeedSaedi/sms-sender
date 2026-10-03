@@ -9,11 +9,15 @@ Reliable bulk SMS sender for the **Kavenegar `verify/lookup`** endpoint.
 - **No double sends.** A SQLite state DB tracks every recipient — re-running
   the same input only sends to numbers that haven't been confirmed yet. Only
   one `sms-sender` process can use a state DB at a time; a second one exits.
-- **Resumable.** A crash mid-run is safe: on restart, orphan in-flight rows
-  are reclaimed and pending rows continue.
-- **Retries.** Network timeouts and transient `409` server errors back off
-  and retry; per-recipient errors (bad template, invalid receptor) are marked
-  permanent and skipped on resume.
+- **Resumable.** A crash mid-run is safe: on restart, rows that were mid-send
+  are marked `unknown` (they may already have the SMS) instead of being sent
+  again, and pending rows continue.
+- **Retries.** Requests that never reached Kavenegar (connection refused, DNS,
+  connect timeout) and its "try later" codes (`409`, `451`) back off and
+  retry. A timeout *after* the request went out is never retried — Kavenegar
+  may have sent it — so the row becomes `unknown`. Per-recipient errors (bad
+  template, invalid receptor) are marked permanent and skipped on resume.
+  Every call to Kavenegar is recorded in the state DB's `attempts` table.
 - **Progress + logs.** A `tqdm` bar shows sent / failed / left, and every
   important event is logged structured to a rotating log file.
 
@@ -197,7 +201,7 @@ sms-sender dry-run --input ./numbers.csv          # parse + normalize only, no A
 | Code | Meaning |
 |---|---|
 | 0 | All recipients sent successfully. |
-| 1 | Run finished but some rows failed (permanent or retriable). |
+| 1 | Run finished but some rows failed (permanent or retriable) or are `unknown`. |
 | 2 | Run halted on an account-level error (no credit, bad API key, plan), or another `sms-sender` is already using the same state DB. Fix and re-run. |
 
 ## Architecture

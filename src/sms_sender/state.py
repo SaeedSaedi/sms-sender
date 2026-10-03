@@ -40,6 +40,24 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         """,
         "CREATE INDEX IF NOT EXISTS idx_recipients_status ON recipients(status)",
     ),
+    (  # 1 → 2: cost of each accepted SMS + one row per call to the provider
+        "ALTER TABLE recipients ADD COLUMN cost INTEGER",
+        """
+        CREATE TABLE attempts (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            phone       TEXT NOT NULL,
+            kind        TEXT NOT NULL,
+            outcome     TEXT NOT NULL,
+            started_at  REAL NOT NULL,
+            finished_at REAL,
+            status_code INTEGER,
+            message_id  INTEGER,
+            cost        INTEGER,
+            detail      TEXT
+        )
+        """,
+        "CREATE INDEX idx_attempts_phone ON attempts(phone)",
+    ),
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)
@@ -55,6 +73,10 @@ IN_FLIGHT = "in_flight"
 SENT = "sent"
 FAILED_PERMANENT = "failed_permanent"
 FAILED_RETRIABLE = "failed_retriable"
+# The request may have reached Kavenegar without a clear answer (timeout,
+# dropped connection, crash mid-send). Never claimable: resending could
+# deliver a second SMS, so it waits to be checked with the provider.
+UNKNOWN = "unknown"
 
 CLAIMABLE = (PENDING, FAILED_RETRIABLE)
 
@@ -213,12 +235,23 @@ class StateStore:
             )
             return cur.rowcount
 
-    def reset_orphan_in_flight(self) -> int:
-        """On startup, any `in_flight` row is from a prior crash — reclaim it."""
+    def mark_orphans_unknown(self) -> int:
+        """On startup, any `in_flight` row is left over from a process that
+        stopped mid-send (the run lock rules out a live one). Its request may
+        or may not have reached Kavenegar, so it becomes `unknown` — never
+        `pending`, which would send it again blindly. Returns rows changed."""
+        now = time.time()
         with self._tx() as conn:
+            conn.execute(
+                "INSERT INTO attempts (phone, kind, outcome, started_at, detail) "
+                "SELECT phone, 'recovery', ?, ?, 'process stopped while the request was in flight' "
+                "FROM recipients WHERE status=?",
+                (UNKNOWN, now, IN_FLIGHT),
+            )
             cur = conn.execute(
-                "UPDATE recipients SET status=? WHERE status=?",
-                (PENDING, IN_FLIGHT),
+                "UPDATE recipients SET status=?, "
+                "last_error='process stopped while the request was in flight' WHERE status=?",
+                (UNKNOWN, IN_FLIGHT),
             )
             return cur.rowcount
 
@@ -248,14 +281,44 @@ class StateStore:
             ).fetchone()
         return Recipient(phone=row["phone"], raw=row["raw"], attempts=row["attempts"])
 
-    def mark_sent(self, phone: str, message_id: int | None, status_code: int) -> None:
+    def mark_sent(
+        self, phone: str, message_id: int | None, status_code: int, cost: int | None = None,
+    ) -> None:
         now = time.time()
         with self._tx() as conn:
             conn.execute(
-                "UPDATE recipients SET status=?, message_id=?, status_code=?, "
+                "UPDATE recipients SET status=?, message_id=?, status_code=?, cost=?, "
                 "sent_at=?, last_error=NULL WHERE phone=?",
-                (SENT, message_id, status_code, now, phone),
+                (SENT, message_id, status_code, cost, now, phone),
             )
+
+    def mark_unknown(self, phone: str, error: str) -> None:
+        """The request may have been accepted — park it until it's checked."""
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE recipients SET status=?, status_code=NULL, last_error=? WHERE phone=?",
+                (UNKNOWN, redact_secrets(error), phone),
+            )
+
+    def record_attempt(
+        self, *, phone: str, kind: str, outcome: str, started_at: float,
+        finished_at: float | None = None, status_code: int | None = None,
+        message_id: int | None = None, cost: int | None = None, detail: str | None = None,
+    ) -> None:
+        """Append one row to the audit trail of calls to the provider."""
+        with self._tx() as conn:
+            conn.execute(
+                "INSERT INTO attempts (phone, kind, outcome, started_at, finished_at, "
+                "status_code, message_id, cost, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (phone, kind, outcome, started_at, finished_at, status_code, message_id,
+                 cost, redact_secrets(detail) if detail else detail),
+            )
+
+    def attempts_for(self, phone: str) -> list[sqlite3.Row]:
+        """Every recorded call for one phone, oldest first."""
+        return self._conn().execute(
+            "SELECT * FROM attempts WHERE phone=? ORDER BY id", (phone,)
+        ).fetchall()
 
     def mark_failed(
         self, phone: str, status_code: int | None, error: str, *, permanent: bool

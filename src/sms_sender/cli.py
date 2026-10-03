@@ -323,7 +323,7 @@ def _do_send(
     notify(notify_target, summary)
     if summary.halted:
         sys.exit(2)
-    if summary.failed_permanent or summary.failed_retriable:
+    if summary.failed_permanent or summary.failed_retriable or summary.unknown:
         sys.exit(1)
 
 

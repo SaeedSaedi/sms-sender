@@ -486,6 +486,43 @@ def test_send_end_to_end_through_real_sender(tmp_path, monkeypatch):
     assert StateStore(db).counts() == {SENT: 2}
 
 
+def test_send_read_timeout_parks_the_row_as_unknown(tmp_path, monkeypatch):
+    """Real CLI → Runner → Sender → _KavenegarHTTP with a read timeout: the
+    request may have been accepted, so it's sent exactly once, recorded as
+    `unknown` with its attempt, and the exit code is 1."""
+    import requests
+    import sms_sender.sender as sender_mod
+
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY_NOT_A_REAL_ONE")
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n", encoding="utf-8")
+    db = tmp_path / "s.db"
+    posts: list[str] = []
+
+    def timeout_post(self, url, data=None, timeout=None, **kw):
+        posts.append(url)
+        raise requests.exceptions.ReadTimeout("read timed out")
+
+    monkeypatch.setattr(sender_mod.requests.Session, "post", timeout_post)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "send",
+            "--input", str(inp),
+            "--template", "tpl",
+            "--state", str(db),
+            "--no-preflight",
+            "--log-file", str(tmp_path / "test.log"),
+        ],
+    )
+    assert result.exit_code == 1, result.output
+    assert len(posts) == 1  # never retried
+    store = StateStore(db)
+    assert store.counts() == {"unknown": 1}
+    assert [r["outcome"] for r in store.attempts_for("09120000001")] == ["unknown"]
+    assert "unknown" in result.output
+
+
 # ---------- approval test (manual gate) ----------
 
 

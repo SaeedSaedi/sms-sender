@@ -39,7 +39,7 @@ pytest -k "claim or in_flight"           # by name pattern
 
 ## Architecture
 
-The whole pipeline exists to enforce one invariant: **a number that has been confirmed sent is never sent again, even across crashes**. Most non-obvious code is in service of that.
+The whole pipeline exists to enforce one invariant: **a number that has been confirmed sent is never sent again, even across crashes** — and its corollary, **a number that *may* have been sent is never resent blindly**. Most non-obvious code is in service of that.
 
 ### Data flow
 
@@ -47,7 +47,7 @@ The whole pipeline exists to enforce one invariant: **a number that has been con
 cli.send → make_runner → Runner.run
               │
               ├─ input_loader.load    (.txt/.csv → normalized phones + invalid rows)
-              ├─ StateStore.upsert_pending / record_invalid / reset_orphan_in_flight
+              ├─ StateStore.upsert_pending / record_invalid / mark_orphans_unknown
               ├─ Runner._preflight    ← Sender.account_info + optional smoke send
               └─ ThreadPoolExecutor → Runner._send_one per phone
                        │
@@ -90,11 +90,12 @@ The approval test runs *before* the smoke test on purpose: the operator gets a c
 
 ### State machine (owned by `state.py`)
 
-Statuses: `pending`, `in_flight`, `sent`, `failed_permanent`, `failed_retriable`. `CLAIMABLE = (pending, failed_retriable)`. Three details matter:
+Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_permanent`, `failed_retriable` (= definitely not sent), `unknown` (= may have been sent). `CLAIMABLE = (pending, failed_retriable)`. The details that matter:
 
 - **`claim()` is the dedup gate.** It runs `UPDATE … WHERE phone=? AND status IN CLAIMABLE`; if `rowcount == 0` the worker silently skips. Two workers racing on the same phone — one wins the UPDATE, the other gets `None`. `sent` and `failed_permanent` rows can never be claimed.
 - **Connection-per-thread.** SQLite connections aren't shareable; `StateStore` keeps one per thread via `threading.local`. WAL mode + `BEGIN IMMEDIATE` keep concurrent writers from blocking each other badly.
-- **Crash recovery via `reset_orphan_in_flight`.** Any `in_flight` row at startup is from a prior crash — Runner reclaims it before fanning out workers. So you can `Ctrl-C` mid-run and re-run safely.
+- **Crash recovery via `mark_orphans_unknown`.** Any `in_flight` row at startup was left by a process that stopped mid-send (the run lock rules out a live one). Its request may or may not have reached Kavenegar, so it becomes `unknown` — never `pending` — and is never claimed again until checked with the provider. So you can `Ctrl-C` mid-run and re-run safely; the rest of the campaign carries on.
+- **Every provider call is an `attempts` row** (kind `send` / `recovery`, outcome `accepted` / `retry` / `rejected` / `halt` / `unknown`, codes, `message_id`, `cost`, redacted detail). `Sender(on_attempt=…)` reports each call; `make_runner` wires it to `StateStore.record_attempt`. A failing audit write is logged and never changes the send's outcome. `recipients.cost` holds the accepted SMS's cost in rials.
 - **One process per DB (`locking.RunLock`).** `Runner.run` and the commands that change rows (`retry-failed`, `reset`, `purge`) hold `fcntl.flock` on `<db>.lock`. A second process exits with code 2 instead of treating the first one's `in_flight` rows as crash leftovers and sending them again. The OS drops the lock when the holder dies (even `kill -9`), so crash recovery still works. `status` / `export-failed` only read and don't lock.
 - **Invalid inputs are persisted with synthetic key `INVALID:<raw>`.** This keeps the `phone` PK constraint while letting `export-failed` surface them.
 - **Schema versions.** `PRAGMA user_version` + append-only steps in `state._MIGRATIONS`. Opening a DB upgrades it in place, in one transaction; a DB written by a newer sms-sender is refused (`StateSchemaError`). Never edit a step that has shipped — existing DBs already applied it; add a new one.
@@ -105,14 +106,15 @@ Statuses: `pending`, `in_flight`, `sent`, `failed_permanent`, `failed_retriable`
 
 | classifier action | sender raises | runner does |
 |---|---|---|
-| `RETRY` (or network error, code=None) | `_RetriableSendError` (internal) | tenacity retries up to `max_attempts`; if exhausted → `SendError` → `failed_retriable` |
+| `RETRY` (409 / 451), or the connection itself failed (`_NotSent`: DNS, refused, connect timeout) | `_RetriableSendError` (internal) | tenacity retries up to `max_attempts`; if exhausted → `SendError` → `failed_retriable` |
+| request may have been processed: read timeout, dropped connection, garbled 200 / 5xx reply, 200 with no entries | `UncertainSendError` | `unknown` — **never retried**, never claimable |
 | `PERMANENT` | `PermanentSendError` | `failed_permanent` (skipped on resume) |
 | `HALT` | `HaltError` | mark row `failed_retriable`, set `_stop` event, **abort the run with exit code 2** |
 | `SUCCESS` | returns `SendResult` | `mark_sent` |
 
 Unknown codes default to `PERMANENT` deliberately — don't burn credit looping on something we don't understand.
 
-`tenacity` only retries `_RetriableSendError` (notice the leading underscore — it never escapes `Sender`). `HaltError` and `PermanentSendError` bypass retry by design. Each retry logs `send_retry` with the phone: `status=None` is a network-level failure (e.g. read timeout) that Kavenegar may still have delivered, so grep those to find possible double sends; a retried Kavenegar code (409/451) was rejected and never sent.
+`tenacity` only retries `_RetriableSendError` (notice the leading underscore — it never escapes `Sender`). `HaltError`, `PermanentSendError` and `UncertainSendError` bypass retry by design. Which network errors count as "never sent" is decided in one place, `sender._never_sent`: only a failed TCP connection (possibly through the proxy). Everything later — and any bare `HTTPException` from an SDK — is uncertain. Each retry logs `send_retry` with the phone; since only never-sent calls and 409/451 are retried, these are not possible double sends.
 
 ### Why `_KavenegarHTTP` exists ([sender.py:92](src/sms_sender/sender.py#L92))
 
@@ -127,7 +129,7 @@ Canonical form is `09XXXXXXXXX`. The normalizer accepts `+98…`, `0098…`, `98
 | Code | Meaning |
 |---|---|
 | 0 | every recipient sent |
-| 1 | run finished with some `failed_permanent` or `failed_retriable` |
+| 1 | run finished with some `failed_permanent`, `failed_retriable` or `unknown` |
 | 2 | `HaltError`, preflight failure, or declined approval-test aborted the run; or another process holds the state DB |
 
 ## Conventions

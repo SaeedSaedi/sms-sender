@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Callable, Protocol
 
 import requests
+import urllib3
 from kavenegar import APIException, HTTPException
 from tenacity import (
     RetryCallState,
@@ -52,6 +54,12 @@ class HaltError(SendError):
     """Account/auth/quota error — abort the whole run."""
 
 
+class UncertainSendError(SendError):
+    """The request may have reached Kavenegar, but no clear answer came back
+    (read timeout, dropped connection, garbled reply). Never retried: a retry
+    could deliver a second SMS. The row becomes `unknown` instead."""
+
+
 class _RetriableSendError(Exception):
     """Internal: signal tenacity to retry. Not exposed."""
 
@@ -61,10 +69,19 @@ class _RetriableSendError(Exception):
         self.message = message
 
 
+class _NotSent(HTTPException):
+    """The connection itself failed, so the request never left. Safe to retry."""
+
+
+class _OutcomeUnknown(HTTPException):
+    """The request may have been processed. Must not be retried blindly."""
+
+
 @dataclass(frozen=True)
 class SendResult:
     message_id: int | None
     status_code: int
+    cost: int | None = None  # rials, as reported by Kavenegar
 
 
 @dataclass(frozen=True)
@@ -88,6 +105,23 @@ class AccountInfo:
     type: str | None
 
 
+@dataclass(frozen=True)
+class Attempt:
+    """One call to Kavenegar, reported to `Sender(on_attempt=…)`.
+
+    `outcome` is `accepted`, `retry` (refused before sending, retried),
+    `rejected` (permanent), `halt`, or `unknown` (may have been sent).
+    """
+    phone: str
+    outcome: str
+    started_at: float
+    finished_at: float
+    status_code: int | None = None
+    message_id: int | None = None
+    cost: int | None = None
+    detail: str | None = None
+
+
 class _SDK(Protocol):
     def verify_lookup(self, params: dict) -> list[dict]: ...
     def account_info(self) -> dict: ...
@@ -103,6 +137,27 @@ def _parse_api_exception(exc: APIException) -> tuple[int | None, str]:
             except ValueError:
                 continue
     return None, s
+
+
+def _never_sent(exc: requests.exceptions.RequestException) -> bool:
+    """True only when the request provably never left: the TCP connection
+    itself failed (DNS failure, connection refused, connect timeout), possibly
+    through the proxy. Anything later — a read timeout, a dropped connection,
+    an SSL error mid-stream — may have reached Kavenegar."""
+    if isinstance(exc, requests.exceptions.ConnectTimeout):
+        return True
+    if not isinstance(exc, requests.exceptions.ConnectionError) or not exc.args:
+        return False
+    reason = getattr(exc.args[0], "reason", None)  # urllib3 MaxRetryError
+    if isinstance(reason, urllib3.exceptions.ProxyError):
+        reason = getattr(reason, "original_error", None)
+    return isinstance(reason, urllib3.exceptions.NewConnectionError)
+
+
+def _may_have_been_processed(http_status: int) -> bool:
+    """A garbled 200 came from the API itself; a 5xx may come from a gateway
+    that already forwarded the request. Either way it may have been sent."""
+    return http_status == 200 or http_status >= 500
 
 
 class _KavenegarHTTP:
@@ -126,29 +181,31 @@ class _KavenegarHTTP:
         try:
             resp = self._session.post(url, data=params or {}, timeout=self._timeout)
         except requests.exceptions.RequestException as e:
-            raise HTTPException(redact_secrets(str(e))) from e
+            if _never_sent(e):
+                raise _NotSent(redact_secrets(str(e))) from e
+            raise _OutcomeUnknown(redact_secrets(str(e))) from e
         try:
             body = resp.json()
         except ValueError as e:
             # Non-JSON body (HTML 5xx page, gateway error, garbled response).
-            # Permanent — retrying won't fix a misconfigured upstream that
-            # serves HTML where JSON is expected.
-            raise PermanentSendError(
-                resp.status_code,
-                redact_secrets(f"non-json response (http {resp.status_code}): {e}"),
-            ) from e
+            detail = redact_secrets(f"non-json response (http {resp.status_code}): {e}")
+            if _may_have_been_processed(resp.status_code):
+                raise _OutcomeUnknown(detail) from e
+            # A 3xx/4xx page means we never reached the API (bad URL, proxy
+            # refusal) — permanent, retrying won't fix the setup.
+            raise PermanentSendError(resp.status_code, detail) from e
         if not isinstance(body, dict) or "return" not in body:
-            raise PermanentSendError(
-                None,
-                f"malformed response (no `return` key): {str(body)[:200]}",
-            )
+            detail = f"malformed response (no `return` key): {str(body)[:200]}"
+            if _may_have_been_processed(resp.status_code):
+                raise _OutcomeUnknown(detail)
+            raise PermanentSendError(None, detail)
         ret = body.get("return") or {}
         status = ret.get("status")
         if not isinstance(status, int):
-            raise PermanentSendError(
-                None,
-                f"malformed response (status not int): status={status!r}",
-            )
+            detail = f"malformed response (status not int): status={status!r}"
+            if _may_have_been_processed(resp.status_code):
+                raise _OutcomeUnknown(detail)
+            raise PermanentSendError(None, detail)
         if status != 200:
             raise APIException(f"APIException[{status}] {ret.get('message', '')}")
         return body
@@ -169,9 +226,15 @@ class Sender:
     """One Sender per process — the SDK's KavenegarAPI is thread-safe (it's
     a thin wrapper over `requests`, and each call opens its own connection)."""
 
-    def __init__(self, cfg: SenderConfig, sdk: _SDK | None = None):
+    def __init__(
+        self, cfg: SenderConfig, sdk: _SDK | None = None, *,
+        on_attempt: Callable[[Attempt], None] | None = None,
+    ):
         self.cfg = cfg
         self._sdk: _SDK = sdk or _KavenegarHTTP(cfg.api_key, cfg.timeout)
+        # Audit hook, called once per call to Kavenegar (make_runner records
+        # these in the state DB's `attempts` table).
+        self._on_attempt = on_attempt
 
     def build_params(self, phone: str, tokens: dict[str, str] | None = None) -> dict:
         """Return the exact POST body that would be sent for `phone`. No I/O.
@@ -189,9 +252,13 @@ class Sender:
     def _do_call(self, phone: str, tokens: dict[str, str] | None) -> SendResult:
         try:
             response = self._sdk.verify_lookup(self.build_params(phone, tokens))
-        except HTTPException as e:
-            # Network / timeout — always retriable.
+        except _NotSent as e:
+            # The connection failed before the request left — safe to retry.
             raise _RetriableSendError(None, f"http: {e}") from e
+        except HTTPException as e:
+            # Any other network failure (read timeout, dropped connection,
+            # garbled reply) may have been processed: never retry it blindly.
+            raise UncertainSendError(None, f"outcome unknown: {e}") from e
         except APIException as e:
             code, message = _parse_api_exception(e)
             action = classify(code)
@@ -204,12 +271,43 @@ class Sender:
 
         # Success path — Kavenegar returns a list of entries.
         if not response:
-            raise PermanentSendError(None, "empty response from kavenegar")
+            # Status 200 means Kavenegar accepted the call, so the SMS may
+            # well have gone out even without an entry to prove it.
+            raise UncertainSendError(None, "status 200 but no entries from kavenegar")
         first = response[0]
         return SendResult(
             message_id=first.get("messageid"),
             status_code=int(first.get("status", 200)),
+            cost=_safe_int(first.get("cost")),
         )
+
+    def _call_and_report(self, phone: str, tokens: dict[str, str] | None) -> SendResult:
+        """One call to Kavenegar, reported to `on_attempt` whatever happens."""
+        started = time.time()
+        try:
+            result = self._do_call(phone, tokens)
+        except Exception as e:
+            self._report(Attempt(
+                phone=phone, outcome=_attempt_outcome(e),
+                started_at=started, finished_at=time.time(),
+                status_code=getattr(e, "status_code", None),
+                detail=redact_secrets(getattr(e, "message", None) or repr(e)),
+            ))
+            raise
+        self._report(Attempt(
+            phone=phone, outcome="accepted",
+            started_at=started, finished_at=time.time(),
+            status_code=result.status_code, message_id=result.message_id, cost=result.cost,
+        ))
+        return result
+
+    def _report(self, attempt: Attempt) -> None:
+        if self._on_attempt is None:
+            return
+        try:
+            self._on_attempt(attempt)
+        except Exception:  # noqa: BLE001 — an audit row must never change a send's outcome
+            logger.exception("attempt_record_failed", extra={"phone": attempt.phone})
 
     def send(self, phone: str, tokens: dict[str, str] | None = None) -> SendResult:
         """Send one SMS, with retries on transient failures.
@@ -217,7 +315,9 @@ class Sender:
         `tokens` are per-recipient values layered over the static config.
         Raises HaltError for account/auth/quota issues (caller aborts the run).
         Raises PermanentSendError for per-recipient issues (caller marks failed).
-        Raises _RetriableSendError-wrapped RetryError after retries are exhausted.
+        Raises UncertainSendError when the request may have been processed
+        without a clear answer — never retried (caller marks it `unknown`).
+        Raises SendError once retries of never-sent calls are exhausted.
         """
         retryer = Retrying(
             stop=stop_after_attempt(self.cfg.max_attempts),
@@ -229,7 +329,7 @@ class Sender:
         try:
             for attempt in retryer:
                 with attempt:
-                    return self._do_call(phone, tokens)
+                    return self._call_and_report(phone, tokens)
         except RetryError as e:
             inner = e.last_attempt.exception()
             if isinstance(inner, _RetriableSendError):
@@ -263,11 +363,23 @@ class Sender:
         )
 
 
+def _attempt_outcome(exc: BaseException) -> str:
+    if isinstance(exc, HaltError):
+        return "halt"
+    if isinstance(exc, UncertainSendError):
+        return "unknown"
+    if isinstance(exc, PermanentSendError):
+        return "rejected"
+    if isinstance(exc, _RetriableSendError):
+        return "retry"
+    return "error"
+
+
 def _log_retry(phone: str, state: RetryCallState) -> None:
-    """Leave a per-phone trace of every retry. A network-level failure
-    (status=None, e.g. a read timeout) may still have been delivered, so these
-    lines are how to find recipients that might have received the SMS twice.
-    A retried Kavenegar code (409/451) was rejected and never sent."""
+    """Leave a per-phone trace of every retry. Only calls that provably
+    never left (the connection failed: status=None) or that Kavenegar
+    refused with "try later" (409/451) are retried, so a retry can't
+    double-send; uncertain failures become `unknown` instead."""
     exc = state.outcome.exception() if state.outcome else None
     logger.warning(
         "send_retry",

@@ -23,6 +23,7 @@ from sms_sender.state import (
     FAILED_RETRIABLE,
     PENDING,
     SENT,
+    UNKNOWN,
     StateStore,
 )
 
@@ -184,8 +185,10 @@ def test_resume_after_halt_picks_up_remaining(tmp_path):
     assert state.counts() == {SENT: 3}
 
 
-def test_resume_after_crash_reclaims_in_flight(tmp_path):
-    """An in_flight row from a prior process must be reclaimed on the next run."""
+def test_resume_after_crash_does_not_resend_in_flight(tmp_path):
+    """An in_flight row from a prior process may already have been accepted
+    by Kavenegar: the next run must not send it again. It becomes `unknown`
+    while everything else carries on."""
     inp = write_input(tmp_path, ["09120000001", "09120000002"])
     db = tmp_path / "s.db"
 
@@ -198,8 +201,10 @@ def test_resume_after_crash_reclaims_in_flight(tmp_path):
     state2 = StateStore(db)
     sender = FakeSender()
     summary = Runner(input_path=inp, state=state2, sender=sender, workers=1).run()
-    assert summary.sent == 2
-    assert state2.counts() == {SENT: 2}
+    assert sender.calls == ["09120000002"]
+    assert summary.sent == 1
+    assert summary.unknown == 1
+    assert state2.counts() == {SENT: 1, UNKNOWN: 1}
 
 
 # ---------- preflight + smoke ordering ----------
