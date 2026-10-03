@@ -122,9 +122,17 @@ class Attempt:
     detail: str | None = None
 
 
+@dataclass(frozen=True)
+class ProviderMessage:
+    """A message Kavenegar reports for a phone (`sms/statusbyreceptor`)."""
+    message_id: int
+    status: int | None  # Kavenegar delivery status, e.g. 10 = delivered
+
+
 class _SDK(Protocol):
     def verify_lookup(self, params: dict) -> list[dict]: ...
     def account_info(self) -> dict: ...
+    def status_by_receptor(self, receptor: str, startdate: int, enddate: int) -> list[dict]: ...
 
 
 def _parse_api_exception(exc: APIException) -> tuple[int | None, str]:
@@ -174,6 +182,7 @@ class _KavenegarHTTP:
     def __init__(self, api_key: str, timeout: float):
         self._verify_url = self.BASE.format(key=api_key, path="verify/lookup")
         self._account_url = self.BASE.format(key=api_key, path="account/info")
+        self._status_by_receptor_url = self.BASE.format(key=api_key, path="sms/statusbyreceptor")
         self._timeout = timeout
         self._session = requests.Session()
 
@@ -220,6 +229,13 @@ class _KavenegarHTTP:
         if isinstance(entries, list):
             entries = entries[0] if entries else {}
         return entries
+
+    def status_by_receptor(self, receptor: str, startdate: int, enddate: int) -> list[dict]:
+        body = self._post(
+            self._status_by_receptor_url,
+            {"receptor": receptor, "startdate": startdate, "enddate": enddate},
+        )
+        return body.get("entries") or []
 
 
 class Sender:
@@ -361,6 +377,27 @@ class Sender:
             expire_date=data.get("expiredate"),
             type=data.get("type"),
         )
+
+    def find_messages(self, phone: str, start: float, end: float) -> list[ProviderMessage]:
+        """Messages Kavenegar sent to `phone` between `start` and `end` (unix
+        seconds; Kavenegar allows at most one day). Read-only — this is how
+        `unknown` rows are settled. Raises HaltError on account problems and
+        SendError when Kavenegar can't be asked right now."""
+        try:
+            entries = self._sdk.status_by_receptor(phone, int(start), int(end))
+        except HTTPException as e:
+            raise SendError(None, f"http: {e}") from e
+        except APIException as e:
+            code, message = _parse_api_exception(e)
+            if classify(code) is Action.HALT:
+                raise HaltError(code, message) from e
+            raise SendError(code, message) from e
+        messages = []
+        for entry in entries:
+            message_id = _safe_int(entry.get("messageid"))
+            if message_id is not None:
+                messages.append(ProviderMessage(message_id, _safe_int(entry.get("status"))))
+        return messages
 
 
 def _attempt_outcome(exc: BaseException) -> str:

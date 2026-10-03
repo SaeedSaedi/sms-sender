@@ -128,6 +128,28 @@ sms-sender retry-failed --input numbers.csv --template my-tpl --token 12345
 # Add --include-permanent to also reset failed_permanent rows.
 ```
 
+### Unknown outcomes
+
+If a request may have reached Kavenegar without a clear answer (a read
+timeout, a dropped connection, or the process dying mid-send), the row
+becomes `unknown` and is **never resent automatically** — the recipient may
+already have the SMS. Every run checks old-enough `unknown` rows with
+Kavenegar first; you can also check them yourself:
+
+```bash
+sms-sender reconcile --state ./sms_state.db
+```
+
+It asks Kavenegar which messages went to each phone around the attempt
+(`sms/statusbyreceptor`) and never sends anything:
+
+- one message found → `sent`
+- none found → `failed_retriable`; the next `send` delivers it
+- several found → `needs_review`; decide yourself, and only if you're sure
+  they didn't get it: `sms-sender reset --status needs_review`
+
+Rows less than 5 minutes old wait (`--min-age`).
+
 ### Throughput control
 
 `--workers` controls parallelism; `--rate` caps total requests per second on
@@ -201,7 +223,7 @@ sms-sender dry-run --input ./numbers.csv          # parse + normalize only, no A
 | Code | Meaning |
 |---|---|
 | 0 | All recipients sent successfully. |
-| 1 | Run finished but some rows failed (permanent or retriable) or are `unknown`. |
+| 1 | Run finished but some rows failed (permanent or retriable), or are `unknown` / `needs_review`. |
 | 2 | Run halted on an account-level error (no credit, bad API key, plan), or another `sms-sender` is already using the same state DB. Fix and re-run. |
 
 ## Architecture

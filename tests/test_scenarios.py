@@ -207,6 +207,81 @@ def test_resume_after_crash_does_not_resend_in_flight(tmp_path):
     assert state2.counts() == {SENT: 1, UNKNOWN: 1}
 
 
+class ReconcilingFakeSender(FakeSender):
+    """FakeSender that also answers Kavenegar lookups for `unknown` rows."""
+
+    def __init__(self, at_kavenegar=None):
+        super().__init__()
+        self.at_kavenegar = at_kavenegar or {}  # phone -> [ProviderMessage]
+
+    def find_messages(self, phone, start, end):
+        return list(self.at_kavenegar.get(phone, []))
+
+
+def test_crash_leftovers_are_settled_with_kavenegar_on_the_next_run(tmp_path):
+    """Two rows were mid-send when the process died. Kavenegar has one: it's
+    marked sent and not resent. The other never arrived: it goes out in this
+    run like everyone else."""
+    from sms_sender.sender import ProviderMessage
+
+    phones = ["09120000001", "09120000002", "09120000003"]
+    inp = write_input(tmp_path, phones)
+    db = tmp_path / "s.db"
+    crashed = StateStore(db)
+    crashed.upsert_pending([(p, p) for p in phones])
+    crashed.claim("09120000001")
+    crashed.claim("09120000002")
+
+    sender = ReconcilingFakeSender({"09120000001": [ProviderMessage(4242, 10)]})
+    summary = Runner(
+        input_path=inp, state=StateStore(db), sender=sender, workers=1,
+        reconcile_min_age_sec=0,
+    ).run()
+    assert sorted(sender.calls) == ["09120000002", "09120000003"]
+    assert summary.unknown == 0
+    assert StateStore(db).counts() == {SENT: 3}
+
+
+def test_unknown_from_this_run_is_settled_at_the_end(tmp_path):
+    from sms_sender.sender import UncertainSendError
+
+    inp = write_input(tmp_path, ["09120000001"])
+    state = StateStore(tmp_path / "s.db")
+    sender = ReconcilingFakeSender()
+    sender.behavior["09120000001"] = lambda: (_ for _ in ()).throw(
+        UncertainSendError(None, "outcome unknown: read timed out")
+    )
+    summary = Runner(
+        input_path=inp, state=state, sender=sender, workers=1, reconcile_min_age_sec=0,
+    ).run()
+    assert sender.calls == ["09120000001"]          # exactly once in this run
+    assert summary.unknown == 0
+    assert state.counts() == {FAILED_RETRIABLE: 1}  # Kavenegar never got it: next run sends it
+
+
+def test_failed_reconciliation_never_blocks_or_resends(tmp_path):
+    """If Kavenegar can't be asked, unknown rows just stay unknown and the
+    rest of the campaign carries on."""
+    inp = write_input(tmp_path, ["09120000001", "09120000002"])
+    db = tmp_path / "s.db"
+    crashed = StateStore(db)
+    crashed.upsert_pending([(p, p) for p in ("09120000001", "09120000002")])
+    crashed.claim("09120000001")
+
+    class BrokenLookup(ReconcilingFakeSender):
+        def find_messages(self, phone, start, end):
+            raise HaltError(403, "invalid api key")
+
+    sender = BrokenLookup()
+    summary = Runner(
+        input_path=inp, state=StateStore(db), sender=sender, workers=1,
+        reconcile_min_age_sec=0,
+    ).run()
+    assert sender.calls == ["09120000002"]
+    assert summary.unknown == 1
+    assert StateStore(db).counts() == {SENT: 1, UNKNOWN: 1}
+
+
 # ---------- preflight + smoke ordering ----------
 
 

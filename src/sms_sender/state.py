@@ -77,6 +77,8 @@ FAILED_RETRIABLE = "failed_retriable"
 # dropped connection, crash mid-send). Never claimable: resending could
 # deliver a second SMS, so it waits to be checked with the provider.
 UNKNOWN = "unknown"
+# Reconciliation found more than one candidate message: an operator decides.
+NEEDS_REVIEW = "needs_review"
 
 CLAIMABLE = (PENDING, FAILED_RETRIABLE)
 
@@ -319,6 +321,55 @@ class StateStore:
         return self._conn().execute(
             "SELECT * FROM attempts WHERE phone=? ORDER BY id", (phone,)
         ).fetchall()
+
+    # ---------- settling `unknown` rows (see reconcile.py) ----------
+
+    def list_unknown(self) -> list[tuple[str, float | None]]:
+        """(phone, last_attempt_at) for every `unknown` row, oldest first."""
+        rows = self._conn().execute(
+            "SELECT phone, last_attempt_at FROM recipients WHERE status=? "
+            "ORDER BY last_attempt_at",
+            (UNKNOWN,),
+        ).fetchall()
+        return [(r["phone"], r["last_attempt_at"]) for r in rows]
+
+    def known_message_ids(self) -> set[int]:
+        """Every Kavenegar message ID this DB already accounts for — sent rows
+        and recorded calls (e.g. the approval test) — so reconciliation never
+        claims one of them for an `unknown` row."""
+        rows = self._conn().execute(
+            "SELECT message_id FROM recipients WHERE message_id IS NOT NULL "
+            "UNION SELECT message_id FROM attempts WHERE message_id IS NOT NULL"
+        ).fetchall()
+        return {r[0] for r in rows}
+
+    def settle_unknown_sent(self, phone: str, message_id: int) -> bool:
+        """Kavenegar has the message, so it was sent. Only an `unknown` row
+        changes; returns whether one did."""
+        with self._tx() as conn:
+            cur = conn.execute(
+                "UPDATE recipients SET status=?, message_id=?, status_code=200, "
+                "sent_at=last_attempt_at, last_error=NULL WHERE phone=? AND status=?",
+                (SENT, message_id, phone, UNKNOWN),
+            )
+            return cur.rowcount == 1
+
+    def settle_unknown_not_sent(self, phone: str, reason: str) -> bool:
+        """Kavenegar never got it, so it's safe to send again."""
+        return self._settle_unknown(phone, FAILED_RETRIABLE, reason)
+
+    def settle_unknown_for_review(self, phone: str, reason: str) -> bool:
+        """Can't tell which message is ours: an operator decides."""
+        return self._settle_unknown(phone, NEEDS_REVIEW, reason)
+
+    def _settle_unknown(self, phone: str, status: str, reason: str) -> bool:
+        with self._tx() as conn:
+            cur = conn.execute(
+                "UPDATE recipients SET status=?, status_code=NULL, last_error=? "
+                "WHERE phone=? AND status=?",
+                (status, reason, phone, UNKNOWN),
+            )
+            return cur.rowcount == 1
 
     def mark_failed(
         self, phone: str, status_code: int | None, error: str, *, permanent: bool

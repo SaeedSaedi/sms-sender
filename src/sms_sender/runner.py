@@ -17,6 +17,7 @@ from . import input_loader
 from .input_loader import TokenColumns
 from .locking import RunLock
 from .rate import TokenBucket
+from .reconcile import DEFAULT_MIN_AGE_SEC, reconcile_unknown
 from .redact import redact_secrets
 from .sender import (
     Attempt,
@@ -27,7 +28,7 @@ from .sender import (
     SenderConfig,
     UncertainSendError,
 )
-from .state import UNKNOWN, StateStore
+from .state import NEEDS_REVIEW, UNKNOWN, StateStore
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,8 @@ class RunSummary:
     # Rows still `unknown` in the DB when the run ended — this run's and
     # earlier ones'. They may have been sent, so they are never resent blindly.
     unknown: int = 0
+    # Rows reconciliation couldn't settle on its own (an operator decides).
+    needs_review: int = 0
 
 
 class PreflightError(Exception):
@@ -92,8 +95,10 @@ class Runner:
         approval_test_number: str | None = None,
         approval_prompt: ApprovalPrompt | None = None,
         token_columns: TokenColumns | None = None,
+        reconcile_min_age_sec: float = DEFAULT_MIN_AGE_SEC,
     ):
         self.input_path = Path(input_path)
+        self.reconcile_min_age_sec = reconcile_min_age_sec
         self.state = state
         self.sender = sender
         self.workers = workers
@@ -303,6 +308,40 @@ class Runner:
         logger.info("approval_granted", extra={"phone": target})
         tqdm.write("Approval granted.")
 
+    def _reconcile_unknown(self, when: str) -> None:
+        """Settle `unknown` rows that are old enough, by asking Kavenegar.
+
+        Best-effort: when the lookup can't run (fake sender, network, account
+        problem) the rows simply stay `unknown` — never claimable — so this
+        can't cause a double send.
+        """
+        if not hasattr(self.sender, "find_messages"):
+            return  # test fakes / alternate senders
+        try:
+            result = reconcile_unknown(
+                self.state, self.sender, min_age_sec=self.reconcile_min_age_sec,
+            )
+        except SendError as e:  # incl. HaltError: bad key, account problem
+            logger.warning(
+                "reconcile_skipped",
+                extra={"when": when, "status": e.status_code, "detail": e.message},
+            )
+            return
+        if result.checked:
+            tqdm.write(
+                f"Checked {result.checked} unknown row(s) with Kavenegar: "
+                f"{result.sent} had been sent, {result.requeued} had not (safe to "
+                f"send again), {result.needs_review} need review."
+            )
+        if result.checked or result.deferred:
+            logger.info(
+                "reconcile_done",
+                extra={
+                    "when": when, "sent": result.sent, "requeued": result.requeued,
+                    "needs_review": result.needs_review, "deferred": result.deferred,
+                },
+            )
+
     def _smoke_test_run(self, phones: list[str]) -> None:
         """Synchronous send to phones[0]. Raises PreflightError on non-success.
 
@@ -362,6 +401,9 @@ class Runner:
                 f"{orphans} recipient(s) were mid-send when the last run stopped. They are "
                 "marked unknown and NOT resent: they may already have the SMS."
             )
+        # Settle old-enough `unknown` rows first, so the ones Kavenegar never
+        # got go out in this run like everyone else.
+        self._reconcile_unknown("start")
 
         # 3. Snapshot work to do.
         phones = self.state.list_claimable_phones()
@@ -448,6 +490,10 @@ class Runner:
                             for f in futures:
                                 f.cancel()
 
+        # On a long run, rows that went `unknown` early may be old enough now.
+        if not halted and not self._stop.is_set():
+            self._reconcile_unknown("end")
+
         summary = self._build_summary(
             loaded=loaded, new_count=new_count,
             sent=sent, failed_permanent=failed_permanent,
@@ -466,6 +512,7 @@ class Runner:
         rate = (sent / elapsed) if elapsed > 0 else 0.0
         with self._error_lock:
             top = tuple(self._error_counter.most_common(3))
+        counts = self.state.counts()
         return RunSummary(
             total_input=len(loaded.valid) + len(loaded.invalid),
             new_recipients=new_count,
@@ -479,7 +526,8 @@ class Runner:
             sends_per_sec=round(rate, 3),
             top_errors=top,
             already_done=already_done,
-            unknown=self.state.counts().get(UNKNOWN, 0),
+            unknown=counts.get(UNKNOWN, 0),
+            needs_review=counts.get(NEEDS_REVIEW, 0),
         )
 
 
@@ -497,6 +545,7 @@ def _summary_log_fields(s: RunSummary) -> dict:
         "failed_retriable": s.failed_retriable,
         "already_done": s.already_done,
         "unknown": s.unknown,
+        "needs_review": s.needs_review,
         "halted": s.halted,
         "elapsed_sec": s.elapsed_sec,
         "sends_per_sec": s.sends_per_sec,
@@ -519,6 +568,8 @@ def format_report(s: RunSummary) -> str:
         lines.append(f"  already_done      {s.already_done}")
     if s.unknown:
         lines.append(f"  unknown           {s.unknown}  (may have been sent; never resent blindly)")
+    if s.needs_review:
+        lines.append(f"  needs_review      {s.needs_review}  (Kavenegar check was ambiguous)")
     lines += [
         f"  halted            {s.halted}",
         f"  elapsed           {s.elapsed_sec:.2f}s ({s.sends_per_sec:.2f} sends/sec)",

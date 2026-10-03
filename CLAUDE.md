@@ -26,6 +26,7 @@ sms-sender status            # row counts by status
 sms-sender export-failed     # dump failed_permanent to CSV
 sms-sender dry-run --input … # parse + normalize, no API calls
 sms-sender reset --status failed_permanent   # promote rows back to pending
+sms-sender reconcile --state data/db/x.db    # ask Kavenegar about `unknown` rows (never sends)
 sms-sender purge -y          # delete state DB (no undo)
 
 # Tests
@@ -90,7 +91,7 @@ The approval test runs *before* the smoke test on purpose: the operator gets a c
 
 ### State machine (owned by `state.py`)
 
-Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_permanent`, `failed_retriable` (= definitely not sent), `unknown` (= may have been sent). `CLAIMABLE = (pending, failed_retriable)`. The details that matter:
+Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_permanent`, `failed_retriable` (= definitely not sent), `unknown` (= may have been sent), `needs_review` (= reconciliation couldn't decide). `CLAIMABLE = (pending, failed_retriable)`. The details that matter:
 
 - **`claim()` is the dedup gate.** It runs `UPDATE … WHERE phone=? AND status IN CLAIMABLE`; if `rowcount == 0` the worker silently skips. Two workers racing on the same phone — one wins the UPDATE, the other gets `None`. `sent` and `failed_permanent` rows can never be claimed.
 - **Connection-per-thread.** SQLite connections aren't shareable; `StateStore` keeps one per thread via `threading.local`. WAL mode + `BEGIN IMMEDIATE` keep concurrent writers from blocking each other badly.
@@ -99,6 +100,12 @@ Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_perm
 - **One process per DB (`locking.RunLock`).** `Runner.run` and the commands that change rows (`retry-failed`, `reset`, `purge`) hold `fcntl.flock` on `<db>.lock`. A second process exits with code 2 instead of treating the first one's `in_flight` rows as crash leftovers and sending them again. The OS drops the lock when the holder dies (even `kill -9`), so crash recovery still works. `status` / `export-failed` only read and don't lock.
 - **Invalid inputs are persisted with synthetic key `INVALID:<raw>`.** This keeps the `phone` PK constraint while letting `export-failed` surface them.
 - **Schema versions.** `PRAGMA user_version` + append-only steps in `state._MIGRATIONS`. Opening a DB upgrades it in place, in one transaction; a DB written by a newer sms-sender is refused (`StateSchemaError`). Never edit a step that has shipped — existing DBs already applied it; add a new one.
+
+### Reconciliation ([reconcile.py](src/sms_sender/reconcile.py))
+
+`unknown` rows are settled by asking Kavenegar what it actually sent, never by resending. `reconcile_unknown` looks each phone up with `sms/statusbyreceptor` (`Sender.find_messages`) in a window around its last claim (−120 s … +900 s; Kavenegar allows ≤ 1 day). Message IDs the DB already accounts for (`known_message_ids`: sent rows plus recorded calls, e.g. the approval test) never count. Exactly one other message → `sent`; none → `failed_retriable`, claimable again; several → `needs_review`, which only `reset --status needs_review` (with confirmation) makes claimable. Rows younger than the min age (300 s) wait. The settle methods only change rows that are still `unknown`, and each decision is an `attempts` row of kind `reconcile`.
+
+The runner reconciles at the start of every run (so rows Kavenegar never got go out with everyone else) and at the end (long runs). It's best-effort: if the lookup fails — even a `HaltError` — the rows just stay `unknown`. `sms-sender reconcile` does the same standalone under the run lock; exit 1 while rows remain `unknown` / `needs_review`, 2 if Kavenegar refuses the lookup.
 
 ### Error taxonomy (split across `sender.py` + `classifier.py`)
 
@@ -129,7 +136,7 @@ Canonical form is `09XXXXXXXXX`. The normalizer accepts `+98…`, `0098…`, `98
 | Code | Meaning |
 |---|---|
 | 0 | every recipient sent |
-| 1 | run finished with some `failed_permanent`, `failed_retriable` or `unknown` |
+| 1 | run finished with some `failed_permanent`, `failed_retriable`, `unknown` or `needs_review` |
 | 2 | `HaltError`, preflight failure, or declined approval-test aborted the run; or another process holds the state DB |
 
 ## Conventions

@@ -35,6 +35,7 @@ def _summary_to_dict(s: RunSummary) -> dict[str, Any]:
         "failed_retriable": s.failed_retriable,
         "already_done": s.already_done,
         "unknown": s.unknown,
+        "needs_review": s.needs_review,
         "halted": s.halted,
         "elapsed_sec": s.elapsed_sec,
         "sends_per_sec": s.sends_per_sec,

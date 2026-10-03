@@ -6,6 +6,7 @@ from kavenegar import APIException, HTTPException
 from sms_sender.sender import (
     HaltError,
     PermanentSendError,
+    ProviderMessage,
     SendError,
     Sender,
     SenderConfig,
@@ -190,6 +191,63 @@ def test_per_recipient_tokens_layer_over_static_ones():
         "receptor": "09123456789", "template": "t",
         "token": "خرید", "token2": "y", "token10": "علی",
     }]
+
+
+# ---------- looking up what Kavenegar sent (reconciliation) ----------
+
+
+class _LookupSDK(FakeSDK):
+    def __init__(self, entries=None, error=None):
+        super().__init__([])
+        self.entries = entries or []
+        self.error = error
+
+    def status_by_receptor(self, receptor, startdate, enddate):
+        self.calls.append((receptor, startdate, enddate))
+        if self.error:
+            raise self.error
+        return self.entries
+
+
+def test_find_messages_parses_kavenegar_entries():
+    sdk = _LookupSDK([
+        {"messageid": 85463238, "receptor": "09123456789", "status": 10, "statustext": "…"},
+        {"messageid": None},  # unusable entry is skipped
+    ])
+    found = Sender(cfg(), sdk=sdk).find_messages("09123456789", 1000.7, 2000.2)
+    assert found == [ProviderMessage(85463238, 10)]
+    assert sdk.calls == [("09123456789", 1000, 2000)]
+
+
+@pytest.mark.parametrize("failure, error_type", [
+    (HTTPException("read timed out"), SendError),
+    (APIException("APIException[403 invalid api key]"), HaltError),
+    (APIException("APIException[417 invalid date]"), SendError),
+])
+def test_find_messages_errors(failure, error_type):
+    with pytest.raises(error_type) as exc:
+        Sender(cfg(), sdk=_LookupSDK(error=failure)).find_messages("09123456789", 1, 2)
+    if error_type is SendError:
+        assert not isinstance(exc.value, HaltError)
+
+
+def test_kavenegar_http_status_by_receptor_posts_the_window(monkeypatch):
+    from sms_sender.sender import _KavenegarHTTP
+
+    http = _KavenegarHTTP("k", timeout=1)
+    seen = {}
+
+    def post(url, data=None, timeout=None, **_kw):
+        seen.update(url=url, data=data)
+        return _FakeJSONResp({
+            "return": {"status": 200, "message": "ok"},
+            "entries": [{"messageid": 1, "status": 10}],
+        })
+
+    monkeypatch.setattr(http._session, "post", post)
+    assert http.status_by_receptor("09123456789", 100, 200) == [{"messageid": 1, "status": 10}]
+    assert seen["url"].endswith("/sms/statusbyreceptor.json")
+    assert seen["data"] == {"receptor": "09123456789", "startdate": 100, "enddate": 200}
 
 
 # ---------- every call is reported (audit trail) ----------

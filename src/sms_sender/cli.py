@@ -19,9 +19,10 @@ from .notify import notify
 from .phone import InvalidPhoneError, normalize as normalize_phone
 from .profile import ProfileError, load_profile, to_default_map
 from .rate import parse_rate
+from .reconcile import DEFAULT_MIN_AGE_SEC, reconcile_unknown
 from .runner import format_report, make_runner
-from .sender import TOKEN_MAX_SPACES, Sender, SenderConfig
-from .state import StateStore
+from .sender import TOKEN_MAX_SPACES, HaltError, Sender, SenderConfig
+from .state import NEEDS_REVIEW, UNKNOWN, StateStore
 
 TEST_NUMBER_ENV = "SMS_SENDER_TEST_NUMBER"
 
@@ -320,10 +321,21 @@ def _do_send(
         sys.exit(2)
 
     click.echo("\n" + format_report(summary))
+    if summary.unknown:
+        click.echo(
+            "Unknown rows are never resent automatically. In 5+ minutes, run "
+            f"`sms-sender reconcile --state {db_path}` to check them with Kavenegar."
+        )
+    if summary.needs_review:
+        click.echo(
+            "needs_review rows may already have the SMS. Only if you're sure they "
+            f"don't: `sms-sender reset --status needs_review --state {db_path}`."
+        )
     notify(notify_target, summary)
     if summary.halted:
         sys.exit(2)
-    if summary.failed_permanent or summary.failed_retriable or summary.unknown:
+    if (summary.failed_permanent or summary.failed_retriable
+            or summary.unknown or summary.needs_review):
         sys.exit(1)
 
 
@@ -401,7 +413,7 @@ def export_failed(db_path: str, out: str) -> None:
               help="Path to the SQLite state DB.")
 @click.option(
     "--status", "from_status", default="failed_permanent", show_default=True,
-    type=click.Choice(["failed_permanent", "failed_retriable", "sent"]),
+    type=click.Choice(["failed_permanent", "failed_retriable", "sent", UNKNOWN, NEEDS_REVIEW]),
     help="Which status to promote back to pending so it gets resent.",
 )
 @click.option("--yes", "-y", is_flag=True,
@@ -412,17 +424,24 @@ def reset(db_path: str, from_status: str, yes: bool) -> None:
     Useful after fixing a template/token issue: rows that were marked
     `failed_permanent` won't be retried otherwise.
 
-    `--status sent` is a footgun — it will cause the next `send` to deliver
-    a second SMS to numbers that have already been sent to. We require an
-    explicit confirmation (or `--yes`) for that case.
+    `--status sent`, `unknown` and `needs_review` are footguns — those rows
+    have, or may have, the SMS already, so the next `send` can deliver a
+    second one. They need an explicit confirmation (or `--yes`). For
+    `unknown`, prefer `sms-sender reconcile`, which checks with Kavenegar.
     """
     store = StateStore(db_path)
-    if from_status == "sent" and not yes:
-        click.confirm(
-            "Resetting status=sent will cause the next `send` to deliver a "
-            "SECOND SMS to every already-sent recipient. Are you sure?",
-            abort=True,
-        )
+    risky = {
+        "sent": "Resetting status=sent will cause the next `send` to deliver a "
+                "SECOND SMS to every already-sent recipient. Are you sure?",
+        UNKNOWN: "These rows may already have the SMS. Resetting them sends again "
+                 "without checking — `sms-sender reconcile` checks with Kavenegar "
+                 "first. Are you sure?",
+        NEEDS_REVIEW: "These rows may already have the SMS (the Kavenegar check found "
+                      "several candidate messages). Resetting them sends again. "
+                      "Are you sure?",
+    }
+    if from_status in risky and not yes:
+        click.confirm(risky[from_status], abort=True)
     with _db_lock(db_path):
         n = store.reset_status(from_status)
     click.echo(f"Reset {n} rows from {from_status} → pending")
@@ -455,6 +474,52 @@ def purge(db_path: str, yes: bool) -> None:
         for p in existing:
             p.unlink()
     click.echo(f"Deleted {len(existing)} file(s).")
+
+
+@cli.command()
+@click.option("--state", "db_path", default="./sms_state.db", show_default=True,
+              type=click.Path(dir_okay=False))
+@click.option(
+    "--min-age", "min_age", default=DEFAULT_MIN_AGE_SEC, show_default=True, type=float,
+    help="Only check rows whose last attempt is at least this many seconds old.",
+)
+@click.option("--timeout", default=15.0, show_default=True, type=float)
+@click.option(
+    "--log-file", default="./logs/sms-sender.log", show_default=True,
+    type=click.Path(dir_okay=False),
+)
+def reconcile(db_path: str, min_age: float, timeout: float, log_file: str) -> None:
+    """Ask Kavenegar what happened to `unknown` rows. Never sends anything.
+
+    Found at Kavenegar → `sent`. Not found → `failed_retriable`, so the next
+    `send` delivers it. Several candidate messages → `needs_review`.
+    """
+    logging_config.setup(log_file=log_file, console_level=logging.WARNING)
+    if not Path(db_path).exists():
+        raise click.UsageError(f"No state DB at {db_path}.")
+    store = StateStore(db_path)
+    # Read-only lookups: the template is never used.
+    sender = Sender(SenderConfig(api_key=load_api_key(), template="", timeout=timeout))
+    with _db_lock(db_path):
+        try:
+            result = reconcile_unknown(store, sender, min_age_sec=min_age)
+        except HaltError as e:
+            click.echo(
+                f"Error: Kavenegar refused the lookup: [{e.status_code}] {e.message}",
+                err=True,
+            )
+            sys.exit(2)
+    click.echo(f"sent (found at Kavenegar)      {result.sent}")
+    click.echo(f"not sent (safe to send again)  {result.requeued}")
+    click.echo(f"needs review                   {result.needs_review}")
+    if result.deferred:
+        click.echo(
+            f"not checked yet                {result.deferred}  (last attempt under "
+            f"{min_age:.0f}s ago, or Kavenegar unreachable: run again later)"
+        )
+    left = store.counts()
+    if left.get(UNKNOWN) or left.get(NEEDS_REVIEW):
+        sys.exit(1)
 
 
 @cli.command("dry-run")

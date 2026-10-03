@@ -523,6 +523,62 @@ def test_send_read_timeout_parks_the_row_as_unknown(tmp_path, monkeypatch):
     assert "unknown" in result.output
 
 
+def _unknown_db(tmp_path) -> Path:
+    db = tmp_path / "s.db"
+    store = StateStore(db)
+    store.upsert_pending([("09120000001", "09120000001"), ("09120000002", "09120000002")])
+    for phone in ("09120000001", "09120000002"):
+        store.claim(phone)
+        store.mark_unknown(phone, "outcome unknown: read timed out")
+    return db
+
+
+def test_reconcile_command_settles_unknown_rows(tmp_path, monkeypatch):
+    from sms_sender.sender import ProviderMessage, Sender
+
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    db = _unknown_db(tmp_path)
+    at_kavenegar = {"09120000001": [ProviderMessage(4242, 10)]}
+    monkeypatch.setattr(
+        Sender, "find_messages", lambda self, phone, start, end: at_kavenegar.get(phone, []),
+    )
+    result = CliRunner().invoke(
+        cli,
+        ["reconcile", "--state", str(db), "--min-age", "0",
+         "--log-file", str(tmp_path / "test.log")],
+    )
+    assert result.exit_code == 0, result.output
+    assert "sent (found at Kavenegar)      1" in result.output
+    assert "not sent (safe to send again)  1" in result.output
+    assert StateStore(db).counts() == {SENT: 1, FAILED_RETRIABLE: 1}
+
+
+def test_reconcile_command_leaves_recent_rows_and_exits_1(tmp_path, monkeypatch):
+    from sms_sender.sender import Sender
+
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    db = _unknown_db(tmp_path)
+    monkeypatch.setattr(
+        Sender, "find_messages", lambda *a, **kw: pytest.fail("looked up a recent row"),
+    )
+    result = CliRunner().invoke(
+        cli, ["reconcile", "--state", str(db), "--log-file", str(tmp_path / "test.log")],
+    )
+    assert result.exit_code == 1, result.output
+    assert "not checked yet                2" in result.output
+    assert StateStore(db).counts() == {"unknown": 2}
+
+
+def test_reset_unknown_needs_confirmation(tmp_path):
+    db = _unknown_db(tmp_path)
+    result = CliRunner().invoke(
+        cli, ["reset", "--status", "unknown", "--state", str(db)], input="n\n",
+    )
+    assert result.exit_code != 0
+    assert "may already have the SMS" in result.output
+    assert StateStore(db).counts() == {"unknown": 2}
+
+
 # ---------- approval test (manual gate) ----------
 
 
