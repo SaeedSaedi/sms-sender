@@ -698,6 +698,42 @@ def test_status_shows_campaign_template_and_last_run(tmp_path, monkeypatch):
     assert "pending" in result.output
 
 
+def test_send_rejects_static_token_with_underscore(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    Path("in.txt").write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(cli, _send_args("--token3", "tether_usdt"))
+    assert result.exit_code == 2
+    assert "'_'" in result.output
+
+
+def test_opt_out_lists_reach_the_runner_normalized(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    captured: dict = {}
+    monkeypatch.setattr(cli_module, "make_runner", _stub_make_runner(captured))
+    Path("in.txt").write_text("09120000001\n", encoding="utf-8")
+    Path("optout-a.txt").write_text("Phone Number\n+98 912 000 0002\n", encoding="utf-8")
+    Path("optout-b.csv").write_text("09120000003,stop\nnot-a-phone\n", encoding="utf-8")
+    result = CliRunner().invoke(
+        cli, _send_args("--opt-out", "optout-a.txt", "--opt-out", "optout-b.csv"),
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["opt_out"] == frozenset({"09120000002", "09120000003"})
+
+
+def test_reset_suppressed_needs_confirmation(tmp_path):
+    db = tmp_path / "s.db"
+    store = StateStore(db)
+    store.upsert_pending([("09120000001", "09120000001")])
+    store.suppress(["09120000001"])
+    result = CliRunner().invoke(
+        cli, ["reset", "--status", "suppressed", "--state", str(db)], input="n\n",
+    )
+    assert result.exit_code != 0
+    assert "opt-out" in result.output
+    assert store.counts() == {"suppressed": 1}
+
+
 def test_status_never_creates_a_db(tmp_path):
     result = CliRunner().invoke(cli, ["status", "--state", str(tmp_path / "nope.db")])
     assert result.exit_code == 0

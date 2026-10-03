@@ -38,7 +38,7 @@ from .sender import (
     SenderConfig,
     UncertainSendError,
 )
-from .state import NEEDS_REVIEW, UNKNOWN, StateStore
+from .state import NEEDS_REVIEW, SUPPRESSED, UNKNOWN, StateStore
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,8 @@ class RunSummary:
     # Ctrl-C, SIGTERM or `cancel()` stopped the run before it finished;
     # re-running the same command continues where it stopped.
     stopped: bool = False
+    # Rows on the opt-out list in this campaign's DB (never sent).
+    suppressed: int = 0
 
 
 class PreflightError(Exception):
@@ -169,8 +171,11 @@ class Runner:
         campaign: str | None = None,
         settings: dict | None = None,
         allow_settings_change: bool = False,
+        opt_out: frozenset[str] | None = None,
     ):
         self.input_path = Path(input_path)
+        # Phones that must never get this campaign (opt-out list).
+        self.opt_out = opt_out or frozenset()
         # Campaign identity: the DB is bound to this name and to `settings`
         # (what it sends, see `campaign_settings`) on the first run.
         self.campaign = campaign
@@ -542,6 +547,13 @@ class Runner:
                 [(inv.raw, inv.reason) for inv in loaded.invalid]
             )
         new_count = self.state.upsert_pending([(r.phone, r.raw) for r in loaded.valid])
+        if self.opt_out:
+            suppressed = self.state.suppress(self.opt_out)
+            if suppressed:
+                logger.info("opted_out_suppressed", extra={"n": suppressed})
+                self._reporter.note(
+                    f"{suppressed} recipient(s) are on the opt-out list and won't be sent."
+                )
         orphans = self.state.mark_orphans_unknown()
         if orphans:
             logger.warning("orphans_marked_unknown", extra={"n": orphans})
@@ -651,6 +663,7 @@ class Runner:
             unknown=db_counts.get(UNKNOWN, 0),
             needs_review=db_counts.get(NEEDS_REVIEW, 0),
             stopped=self._cancelled.is_set(),
+            suppressed=db_counts.get(SUPPRESSED, 0),
         )
 
 
@@ -669,6 +682,7 @@ def _summary_log_fields(s: RunSummary) -> dict:
         "already_done": s.already_done,
         "unknown": s.unknown,
         "needs_review": s.needs_review,
+        "suppressed": s.suppressed,
         "halted": s.halted,
         "stopped": s.stopped,
         "elapsed_sec": s.elapsed_sec,
@@ -694,6 +708,8 @@ def format_report(s: RunSummary) -> str:
         lines.append(f"  unknown           {s.unknown}  (may have been sent; never resent blindly)")
     if s.needs_review:
         lines.append(f"  needs_review      {s.needs_review}  (Kavenegar check was ambiguous)")
+    if s.suppressed:
+        lines.append(f"  suppressed        {s.suppressed}  (on the opt-out list; never sent)")
     if s.stopped:
         lines.append("  stopped           True  (re-run the same command to continue)")
     lines += [
@@ -751,6 +767,7 @@ def make_runner(
     token_columns: TokenColumns | None = None,
     campaign: str | None = None,
     allow_settings_change: bool = False,
+    opt_out: frozenset[str] | None = None,
 ) -> Runner:
     state = StateStore(db_path)
     sender = Sender(sender_cfg, on_attempt=_attempt_recorder(state))
@@ -767,4 +784,5 @@ def make_runner(
         campaign=campaign,
         settings=campaign_settings(sender_cfg, token_columns),
         allow_settings_change=allow_settings_change,
+        opt_out=opt_out,
     )

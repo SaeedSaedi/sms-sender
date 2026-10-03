@@ -35,6 +35,23 @@ _API_EXC_RE_INSIDE = re.compile(r"\[(\d+)\s+(.+?)\]")
 TOKEN_MAX_SPACES: dict[str, int] = {
     "token": 0, "token2": 0, "token3": 0, "token10": 5, "token20": 8,
 }
+TOKEN_MAX_LEN = 100
+
+
+def token_problem(name: str, value: str) -> str | None:
+    """Why Kavenegar would reject `value` as token `name` (error 431), or
+    None if it's fine: at most 100 characters, no line break or underscore,
+    and no more spaces than the token allows."""
+    if len(value) > TOKEN_MAX_LEN:
+        return f"{name} is {len(value)} characters; Kavenegar allows at most {TOKEN_MAX_LEN}"
+    if any(ch in value for ch in "\r\n\t"):
+        return f"{name} contains a line break or tab, which Kavenegar rejects"
+    if "_" in value:
+        return f"{name} contains '_', which Kavenegar rejects"
+    spaces = value.count(" ")
+    if spaces > TOKEN_MAX_SPACES[name]:
+        return f"{name} allows at most {TOKEN_MAX_SPACES[name]} space(s); got {spaces}"
+    return None
 
 # Lookup methods (e.g. sms/statusbyreceptor) answer an empty result with this
 # code — "رکوردی با مشخصات مورد نظر پیدا نشد" (no record found) — not with [].

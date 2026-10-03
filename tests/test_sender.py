@@ -193,6 +193,35 @@ def test_per_recipient_tokens_layer_over_static_ones():
     }]
 
 
+# ---------- Kavenegar's token rules (error 431) ----------
+
+
+@pytest.mark.parametrize("name, value, fragment", [
+    ("token", "x" * 101, "at most 100"),
+    ("token20", "two\nlines", "line break"),
+    ("token3", "has_underscore", "'_'"),
+    ("token", "no spaces allowed", "space"),
+    ("token10", "a b c d e f g", "space"),  # 6 spaces > 5
+])
+def test_token_problem_names_the_rule(name, value, fragment):
+    from sms_sender.sender import token_problem
+
+    problem = token_problem(name, value)
+    assert problem is not None and fragment in problem and name in problem
+
+
+@pytest.mark.parametrize("name, value", [
+    ("token", "x" * 100),
+    ("token3", "190,400"),                   # comma: sent fine in production
+    ("token20", "wallet/usoon-oil(usoon)"),  # slashes, parens: sent fine
+    ("token10", "نفت خام OIL(USOON)"),        # 2 spaces ≤ 5
+])
+def test_token_problem_accepts_real_production_values(name, value):
+    from sms_sender.sender import token_problem
+
+    assert token_problem(name, value) is None
+
+
 # ---------- looking up what Kavenegar sent (reconciliation) ----------
 
 

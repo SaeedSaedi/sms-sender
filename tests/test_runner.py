@@ -184,6 +184,30 @@ def test_rerun_with_other_settings_refuses_before_touching_rows(tmp_path):
     assert StateStore(db).counts() == {SENT: 1}  # the new phone wasn't even seeded
 
 
+def test_opted_out_recipients_are_never_sent(tmp_path):
+    from sms_sender.state import SUPPRESSED
+
+    db = tmp_path / "s.db"
+    already = StateStore(db)
+    already.upsert_pending([("09120000003", "09120000003")])
+    already.claim("09120000003")
+    already.mark_sent("09120000003", message_id=1, status_code=200)
+
+    inp = write_input(tmp_path, ["09120000001", "09120000002", "09120000003"])
+    reporter = RecordingReporter()
+    sender = FakeSender()
+    summary = Runner(
+        input_path=inp, state=StateStore(db), sender=sender, workers=1, reporter=reporter,
+        opt_out=frozenset({"09120000002", "09120000003"}),
+    ).run()
+    assert sender.calls == ["09120000001"]
+    # The opted-out one is suppressed; the one that already had it stays sent.
+    assert StateStore(db).counts() == {SENT: 2, SUPPRESSED: 1}
+    assert summary.suppressed == 1
+    assert any("opt-out" in n for n in reporter.notes)
+    assert "suppressed" in format_report(summary)
+
+
 def test_run_start_logs_the_template(tmp_path, caplog):
     """The log is the campaign history today, so each run records its template."""
     from types import SimpleNamespace

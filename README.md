@@ -86,6 +86,19 @@ fixing a wrong template is fine. `--allow-settings-change` overrides it.
 `--state` (or `state` in a profile) still picks a DB explicitly and wins over
 `--campaign`; in a profile, write `campaign = "coin-price-7"`.
 
+### Opt-out list
+
+People who must never get a campaign go in one or more lists (same formats as
+`--input`):
+
+```bash
+sms-sender send --campaign coin-price-7 --input ... --opt-out data/opt-out.txt
+```
+
+Matching recipients become `suppressed` and are never sent; anyone who
+already got the campaign stays `sent`. In a profile:
+`opt_out = ["data/opt-out.txt"]`.
+
 ### Per-recipient tokens
 
 When each recipient needs their own values (name, coin, …), take the tokens
@@ -108,8 +121,10 @@ sms-sender send --input trades.csv --template transaction-1 \
 
 `--value-map COLUMN:FROM=TO` translates a column's values before sending.
 Rows that can't be sent as-is — an empty cell, a value with no `--value-map`
-entry, or more spaces than the token allows — are recorded as invalid
-(see `export-failed`) rather than sent. `dry-run` and `preview` accept the same
+entry, or a value Kavenegar would reject (more spaces than the token allows,
+an underscore, a line break, more than 100 characters) — are recorded as
+invalid (see `export-failed`) rather than sent. Static `--token…` values are
+checked by the same rules. `dry-run` and `preview` accept the same
 flags, so you can check every row and the exact POST bodies first. In a
 profile, write the flags as lists:
 `token_column = ["token=trade_side", "token10=first_name"]`.

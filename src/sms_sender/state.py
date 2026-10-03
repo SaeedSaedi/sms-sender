@@ -94,6 +94,8 @@ FAILED_RETRIABLE = "failed_retriable"
 UNKNOWN = "unknown"
 # Reconciliation found more than one candidate message: an operator decides.
 NEEDS_REVIEW = "needs_review"
+# On the opt-out list: never sent. Not claimable.
+SUPPRESSED = "suppressed"
 
 CLAIMABLE = (PENDING, FAILED_RETRIABLE)
 
@@ -241,6 +243,25 @@ class StateStore:
             )
 
     # ---------- run lifecycle ----------
+
+    def suppress(self, phones: Iterable[str]) -> int:
+        """Move opted-out phones out of the send queue. Only claimable rows
+        change — a row that was already sent stays `sent`. Returns rows
+        changed. Chunked: SQLite caps the IN-list."""
+        changed = 0
+        batch = list(phones)
+        for start in range(0, len(batch), 500):
+            chunk = batch[start:start + 500]
+            placeholders = ",".join("?" * len(chunk))
+            with self._tx() as conn:
+                cur = conn.execute(
+                    f"UPDATE recipients SET status=?, last_error='on the opt-out list' "
+                    f"WHERE phone IN ({placeholders}) "
+                    f"AND status IN ({','.join('?' * len(CLAIMABLE))})",
+                    (SUPPRESSED, *chunk, *CLAIMABLE),
+                )
+                changed += cur.rowcount
+        return changed
 
     def reset_status(self, from_status: str) -> int:
         """Promote rows in `from_status` back to pending. Returns rows changed."""

@@ -25,9 +25,10 @@ from .profile import ProfileError, load_profile, to_default_map
 from .rate import parse_rate
 from .reconcile import DEFAULT_MIN_AGE_SEC, REQUEUE_NOT_FOUND, reconcile_unknown
 from .runner import format_report, make_runner
-from .sender import TOKEN_MAX_SPACES, HaltError, Sender, SenderConfig
+from .sender import TOKEN_MAX_SPACES, HaltError, Sender, SenderConfig, token_problem
 from .state import (
     NEEDS_REVIEW,
+    SUPPRESSED,
     UNKNOWN,
     CampaignMismatchError,
     StateStore,
@@ -42,20 +43,16 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 def _validate_token(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
-    # Kavenegar's space limits (see TOKEN_MAX_SPACES). Validating at the CLI
+    # Kavenegar's token rules (see `token_problem`). Validating at the CLI
     # saves a wasted preflight round-trip on misuse.
     if value is None:
         return None
     name = param.name or ""
-    limit = TOKEN_MAX_SPACES.get(name)
-    if limit is None:
+    if name not in TOKEN_MAX_SPACES:
         return value
-    spaces = value.count(" ")
-    if spaces > limit:
-        raise click.BadParameter(
-            f"--{name} allows at most {limit} space(s); got {spaces}",
-            ctx=ctx, param=param,
-        )
+    problem = token_problem(name, value)
+    if problem:
+        raise click.BadParameter(f"--{problem}", ctx=ctx, param=param)
     return value
 
 
@@ -127,6 +124,17 @@ def _load_input(input_path: str, token_columns: TokenColumns | None) -> input_lo
         return input_loader.load(input_path, token_columns)
     except InputError as e:
         raise click.UsageError(str(e)) from e
+
+
+def _load_opt_out(paths: tuple[str, ...]) -> frozenset[str] | None:
+    """Phones that must never get the campaign, from one or more lists.
+    Lines that aren't phone numbers are skipped."""
+    if not paths:
+        return None
+    phones: set[str] = set()
+    for path in paths:
+        phones.update(r.phone for r in _load_input(path, None).valid)
+    return frozenset(phones)
 
 
 _CAMPAIGN_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
@@ -232,6 +240,13 @@ def _send_options(f: F) -> F:
         ),
         _campaign_option,
         click.option(
+            "--opt-out", "opt_out", multiple=True,
+            type=click.Path(exists=True, dir_okay=False),
+            help="A list of phones that must never get this campaign (same "
+                 "formats as --input). Repeatable. Matching recipients become "
+                 "`suppressed`; anyone already sent stays `sent`.",
+        ),
+        click.option(
             "--allow-settings-change", is_flag=True,
             help="Let a campaign that already sent continue with a different "
                  "template or tokens (both message versions end up in one campaign).",
@@ -318,6 +333,7 @@ def _do_send(
     # Defaulted so the wizard (static tokens only) needn't pass them.
     token_column: tuple[str, ...] = (), value_map: tuple[str, ...] = (),
     campaign: str | None = None, allow_settings_change: bool = False,
+    opt_out: tuple[str, ...] = (),
 ) -> None:
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
@@ -358,6 +374,7 @@ def _do_send(
         token_columns=token_columns,
         campaign=campaign,
         allow_settings_change=allow_settings_change,
+        opt_out=_load_opt_out(opt_out),
     )
     try:
         summary = runner.run()
@@ -487,7 +504,9 @@ def export_failed(db_path: str, out: str, campaign: str | None) -> None:
               help="Path to the SQLite state DB.")
 @click.option(
     "--status", "from_status", default="failed_permanent", show_default=True,
-    type=click.Choice(["failed_permanent", "failed_retriable", "sent", UNKNOWN, NEEDS_REVIEW]),
+    type=click.Choice([
+        "failed_permanent", "failed_retriable", "sent", UNKNOWN, NEEDS_REVIEW, SUPPRESSED,
+    ]),
     help="Which status to promote back to pending so it gets resent.",
 )
 @click.option("--yes", "-y", is_flag=True,
@@ -515,6 +534,8 @@ def reset(db_path: str, from_status: str, yes: bool, campaign: str | None) -> No
         NEEDS_REVIEW: "These rows may already have the SMS (the Kavenegar check found "
                       "several candidate messages). Resetting them sends again. "
                       "Are you sure?",
+        SUPPRESSED: "These recipients are on the opt-out list. Resetting them sends "
+                    "them the campaign. Are you sure?",
     }
     if from_status in risky and not yes:
         click.confirm(risky[from_status], abort=True)

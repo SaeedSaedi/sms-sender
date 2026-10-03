@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .phone import InvalidPhoneError, normalize
-from .sender import TOKEN_MAX_SPACES
+from .sender import token_problem
 
 
 class InputError(ValueError):
@@ -178,11 +178,8 @@ def _row_tokens(row: dict[str, str | None], spec: TokenColumns) -> tuple[dict[st
             if value not in mapping:
                 return {}, f"{column}={value!r} has no entry in its value map"
             value = mapping[value]
-        spaces = value.count(" ")
-        if spaces > TOKEN_MAX_SPACES[name]:
-            return {}, (
-                f"{column} has {spaces} space(s); {name} allows at most "
-                f"{TOKEN_MAX_SPACES[name]}"
-            )
+        problem = token_problem(name, value)
+        if problem:
+            return {}, f"{column}: {problem}"
         tokens[name] = value
     return tokens, None

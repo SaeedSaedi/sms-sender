@@ -36,6 +36,7 @@ def _summary_to_dict(s: RunSummary) -> dict[str, Any]:
         "already_done": s.already_done,
         "unknown": s.unknown,
         "needs_review": s.needs_review,
+        "suppressed": s.suppressed,
         "halted": s.halted,
         "stopped": s.stopped,
         "elapsed_sec": s.elapsed_sec,

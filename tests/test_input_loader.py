@@ -34,6 +34,21 @@ def test_csv_takes_first_cell(tmp_path):
     assert r.header == "phone"
 
 
+def test_token_columns_apply_kavenegar_token_rules(tmp_path):
+    p = write(
+        tmp_path, "in.csv",
+        "phone,coin\n"
+        "09120000001,tether_usdt\n"     # underscore → Kavenegar error 431
+        f"09120000002,{'x' * 101}\n"     # over 100 characters
+        "09120000003,tether-usdt\n",
+    )
+    r = load(p, TokenColumns(columns={"token20": "coin"}))
+    assert [x.phone for x in r.valid] == ["09120000003"]
+    reasons = {x.raw: x.reason for x in r.invalid}
+    assert "'_'" in reasons["09120000001"] and "coin" in reasons["09120000001"]
+    assert "at most 100" in reasons["09120000002"]
+
+
 def test_excel_style_header_is_skipped_not_invalid(tmp_path):
     # Real segment exports: BOM + "Phone Number" + one number per row.
     p = tmp_path / "seg.csv"
