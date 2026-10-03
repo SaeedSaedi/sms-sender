@@ -1,5 +1,6 @@
 # sms-sender
 
+[![Tests](https://github.com/SaeedSaedi/sms-sender/actions/workflows/tests.yml/badge.svg)](https://github.com/SaeedSaedi/sms-sender/actions/workflows/tests.yml)
 [![Release](https://img.shields.io/github/v/release/SaeedSaedi/sms-sender)](https://github.com/SaeedSaedi/sms-sender/releases)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/github/license/SaeedSaedi/sms-sender)](LICENSE)
@@ -258,3 +259,6 @@ is deleted.
 ```bash
 pytest
 ```
+
+GitHub Actions runs the suite on Python 3.10 and 3.14 for every push to
+`main` and every pull request (`.github/workflows/tests.yml`).

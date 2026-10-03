@@ -36,6 +36,8 @@ pytest tests/test_state.py::test_claim   # one test
 pytest -k "claim or in_flight"           # by name pattern
 ```
 
+CI (`.github/workflows/tests.yml`) runs `pytest` on Python 3.10 (the `requires-python` floor) and 3.14 for pushes to `main` and every PR. Code must keep working on 3.10.
+
 `KAVENEGAR_API_KEY` must be set (env or `.env` in cwd) for `send`. Other commands work without it. `SMS_SENDER_TEST_NUMBER` (optional) provides the default phone for `--approval-test`; the `--test-number` flag overrides it.
 
 ## Architecture
