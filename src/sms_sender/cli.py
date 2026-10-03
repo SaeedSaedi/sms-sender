@@ -26,6 +26,7 @@ from .rate import parse_rate
 from .reconcile import DEFAULT_MIN_AGE_SEC, REQUEUE_NOT_FOUND, reconcile_unknown
 from .runner import format_report, make_runner
 from .sender import TOKEN_MAX_SPACES, HaltError, Sender, SenderConfig, token_problem
+from .window import DEFAULT_WINDOW, ENV_SEND_WINDOW, parse_window
 from .state import (
     NEEDS_REVIEW,
     SUPPRESSED,
@@ -247,6 +248,13 @@ def _send_options(f: F) -> F:
                  "`suppressed`; anyone already sent stays `sent`.",
         ),
         click.option(
+            "--send-window", "send_window", default=DEFAULT_WINDOW, show_default=True,
+            envvar=ENV_SEND_WINDOW, metavar="HH:MM-HH:MM",
+            help="Only send inside this daily window, in Tehran time; 'off' to send "
+                 "any time. Outside it the run won't start, and a run stops "
+                 "(resumably) when the window closes.",
+        ),
+        click.option(
             "--allow-settings-change", is_flag=True,
             help="Let a campaign that already sent continue with a different "
                  "template or tokens (both message versions end up in one campaign).",
@@ -334,6 +342,8 @@ def _do_send(
     token_column: tuple[str, ...] = (), value_map: tuple[str, ...] = (),
     campaign: str | None = None, allow_settings_change: bool = False,
     opt_out: tuple[str, ...] = (),
+    # None: the env var, else 08:00-21:00 (the wizard doesn't pass it).
+    send_window: str | None = None,
 ) -> None:
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
@@ -352,6 +362,12 @@ def _do_send(
         {"token": token, "token2": token2, "token3": token3,
          "token10": token10, "token20": token20},
     )
+    if send_window is None:
+        send_window = os.environ.get(ENV_SEND_WINDOW, DEFAULT_WINDOW)
+    try:
+        window = parse_window(send_window)
+    except ValueError as e:
+        raise click.UsageError(str(e)) from e
 
     # `load_api_key` calls `load_dotenv`, which makes `.env`-set values
     # (including SMS_SENDER_TEST_NUMBER) visible to `_resolve_test_number`.
@@ -375,6 +391,7 @@ def _do_send(
         campaign=campaign,
         allow_settings_change=allow_settings_change,
         opt_out=_load_opt_out(opt_out),
+        send_window=window,
     )
     try:
         summary = runner.run()

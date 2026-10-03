@@ -208,6 +208,47 @@ def test_opted_out_recipients_are_never_sent(tmp_path):
     assert "suppressed" in format_report(summary)
 
 
+def test_run_outside_the_sending_window_does_not_start(tmp_path):
+    from datetime import datetime
+
+    from sms_sender.window import TEHRAN, parse_window
+
+    sender = FakeSender()
+    reporter = RecordingReporter()
+    summary = Runner(
+        input_path=write_input(tmp_path, ["09120000001"]), state=StateStore(tmp_path / "s.db"),
+        sender=sender, workers=1, reporter=reporter,
+        send_window=parse_window("08:00-21:00"),
+        clock=lambda: datetime(2026, 10, 4, 22, 15, tzinfo=TEHRAN),
+    ).run()
+    assert summary.halted is True
+    assert sender.calls == []
+    assert any("outside the sending window" in n and "22:15" in n for n in reporter.notes)
+
+
+def test_run_stops_when_the_sending_window_closes(tmp_path):
+    """Inside the window for the preflight check and two sends, then 21:00:
+    nothing more is claimed, and the rest wait for the next run."""
+    from datetime import datetime
+
+    from sms_sender.window import TEHRAN, parse_window
+
+    inside = iter([datetime(2026, 10, 4, 20, 59, tzinfo=TEHRAN)] * 3)
+    closed = datetime(2026, 10, 4, 21, 0, tzinfo=TEHRAN)
+    state = StateStore(tmp_path / "s.db")
+    sender = FakeSender()
+    reporter = RecordingReporter()
+    summary = Runner(
+        input_path=write_input(tmp_path, [f"0912000000{i}" for i in range(1, 5)]),
+        state=state, sender=sender, workers=1, reporter=reporter,
+        send_window=parse_window("08:00-21:00"), clock=lambda: next(inside, closed),
+    ).run()
+    assert len(sender.calls) == 2
+    assert summary.stopped is True and summary.halted is False
+    assert state.counts() == {SENT: 2, PENDING: 2}
+    assert any("sending window" in n and "closed" in n for n in reporter.notes)
+
+
 def test_run_start_logs_the_template(tmp_path, caplog):
     """The log is the campaign history today, so each run records its template."""
     from types import SimpleNamespace

@@ -734,6 +734,37 @@ def test_reset_suppressed_needs_confirmation(tmp_path):
     assert store.counts() == {"suppressed": 1}
 
 
+@pytest.mark.parametrize("args, env, expected", [
+    ((), None, None),                                   # conftest switches it off
+    (("--send-window", "off"), None, None),
+    (("--send-window", "08:00-21:00"), None, "08:00–21:00"),
+    ((), "09:00-18:00", "09:00–18:00"),                 # from the env var
+])
+def test_send_window_reaches_the_runner(tmp_path, monkeypatch, args, env, expected):
+    from sms_sender.window import ENV_SEND_WINDOW
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    if env is not None:
+        monkeypatch.setenv(ENV_SEND_WINDOW, env)
+    captured: dict = {}
+    monkeypatch.setattr(cli_module, "make_runner", _stub_make_runner(captured))
+    Path("in.txt").write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(cli, _send_args(*args))
+    assert result.exit_code == 0, result.output
+    window = captured["send_window"]
+    assert (str(window).split(" ")[0] if window else None) == expected
+
+
+def test_bad_send_window_is_a_usage_error(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    Path("in.txt").write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(cli, _send_args("--send-window", "8-21"))
+    assert result.exit_code == 2
+    assert "08:00-21:00" in result.output
+
+
 def test_status_never_creates_a_db(tmp_path):
     result = CliRunner().invoke(cli, ["status", "--state", str(tmp_path / "nope.db")])
     assert result.exit_code == 0

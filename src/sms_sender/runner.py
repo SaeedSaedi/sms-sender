@@ -17,6 +17,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterator, Protocol
 
@@ -39,6 +40,7 @@ from .sender import (
     UncertainSendError,
 )
 from .state import NEEDS_REVIEW, SUPPRESSED, UNKNOWN, StateStore
+from .window import TEHRAN, SendWindow, now_tehran
 
 logger = logging.getLogger(__name__)
 
@@ -172,10 +174,16 @@ class Runner:
         settings: dict | None = None,
         allow_settings_change: bool = False,
         opt_out: frozenset[str] | None = None,
+        send_window: SendWindow | None = None,
+        clock: Callable[[], datetime] = now_tehran,
     ):
         self.input_path = Path(input_path)
         # Phones that must never get this campaign (opt-out list).
         self.opt_out = opt_out or frozenset()
+        # Daily hours SMS may go out; None = any time.
+        self.send_window = send_window
+        self.clock = clock
+        self._window_closed = threading.Event()
         # Campaign identity: the DB is bound to this name and to `settings`
         # (what it sends, see `campaign_settings`) on the first run.
         self.campaign = campaign
@@ -209,6 +217,14 @@ class Runner:
         requests already in flight finish and are recorded, and the rest stay
         claimable for the next run. Ctrl-C does the same in the CLI."""
         self._cancelled.set()
+        self._stop.set()
+
+    def _close_window(self) -> None:
+        """The sending window closed mid-run: claim nothing more. The rest
+        stay claimable, so the next run inside the window continues."""
+        if not self._window_closed.is_set():
+            self._window_closed.set()
+            logger.warning("send_window_closed", extra={"window": str(self.send_window)})
         self._stop.set()
 
     def _record_error(self, status_code: int | None, message: str) -> None:
@@ -256,6 +272,9 @@ class Runner:
         # Rate-limit BEFORE claim so we don't lock the row while sleeping.
         self._bucket.acquire()
         if self._stop.is_set():
+            return ("skipped", phone)
+        if self.send_window and not self.send_window.contains(self.clock()):
+            self._close_window()
             return ("skipped", phone)
         recipient = self.state.claim(phone)
         if recipient is None:
@@ -498,6 +517,11 @@ class Runner:
 
         counts, halted = self._fan_out(phones)
         counts.sent += smoke_sent
+        if self._window_closed.is_set():
+            self._reporter.note(
+                f"The sending window ({self.send_window}) closed. Re-run the same "
+                "command inside it to continue."
+            )
 
         # On a long run, rows that went `unknown` early may be old enough now.
         if not halted and not self._stop.is_set():
@@ -593,6 +617,13 @@ class Runner:
         """Account check → optional approval test (manual gate) → optional
         smoke test (auto). Raises PreflightError to abort before fan-out.
         Returns the phones still to send and how many the smoke test sent."""
+        if self.send_window and phones:
+            now = self.clock()
+            if not self.send_window.contains(now):
+                raise PreflightError(
+                    f"outside the sending window ({self.send_window}): it's "
+                    f"{now.astimezone(TEHRAN):%H:%M} there; run again inside it"
+                )
         self._preflight(phones)
         self._approval_test(phones)
         self._smoke_test_run(phones)
@@ -662,7 +693,7 @@ class Runner:
             already_done=counts.already_done,
             unknown=db_counts.get(UNKNOWN, 0),
             needs_review=db_counts.get(NEEDS_REVIEW, 0),
-            stopped=self._cancelled.is_set(),
+            stopped=self._cancelled.is_set() or self._window_closed.is_set(),
             suppressed=db_counts.get(SUPPRESSED, 0),
         )
 
@@ -768,6 +799,7 @@ def make_runner(
     campaign: str | None = None,
     allow_settings_change: bool = False,
     opt_out: frozenset[str] | None = None,
+    send_window: SendWindow | None = None,
 ) -> Runner:
     state = StateStore(db_path)
     sender = Sender(sender_cfg, on_attempt=_attempt_recorder(state))
@@ -785,4 +817,5 @@ def make_runner(
         settings=campaign_settings(sender_cfg, token_columns),
         allow_settings_change=allow_settings_change,
         opt_out=opt_out,
+        send_window=send_window,
     )

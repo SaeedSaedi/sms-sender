@@ -99,6 +99,21 @@ Matching recipients become `suppressed` and are never sent; anyone who
 already got the campaign stays `sent`. In a profile:
 `opt_out = ["data/opt-out.txt"]`.
 
+### Sending hours
+
+Campaign SMS only go out between **08:00 and 21:00 Tehran time** by default.
+Outside that window a run refuses to start (exit code 2); if the window closes
+mid-run, it stops claiming new recipients, says so, and the same command
+continues the next day.
+
+```bash
+sms-sender send ... --send-window 09:00-20:00   # a different window
+sms-sender send ... --send-window off           # any time
+```
+
+`SMS_SENDER_SEND_WINDOW` (env or `.env`) or `send_window` in a profile set it
+too.
+
 ### Per-recipient tokens
 
 When each recipient needs their own values (name, coin, …), take the tokens
@@ -260,7 +275,7 @@ sms-sender dry-run --input ./numbers.csv          # parse + normalize only, no A
 |---|---|
 | 0 | All recipients sent successfully. |
 | 1 | Run finished but some rows failed (permanent or retriable), or are `unknown` / `needs_review`. |
-| 2 | Run halted on an account-level error (no credit, bad API key, plan), another `sms-sender` is already using the same state DB, or the DB belongs to another campaign / was sent with other settings. Fix and re-run. |
+| 2 | Run halted on an account-level error (no credit, bad API key, plan), outside the sending window, another `sms-sender` is already using the same state DB, or the DB belongs to another campaign / was sent with other settings. Fix and re-run. |
 
 ## Architecture
 
