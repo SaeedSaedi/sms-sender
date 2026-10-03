@@ -152,8 +152,14 @@ fanning out across 10k rows:
 ```bash
 sms-sender send --input numbers.csv --template my-tpl --token 12345 \
     --smoke-test            # send to the first phone synchronously, abort if it fails
-# Add --no-preflight to skip the account/info check (default is on).
+# Add --no-preflight to skip the account checks (default is on).
 ```
+
+Before sending, the account checks also read (never change) the Kavenegar
+account settings: a run on an account in **debug mode** stops, because nothing
+would be delivered. With `--approval-test`, the test SMS's real cost gives an
+**estimate** — cost × recipients — and a run the remaining credit can't cover
+stops before the fan-out. The end-of-run report shows what the run cost.
 
 You can also dry-run the exact request without sending:
 

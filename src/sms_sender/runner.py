@@ -71,6 +71,9 @@ class RunSummary:
     stopped: bool = False
     # Rows on the opt-out list in this campaign's DB (never sent).
     suppressed: int = 0
+    # What this run's accepted SMS cost, in rials (Kavenegar's own figures,
+    # approval test included).
+    cost: int = 0
 
 
 class PreflightError(Exception):
@@ -211,6 +214,16 @@ class Runner:
         self._cancelled = threading.Event()
         self._error_counter: Counter[str] = Counter()
         self._error_lock = threading.Lock()
+        # Pre-send figures: credit from account/info, a real per-SMS cost from
+        # the approval test, and what this run has spent so far.
+        self._credit: int | None = None
+        self._approval_cost: int | None = None
+        self._run_cost = 0
+
+    def _add_cost(self, cost: int | None) -> None:
+        if cost:
+            with self._error_lock:
+                self._run_cost += cost
 
     def cancel(self) -> None:
         """Stop gracefully, from any thread: no further recipient is claimed,
@@ -329,6 +342,7 @@ class Runner:
             return ("failed_retriable", phone)
         else:
             self.state.mark_sent(phone, result.message_id, result.status_code, result.cost)
+            self._add_cost(result.cost)
             logger.info(
                 "send_ok",
                 extra={
@@ -375,6 +389,7 @@ class Runner:
             },
         )
         if info.remaining_credit is not None:
+            self._credit = info.remaining_credit
             self._reporter.note(
                 f"Account: credit={info.remaining_credit} "
                 f"expires={info.expire_date or '?'} type={info.type or '?'}"
@@ -383,6 +398,66 @@ class Runner:
                 raise PreflightError(
                     f"remaining credit is {info.remaining_credit}; top up before sending"
                 )
+        self._check_account_config()
+
+    def _check_account_config(self) -> None:
+        """Account settings that change what a run does. Read-only and
+        best-effort: if they can't be read, the run goes on."""
+        if not hasattr(self.sender, "account_config"):
+            return  # test fakes / alternate senders
+        try:
+            config = self.sender.account_config()
+        except SendError as e:  # incl. HaltError, e.g. no access to this method
+            logger.warning(
+                "preflight_config_unreadable",
+                extra={"status": e.status_code, "detail": e.message},
+            )
+            return
+        logger.info(
+            "preflight_config",
+            extra={"debug_mode": config.debug_mode, "resend_failed": config.resend_failed},
+        )
+        if config.debug_mode:
+            raise PreflightError(
+                "the Kavenegar account is in debug mode, so nothing would be delivered "
+                "(every SMS is cancelled); turn it off in the Kavenegar panel first"
+            )
+        if config.resend_failed:
+            self._reporter.note(
+                "Note: Kavenegar's 'resend failed' setting is on, so it resends "
+                "undelivered SMS once by itself."
+            )
+
+    def _check_credit(self, phones: list[str]) -> None:
+        """Estimate the run's cost from a real SMS — the approval test's, else
+        what this campaign already paid per SMS — and refuse a run the credit
+        can't cover. Skipped while either number is unknown."""
+        if not phones or self._credit is None:
+            return
+        per_sms = self._approval_cost or self.state.average_cost()
+        if not per_sms:
+            self._reporter.note(
+                "Cost estimate: unknown until one SMS has gone out "
+                "(--approval-test sends one first)."
+            )
+            return
+        estimate = per_sms * len(phones)
+        varies = " (per-recipient tokens: the real cost varies with length)" \
+            if self.token_columns is not None else ""
+        self._reporter.note(
+            f"Estimated cost: {len(phones)} SMS × {per_sms} = {estimate} rials; "
+            f"credit {self._credit} rials{varies}."
+        )
+        logger.info(
+            "cost_estimate",
+            extra={"recipients": len(phones), "per_sms": per_sms, "estimate": estimate,
+                   "credit": self._credit},
+        )
+        if estimate > self._credit:
+            raise PreflightError(
+                f"not enough credit: about {estimate} rials needed for {len(phones)} "
+                f"SMS, {self._credit} left"
+            )
 
     def _approval_test(self, phones: list[str]) -> None:
         """Send to the operator's own number out-of-band, then prompt y/N.
@@ -430,6 +505,8 @@ class Runner:
             "approval_test_sent",
             extra={"phone": target, "msg_id": result.message_id},
         )
+        self._approval_cost = result.cost
+        self._add_cost(result.cost)
         approved = self._approval_prompt(target, len(phones))
         if not approved:
             logger.warning("approval_declined", extra={"phone": target})
@@ -626,6 +703,7 @@ class Runner:
                 )
         self._preflight(phones)
         self._approval_test(phones)
+        self._check_credit(phones)
         self._smoke_test_run(phones)
         if self.smoke_test and self.preflight and phones:
             # The smoke test consumed phones[0] synchronously.
@@ -695,6 +773,7 @@ class Runner:
             needs_review=db_counts.get(NEEDS_REVIEW, 0),
             stopped=self._cancelled.is_set() or self._window_closed.is_set(),
             suppressed=db_counts.get(SUPPRESSED, 0),
+            cost=self._run_cost,
         )
 
 
@@ -714,6 +793,7 @@ def _summary_log_fields(s: RunSummary) -> dict:
         "unknown": s.unknown,
         "needs_review": s.needs_review,
         "suppressed": s.suppressed,
+        "cost": s.cost,
         "halted": s.halted,
         "stopped": s.stopped,
         "elapsed_sec": s.elapsed_sec,
@@ -743,6 +823,8 @@ def format_report(s: RunSummary) -> str:
         lines.append(f"  suppressed        {s.suppressed}  (on the opt-out list; never sent)")
     if s.stopped:
         lines.append("  stopped           True  (re-run the same command to continue)")
+    if s.cost:
+        lines.append(f"  cost              {s.cost:,} rials")
     lines += [
         f"  halted            {s.halted}",
         f"  elapsed           {s.elapsed_sec:.2f}s ({s.sends_per_sec:.2f} sends/sec)",

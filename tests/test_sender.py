@@ -193,6 +193,42 @@ def test_per_recipient_tokens_layer_over_static_ones():
     }]
 
 
+# ---------- account settings (read-only) ----------
+
+
+def test_account_config_is_read_with_a_plain_get(monkeypatch):
+    """GET without parameters only reads the settings; any parameter would
+    change that setting on the account, so none may ever be sent."""
+    from sms_sender.sender import AccountConfig, _KavenegarHTTP
+
+    http = _KavenegarHTTP("k", timeout=1)
+    seen = {}
+
+    def get(url, **kwargs):
+        seen.update(url=url, kwargs=kwargs)
+        return _FakeJSONResp({
+            "return": {"status": 200, "message": "ok"},
+            "entries": {"apilogs": "justfaults", "debugmode": "disabled", "resendfailed": "enabled"},
+        })
+
+    monkeypatch.setattr(http._session, "get", get)
+    monkeypatch.setattr(
+        http._session, "post", lambda *a, **kw: pytest.fail("account/config must never be POSTed"),
+    )
+    assert Sender(cfg(), sdk=http).account_config() == AccountConfig(
+        debug_mode=False, resend_failed=True,
+    )
+    assert seen["url"].endswith("/account/config.json")
+    assert set(seen["kwargs"]) == {"timeout"}  # no data, no params
+
+
+def test_account_config_unrecognized_values_are_unknown():
+    sdk = FakeSDK([])
+    sdk.account_config = lambda: {"debugmode": "maybe"}
+    config = Sender(cfg(), sdk=sdk).account_config()
+    assert (config.debug_mode, config.resend_failed) == (None, None)
+
+
 # ---------- Kavenegar's token rules (error 431) ----------
 
 

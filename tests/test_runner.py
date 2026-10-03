@@ -249,6 +249,100 @@ def test_run_stops_when_the_sending_window_closes(tmp_path):
     assert any("sending window" in n and "closed" in n for n in reporter.notes)
 
 
+class AccountFakeSender(FakeSender):
+    """FakeSender with an account: credit, settings, and a cost per SMS."""
+
+    def __init__(self, credit=10_000, config=None, cost=None):
+        super().__init__()
+        self.credit, self.config, self.cost = credit, config, cost
+
+    def account_info(self):
+        return AccountInfo(remaining_credit=self.credit, expire_date=None, type="master")
+
+    def account_config(self):
+        from sms_sender.sender import AccountConfig
+
+        if isinstance(self.config, BaseException):
+            raise self.config
+        return self.config or AccountConfig(debug_mode=False, resend_failed=False)
+
+    def send(self, phone, tokens=None):
+        super().send(phone, tokens)
+        return SendResult(message_id=1, status_code=200, cost=self.cost)
+
+
+def _run(tmp_path, sender, phones, **kw):
+    reporter = RecordingReporter()
+    summary = Runner(
+        input_path=write_input(tmp_path, phones), state=StateStore(tmp_path / "s.db"),
+        sender=sender, workers=1, reporter=reporter, **kw,
+    ).run()
+    return summary, reporter
+
+
+def test_debug_mode_account_stops_before_sending(tmp_path):
+    from sms_sender.sender import AccountConfig
+
+    sender = AccountFakeSender(config=AccountConfig(debug_mode=True, resend_failed=False))
+    summary, reporter = _run(tmp_path, sender, ["09120000001"])
+    assert summary.halted is True
+    assert sender.calls == []
+    assert any("debug mode" in n for n in reporter.notes)
+
+
+def test_resend_failed_setting_is_flagged_but_does_not_block(tmp_path):
+    from sms_sender.sender import AccountConfig
+
+    sender = AccountFakeSender(config=AccountConfig(debug_mode=False, resend_failed=True))
+    summary, reporter = _run(tmp_path, sender, ["09120000001"])
+    assert summary.sent == 1
+    assert any("resend failed" in n for n in reporter.notes)
+
+
+def test_unreadable_account_settings_do_not_block(tmp_path):
+    sender = AccountFakeSender(config=HaltError(407, "no access to this method"))
+    summary, _ = _run(tmp_path, sender, ["09120000001"])
+    assert summary.sent == 1
+
+
+def test_not_enough_credit_for_the_estimate_stops_after_the_test_sms(tmp_path):
+    """The approval test costs 1,200; 3 recipients need ~3,600; 3,000 left."""
+    sender = AccountFakeSender(credit=3_000, cost=1_200)
+    summary, reporter = _run(
+        tmp_path, sender, ["09120000001", "09120000002", "09120000003"],
+        approval_test_number="09150000077", approval_prompt=lambda *_: True,
+    )
+    assert summary.halted is True
+    assert sender.calls == ["09150000077"]  # only the approval test went out
+    assert summary.cost == 1_200
+    assert any("not enough credit" in n and "3600" in n for n in reporter.notes)
+
+
+def test_enough_credit_shows_the_estimate_and_sums_the_real_cost(tmp_path):
+    sender = AccountFakeSender(credit=10_000, cost=1_200)
+    summary, reporter = _run(
+        tmp_path, sender, ["09120000001", "09120000002", "09120000003"],
+        approval_test_number="09150000077", approval_prompt=lambda *_: True,
+    )
+    assert summary.sent == 3
+    assert any("3 SMS × 1200 = 3600 rials" in n for n in reporter.notes)
+    assert summary.cost == 4 * 1_200  # approval test + 3 recipients
+    assert "4,800 rials" in format_report(summary)
+
+
+def test_resumed_campaign_estimates_from_what_it_already_paid(tmp_path):
+    db = tmp_path / "s.db"
+    earlier = StateStore(db)
+    earlier.upsert_pending([("09120000009", "09120000009")])
+    earlier.claim("09120000009")
+    earlier.mark_sent("09120000009", message_id=1, status_code=200, cost=1_100)
+
+    sender = AccountFakeSender(credit=2_000, cost=1_100)
+    summary, _ = _run(tmp_path, sender, ["09120000001", "09120000002"])
+    assert summary.halted is True  # 2 × 1,100 > 2,000
+    assert sender.calls == []
+
+
 def test_run_start_logs_the_template(tmp_path, caplog):
     """The log is the campaign history today, so each run records its template."""
     from types import SimpleNamespace

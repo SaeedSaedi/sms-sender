@@ -8,6 +8,7 @@ release the row.
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 import threading
 import time
@@ -479,6 +480,13 @@ class StateStore:
             )
 
     # ---------- reporting ----------
+
+    def average_cost(self) -> int | None:
+        """What this campaign paid per SMS so far (rials, rounded up), if any."""
+        row = self._conn().execute(
+            "SELECT AVG(cost) FROM recipients WHERE cost IS NOT NULL"
+        ).fetchone()
+        return math.ceil(row[0]) if row and row[0] is not None else None
 
     def counts(self) -> dict[str, int]:
         rows = self._conn().execute(
