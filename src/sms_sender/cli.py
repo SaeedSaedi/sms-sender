@@ -5,7 +5,6 @@ import csv
 import json
 import logging
 import os
-import re
 import sys
 import time
 from contextlib import contextmanager
@@ -17,7 +16,7 @@ from click.core import ParameterSource
 
 from . import input_loader, logging_config
 from .config import load_api_key
-from .input_loader import InputError, TokenColumns
+from .input_loader import SLUG_RE, InputError, TokenColumns
 from .locking import RunLock, RunLockError
 from .notify import notify
 from .phone import InvalidPhoneError, normalize as normalize_phone
@@ -79,6 +78,12 @@ _value_map_option = click.option(
          "'trade_side:Buy=خرید'. Repeatable. A row whose value has no entry "
          "is recorded as invalid instead of being sent untranslated.",
 )
+_user_id_column_option = click.option(
+    "--user-id-column", "user_id_column", default=None, metavar="COLUMN",
+    help="CSV column with each recipient's user ID (the input needs a header "
+         "row; its first column is the phone). A blank ID is still sent and "
+         "reported as missing user ID; a phone with two different IDs isn't sent.",
+)
 
 
 def _parse_token_columns(
@@ -129,9 +134,11 @@ def _parse_token_columns(
     return TokenColumns(columns=columns, value_maps=value_maps)
 
 
-def _load_input(input_path: str, token_columns: TokenColumns | None) -> input_loader.LoadResult:
+def _load_input(
+    input_path: str, token_columns: TokenColumns | None, user_id_column: str | None = None,
+) -> input_loader.LoadResult:
     try:
-        return input_loader.load(input_path, token_columns)
+        return input_loader.load(input_path, token_columns, user_id_column)
     except InputError as e:
         raise click.UsageError(str(e)) from e
 
@@ -147,8 +154,6 @@ def _load_opt_out(paths: tuple[str, ...]) -> frozenset[str] | None:
     return frozenset(phones)
 
 
-_CAMPAIGN_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
-
 _campaign_option = click.option(
     "--campaign", default=None, metavar="SLUG",
     help="Campaign name, e.g. 'coin-price-7'. Gives the campaign its own state "
@@ -161,7 +166,7 @@ def _resolve_db_path(db_path: str, campaign: str | None) -> str:
     `--campaign X` → data/db/X.db, then the built-in default."""
     if campaign is None:
         return db_path
-    if not _CAMPAIGN_RE.match(campaign):
+    if not SLUG_RE.match(campaign):
         raise click.BadParameter(
             f"{campaign!r}: use lowercase letters, digits and dashes, e.g. coin-price-7",
             param_hint="--campaign",
@@ -239,6 +244,13 @@ def _send_options(f: F) -> F:
                      help="Static token20 value (up to 8 spaces)."),
         _token_column_option,
         _value_map_option,
+        _user_id_column_option,
+        click.option(
+            "--segment", default=None, metavar="NAME",
+            help="Which segment this input is (lowercase letters, digits, dashes); "
+                 "defaults to the input file's name. Recorded per recipient for "
+                 "reports and links.",
+        ),
         click.option("--workers", default=5, show_default=True, type=int),
         click.option("--max-attempts", default=5, show_default=True, type=int),
         click.option("--timeout", default=15.0, show_default=True, type=float),
@@ -353,9 +365,16 @@ def _do_send(
     opt_out: tuple[str, ...] = (),
     # None: the env var, else 08:00-21:00 (the wizard doesn't pass it).
     send_window: str | None = None,
+    user_id_column: str | None = None,
+    segment: str | None = None,
 ) -> None:
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    if segment is not None and not SLUG_RE.match(segment):
+        raise click.BadParameter(
+            f"{segment!r}: use lowercase letters, digits and dashes, e.g. vip-2",
+            param_hint="--segment",
+        )
     db_path = _resolve_db_path(db_path, campaign)
     console_level = (
         logging.DEBUG if verbose else (logging.WARNING if quiet else logging.INFO)
@@ -401,6 +420,8 @@ def _do_send(
         allow_settings_change=allow_settings_change,
         opt_out=_load_opt_out(opt_out),
         send_window=window,
+        user_id_column=user_id_column,
+        segment=segment,
     )
     try:
         summary = runner.run()
@@ -499,6 +520,9 @@ def status(db_path: str, campaign: str | None) -> None:
     delivered = store.delivery_counts()
     if delivered:
         click.echo(f"delivery   {describe_delivery(delivered)}")
+    if store.get_meta("user_id_column") is not None:
+        with_id, missing = store.user_id_counts()
+        click.echo(f"user IDs   {with_id} recipient(s); missing user ID: {missing}")
     counts = store.counts()
     if not counts:
         click.echo("(empty)")
@@ -700,16 +724,29 @@ def delivery(db_path: str, campaign: str | None, timeout: float, log_file: str) 
 @click.option("--input", "input_path", required=True, type=click.Path(exists=True, dir_okay=False))
 @_token_column_option
 @_value_map_option
-def dry_run(input_path: str, token_column: tuple[str, ...], value_map: tuple[str, ...]) -> None:
+@_user_id_column_option
+def dry_run(
+    input_path: str, token_column: tuple[str, ...], value_map: tuple[str, ...],
+    user_id_column: str | None,
+) -> None:
     """Parse + normalize + dedup, print what would be sent. No API calls."""
-    result = _load_input(input_path, _parse_token_columns(token_column, value_map, {}))
+    result = _load_input(
+        input_path, _parse_token_columns(token_column, value_map, {}), user_id_column,
+    )
     click.echo(f"valid={len(result.valid)} invalid={len(result.invalid)} "
                f"duplicates_collapsed={result.duplicates_collapsed}")
+    if user_id_column is not None:
+        click.echo(
+            f"user IDs: missing user ID={result.missing_user_id} (still sent), "
+            f"conflicting user IDs={len(result.conflicts)} phone(s) (not sent)"
+        )
     if result.header is not None:
         click.echo(f"  (skipped header row {result.header!r})")
     for r in result.valid[:10]:
         tokens = "".join(f"  {k}={v}" for k, v in r.tokens.items())
-        click.echo(f"  {r.phone}  (raw={r.raw!r}){tokens}")
+        who = (f"  user_id={r.user_id or '(missing user ID)'}"
+               if user_id_column is not None else "")
+        click.echo(f"  {r.phone}  (raw={r.raw!r}){tokens}{who}")
     if len(result.valid) > 10:
         click.echo(f"  ... and {len(result.valid) - 10} more")
     for inv in result.invalid:

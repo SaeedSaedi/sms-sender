@@ -67,6 +67,10 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         "ALTER TABLE recipients ADD COLUMN delivery_status INTEGER",
         "ALTER TABLE recipients ADD COLUMN delivery_checked_at REAL",
     ),
+    (  # 4 → 5: who each recipient is (user ID from the import) and which segment brought them
+        "ALTER TABLE recipients ADD COLUMN user_id TEXT",
+        "ALTER TABLE recipients ADD COLUMN segment TEXT",
+    ),
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)
@@ -204,8 +208,11 @@ class StateStore:
 
     # ---------- bulk loading ----------
 
-    def upsert_pending(self, rows: list[tuple[str, str]]) -> int:
-        """Insert (phone, raw) pairs as pending. Returns number of new rows."""
+    def upsert_pending(self, rows: list[tuple[str, str]], *, segment: str | None = None) -> int:
+        """Insert (phone, raw) pairs as pending. Returns number of new rows.
+
+        `segment` records which segment brought each new recipient; rows
+        that had none yet (created before segments existed) get it too."""
         if not rows:
             return 0
         now = time.time()
@@ -213,10 +220,75 @@ class StateStore:
             before = conn.total_changes
             conn.executemany(
                 "INSERT OR IGNORE INTO recipients "
-                "(phone, raw, status, first_seen_at) VALUES (?, ?, ?, ?)",
-                [(p, r, PENDING, now) for p, r in rows],
+                "(phone, raw, status, first_seen_at, segment) VALUES (?, ?, ?, ?, ?)",
+                [(p, r, PENDING, now, segment) for p, r in rows],
             )
-            return conn.total_changes - before
+            new = conn.total_changes - before
+            if segment is not None:
+                conn.executemany(
+                    "UPDATE recipients SET segment=? WHERE phone=? AND segment IS NULL",
+                    [(segment, p) for p, _ in rows],
+                )
+            return new
+
+    def assign_user_ids(self, user_ids: dict[str, str]) -> list[tuple[str, str, str]]:
+        """Record each phone's user ID from the import. A phone that already
+        has a different one is a conflict, returned as (phone, stored, new)
+        and left unchanged; the caller excludes it from sending."""
+        if not user_ids:
+            return []
+        stored: dict[str, str | None] = {}
+        phones = list(user_ids)
+        with self._tx() as conn:
+            for start in range(0, len(phones), 500):
+                chunk = phones[start:start + 500]
+                for row in conn.execute(
+                    f"SELECT phone, user_id FROM recipients "
+                    f"WHERE phone IN ({','.join('?' * len(chunk))})",
+                    chunk,
+                ):
+                    stored[row["phone"]] = row["user_id"]
+            conn.executemany(
+                "UPDATE recipients SET user_id=? WHERE phone=? AND user_id IS NULL",
+                [(uid, p) for p, uid in user_ids.items() if p in stored and stored[p] is None],
+            )
+        return [
+            (p, old, user_ids[p]) for p, old in stored.items()
+            if old is not None and old != user_ids[p]
+        ]
+
+    def exclude(self, phones: Iterable[str], reason: str) -> int:
+        """Take recipients that must not be sent (e.g. conflicting user IDs)
+        out of the send queue as invalid (`failed_permanent`). Only claimable
+        rows change; returns how many did."""
+        return self._move_claimable(phones, FAILED_PERMANENT, reason)
+
+    def _move_claimable(self, phones: Iterable[str], status: str, reason: str) -> int:
+        """Set `status` on the claimable rows among `phones`. Chunked:
+        SQLite caps the IN-list."""
+        changed = 0
+        batch = list(phones)
+        for start in range(0, len(batch), 500):
+            chunk = batch[start:start + 500]
+            placeholders = ",".join("?" * len(chunk))
+            with self._tx() as conn:
+                cur = conn.execute(
+                    f"UPDATE recipients SET status=?, last_error=? "
+                    f"WHERE phone IN ({placeholders}) "
+                    f"AND status IN ({','.join('?' * len(CLAIMABLE))})",
+                    (status, reason, *chunk, *CLAIMABLE),
+                )
+                changed += cur.rowcount
+        return changed
+
+    def user_id_counts(self) -> tuple[int, int]:
+        """(recipients with a user ID, recipients missing one) — real
+        recipients only, not invalid input rows."""
+        row = self._conn().execute(
+            "SELECT SUM(user_id IS NOT NULL), SUM(user_id IS NULL) FROM recipients "
+            "WHERE phone NOT LIKE 'INVALID:%'"
+        ).fetchone()
+        return (row[0] or 0, row[1] or 0)
 
     def record_invalid(self, raw: str, reason: str) -> None:
         """Persist a single structurally invalid input as a permanent failure.
@@ -252,21 +324,8 @@ class StateStore:
     def suppress(self, phones: Iterable[str]) -> int:
         """Move opted-out phones out of the send queue. Only claimable rows
         change — a row that was already sent stays `sent`. Returns rows
-        changed. Chunked: SQLite caps the IN-list."""
-        changed = 0
-        batch = list(phones)
-        for start in range(0, len(batch), 500):
-            chunk = batch[start:start + 500]
-            placeholders = ",".join("?" * len(chunk))
-            with self._tx() as conn:
-                cur = conn.execute(
-                    f"UPDATE recipients SET status=?, last_error='on the opt-out list' "
-                    f"WHERE phone IN ({placeholders}) "
-                    f"AND status IN ({','.join('?' * len(CLAIMABLE))})",
-                    (SUPPRESSED, *chunk, *CLAIMABLE),
-                )
-                changed += cur.rowcount
-        return changed
+        changed."""
+        return self._move_claimable(phones, SUPPRESSED, "on the opt-out list")
 
     def reset_status(self, from_status: str) -> int:
         """Promote rows in `from_status` back to pending. Returns rows changed."""

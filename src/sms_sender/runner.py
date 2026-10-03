@@ -74,6 +74,11 @@ class RunSummary:
     # What this run's accepted SMS cost, in rials (Kavenegar's own figures,
     # approval test included).
     cost: int = 0
+    # With a user-ID column: input rows whose user ID was blank (still sent,
+    # reported as "missing user ID"), and phones excluded because they came
+    # with two different user IDs.
+    missing_user_id: int = 0
+    user_id_conflicts: int = 0
 
 
 class PreflightError(Exception):
@@ -179,8 +184,15 @@ class Runner:
         opt_out: frozenset[str] | None = None,
         send_window: SendWindow | None = None,
         clock: Callable[[], datetime] = now_tehran,
+        user_id_column: str | None = None,
+        segment: str | None = None,
     ):
         self.input_path = Path(input_path)
+        # Which input column holds each recipient's user ID (None: no IDs),
+        # and the segment this input is (default: the file's name).
+        self.user_id_column = user_id_column
+        self.segment = segment or input_loader.segment_from_path(input_path)
+        self._user_id_conflicts = 0
         # Phones that must never get this campaign (opt-out list).
         self.opt_out = opt_out or frozenset()
         # Daily hours SMS may go out; None = any time.
@@ -629,17 +641,20 @@ class Runner:
             if changed:
                 logger.warning("campaign_settings_changed", extra={"changed": ", ".join(changed)})
                 self._reporter.note(f"Campaign settings changed: {', '.join(changed)}.")
-        loaded = input_loader.load(self.input_path, self.token_columns)
+        loaded = input_loader.load(self.input_path, self.token_columns, self.user_id_column)
         if self.token_columns is not None:
             self._row_tokens = {r.phone: r.tokens for r in loaded.valid}
         logger.info(
             "input_loaded",
             extra={
                 "path": str(self.input_path),
+                "segment": self.segment,
                 "valid": len(loaded.valid),
                 "invalid": len(loaded.invalid),
                 "duplicates_collapsed": loaded.duplicates_collapsed,
                 "header": loaded.header,
+                "missing_user_id": loaded.missing_user_id,
+                "user_id_conflicts": len(loaded.conflicts),
             },
         )
 
@@ -647,7 +662,11 @@ class Runner:
             self.state.record_invalid_many(
                 [(inv.raw, inv.reason) for inv in loaded.invalid]
             )
-        new_count = self.state.upsert_pending([(r.phone, r.raw) for r in loaded.valid])
+        new_count = self.state.upsert_pending(
+            [(r.phone, r.raw) for r in loaded.valid], segment=self.segment,
+        )
+        if self.user_id_column is not None:
+            self._apply_user_ids(loaded)
         orphans = self.state.mark_orphans_unknown()
         if orphans:
             logger.warning("orphans_marked_unknown", extra={"n": orphans})
@@ -691,6 +710,34 @@ class Runner:
             },
         )
         return loaded, new_count, phones
+
+    def _apply_user_ids(self, loaded: LoadResult) -> None:
+        """Record user IDs and take phones with two different ones out of
+        the queue — within this file, or against an earlier import. They
+        can't be attributed to anyone, so they aren't sent (decided
+        2026-10-04); a phone that already got the SMS stays `sent`."""
+        self.state.set_meta("user_id_column", self.user_id_column or "")
+        earlier = self.state.assign_user_ids(
+            {r.phone: r.user_id for r in loaded.valid if r.user_id}
+        )
+        for phone, stored, new in earlier:
+            logger.warning(
+                "user_id_conflict", extra={"phone": phone, "stored": stored, "new": new},
+            )
+        conflicting = set(loaded.conflicts) | {phone for phone, _, _ in earlier}
+        if conflicting:
+            excluded = self.state.exclude(conflicting, "conflicting user IDs; not sent")
+            self._user_id_conflicts = len(conflicting)
+            self._reporter.note(
+                f"{len(conflicting)} phone(s) came with two different user IDs and "
+                f"won't be sent ({excluded} taken out of the queue; any already "
+                "sent stay sent). Fix the IDs at the source."
+            )
+        if loaded.missing_user_id:
+            self._reporter.note(
+                f"{loaded.missing_user_id} recipient(s) have no user ID: they're sent, "
+                "and reported as missing user ID."
+            )
 
     def _preflight_checks(self, phones: list[str]) -> tuple[list[str], int]:
         """Account check → optional approval test (manual gate) → optional
@@ -776,6 +823,8 @@ class Runner:
             stopped=self._cancelled.is_set() or self._window_closed.is_set(),
             suppressed=db_counts.get(SUPPRESSED, 0),
             cost=self._run_cost,
+            missing_user_id=loaded.missing_user_id,
+            user_id_conflicts=self._user_id_conflicts,
         )
 
 
@@ -796,6 +845,8 @@ def _summary_log_fields(s: RunSummary) -> dict:
         "needs_review": s.needs_review,
         "suppressed": s.suppressed,
         "cost": s.cost,
+        "missing_user_id": s.missing_user_id,
+        "user_id_conflicts": s.user_id_conflicts,
         "halted": s.halted,
         "stopped": s.stopped,
         "elapsed_sec": s.elapsed_sec,
@@ -823,6 +874,10 @@ def format_report(s: RunSummary) -> str:
         lines.append(f"  needs_review      {s.needs_review}  (Kavenegar check was ambiguous)")
     if s.suppressed:
         lines.append(f"  suppressed        {s.suppressed}  (on the opt-out list; never sent)")
+    if s.missing_user_id:
+        lines.append(f"  missing user ID   {s.missing_user_id}  (sent; not attributable to a user)")
+    if s.user_id_conflicts:
+        lines.append(f"  user ID conflict  {s.user_id_conflicts}  (two different user IDs; not sent)")
     if s.stopped:
         lines.append("  stopped           True  (re-run the same command to continue)")
     if s.cost:
@@ -884,6 +939,8 @@ def make_runner(
     allow_settings_change: bool = False,
     opt_out: frozenset[str] | None = None,
     send_window: SendWindow | None = None,
+    user_id_column: str | None = None,
+    segment: str | None = None,
 ) -> Runner:
     state = StateStore(db_path)
     sender = Sender(sender_cfg, on_attempt=_attempt_recorder(state))
@@ -902,4 +959,6 @@ def make_runner(
         allow_settings_change=allow_settings_change,
         opt_out=opt_out,
         send_window=send_window,
+        user_id_column=user_id_column,
+        segment=segment,
     )
