@@ -25,7 +25,16 @@ from .profile import ProfileError, load_profile, to_default_map
 from .rate import parse_rate
 from .reconcile import DEFAULT_MIN_AGE_SEC, REQUEUE_NOT_FOUND, reconcile_unknown
 from .runner import format_report, make_runner
-from .sender import TOKEN_MAX_SPACES, HaltError, Sender, SenderConfig, token_problem
+from .delivery import describe as describe_delivery
+from .delivery import sync_delivery
+from .sender import (
+    TOKEN_MAX_SPACES,
+    HaltError,
+    SendError,
+    Sender,
+    SenderConfig,
+    token_problem,
+)
 from .window import DEFAULT_WINDOW, ENV_SEND_WINDOW, parse_window
 from .state import (
     NEEDS_REVIEW,
@@ -487,6 +496,9 @@ def status(db_path: str, campaign: str | None) -> None:
             f"last run   {when}: sent {run['sent']}, "
             f"failed {run['failed_permanent'] + run['failed_retriable']}{flags}"
         )
+    delivered = store.delivery_counts()
+    if delivered:
+        click.echo(f"delivery   {describe_delivery(delivered)}")
     counts = store.counts()
     if not counts:
         click.echo("(empty)")
@@ -650,6 +662,38 @@ def reconcile(
     left = store.counts()
     if left.get(UNKNOWN) or left.get(NEEDS_REVIEW):
         sys.exit(1)
+
+
+@cli.command()
+@click.option("--state", "db_path", default="./sms_state.db", show_default=True,
+              type=click.Path(dir_okay=False))
+@_campaign_option
+@click.option("--timeout", default=15.0, show_default=True, type=float)
+@click.option(
+    "--log-file", default="./logs/sms-sender.log", show_default=True,
+    type=click.Path(dir_okay=False),
+)
+def delivery(db_path: str, campaign: str | None, timeout: float, log_file: str) -> None:
+    """Fetch delivery reports for SMS sent in the last 48 h. Never sends anything.
+
+    Kavenegar only reports delivery for 48 hours after sending, so run this a
+    few times in that window (e.g. after 10 minutes, an hour, a day). Safe to
+    run while a send is in progress.
+    """
+    logging_config.setup(log_file=log_file, console_level=logging.WARNING)
+    db_path = _resolve_db_path(db_path, campaign)
+    if not Path(db_path).exists():
+        raise click.UsageError(f"No state DB at {db_path}.")
+    store = StateStore(db_path)
+    # Read-only lookups: the template is never used.
+    sender = Sender(SenderConfig(api_key=load_api_key(), template="", timeout=timeout))
+    try:
+        result = sync_delivery(store, sender)
+    except SendError as e:  # incl. HaltError
+        click.echo(f"Error: Kavenegar didn't answer: [{e.status_code}] {e.message}", err=True)
+        sys.exit(2 if isinstance(e, HaltError) else 1)
+    click.echo(f"checked {result.checked} SMS, {result.updated} with a status")
+    click.echo(f"delivery   {describe_delivery(store.delivery_counts()) or '(nothing sent)'}")
 
 
 @cli.command("dry-run")

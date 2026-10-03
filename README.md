@@ -207,6 +207,20 @@ It asks Kavenegar which messages went to each phone around the attempt
 
 Rows less than 5 minutes old wait (`--min-age`).
 
+### Delivery reports
+
+`sent` means Kavenegar accepted the SMS. Whether it reached the phone comes
+later:
+
+```bash
+sms-sender delivery --campaign coin-price-7   # ask Kavenegar, store the answers
+sms-sender status --campaign coin-price-7     # delivery: delivered 10,234 · undelivered 120 · …
+```
+
+Kavenegar only reports delivery for **48 hours** after sending, so run
+`delivery` a few times inside that window (e.g. after 10 minutes, an hour, a
+day). It never sends anything and is safe to run during a send.
+
 ### Throughput control
 
 `--workers` controls parallelism; `--rate` caps total requests per second on

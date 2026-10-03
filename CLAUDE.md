@@ -28,6 +28,7 @@ sms-sender export-failed     # dump failed_permanent to CSV
 sms-sender dry-run --input … # parse + normalize, no API calls
 sms-sender reset --status failed_permanent   # promote rows back to pending
 sms-sender reconcile --state data/db/x.db    # ask Kavenegar about `unknown` rows (never sends)
+sms-sender delivery --campaign coin-price-7   # delivery reports for the last 48 h (never sends)
 sms-sender purge -y          # delete state DB (no undo)
 
 # Tests
@@ -127,6 +128,10 @@ Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_perm
 `unknown` rows are settled by asking Kavenegar what it actually sent, never by resending. `reconcile_unknown` looks each phone up with `sms/statusbyreceptor` (`Sender.find_messages`) in a window around its last claim (−120 s … +900 s; Kavenegar allows ≤ 1 day). Message IDs the DB already accounts for (`known_message_ids`: sent rows plus recorded calls, e.g. the approval test) never count. Exactly one other message → `sent`; several → `needs_review`, which only `reset --status needs_review` (with confirmation) makes claimable. None → `needs_review` too, by default (`reconcile.REQUEUE_NOT_FOUND = False`): a live lookup on 2026-10-04 didn't find a 5-day-old lookup message, so "not found" isn't yet trusted as "never sent". With `requeue_not_found` (CLI `--requeue-not-found`, `Runner(reconcile_requeue_not_found=True)`) it becomes `failed_retriable`, claimable again; flip the default once a fresh lookup message is confirmed findable. Kavenegar reports an empty lookup as error 449, which `find_messages` turns into `[]`. Rows younger than the min age (300 s) wait. The settle methods only change rows that are still `unknown`, and each decision is an `attempts` row of kind `reconcile`.
 
 The runner reconciles at the start of every run (so rows Kavenegar never got go out with everyone else) and at the end (long runs). It's best-effort: if the lookup fails — even a `HaltError` — the rows just stay `unknown`. `sms-sender reconcile` does the same standalone under the run lock; exit 1 while rows remain `unknown` / `needs_review`, 2 if Kavenegar refuses the lookup.
+
+### Delivery reports ([delivery.py](src/sms_sender/delivery.py))
+
+`sent` means Kavenegar *accepted* an SMS. `sync_delivery` asks `sms/status` (`Sender.delivery_statuses`: ≤ 500 message IDs per call) about sent rows from the last 48 h whose delivery status isn't final, and stores it in `recipients.delivery_status` / `delivery_checked_at` (schema v4). Final: 6, 10 (delivered), 13, 14, 100; 11 (undelivered) is re-checked because it can still turn into 10. Kavenegar only answers for 48 h, so `sms-sender delivery` has to run inside that window (the dashboard will schedule it). It doesn't take the run lock — it only writes the delivery columns — so it's safe during a send. `status` prints the breakdown (`delivery.describe`).
 
 ### Error taxonomy (split across `sender.py` + `classifier.py`)
 

@@ -193,6 +193,39 @@ def test_per_recipient_tokens_layer_over_static_ones():
     }]
 
 
+# ---------- delivery reports (sms/status) ----------
+
+
+def test_message_status_posts_comma_joined_ids_and_parses(monkeypatch):
+    from sms_sender.sender import _KavenegarHTTP
+
+    http = _KavenegarHTTP("k", timeout=1)
+    seen = {}
+
+    def post(url, data=None, timeout=None, **_kw):
+        seen.update(url=url, data=data)
+        return _FakeJSONResp({
+            "return": {"status": 200, "message": "ok"},
+            "entries": [{"messageid": 11, "status": 10, "statustext": "…"},
+                        {"messageid": 12, "status": 4}],
+        })
+
+    monkeypatch.setattr(http._session, "post", post)
+    assert Sender(cfg(), sdk=http).delivery_statuses([11, 12]) == {11: 10, 12: 4}
+    assert seen["url"].endswith("/sms/status.json")
+    assert seen["data"] == {"messageid": "11,12"}
+
+
+def test_delivery_statuses_449_means_none():
+    sdk = FakeSDK([])
+
+    def no_record(_ids):
+        raise APIException("APIException[449] رکوردی با مشخصات مورد نظر پیدا نشد")
+
+    sdk.message_status = no_record
+    assert Sender(cfg(), sdk=sdk).delivery_statuses([1]) == {}
+
+
 # ---------- account settings (read-only) ----------
 
 

@@ -63,6 +63,10 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
     (  # 2 → 3: which campaign this DB is, what it sends with, last run
         "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
     ),
+    (  # 3 → 4: whether each accepted SMS reached the phone (Kavenegar sms/status)
+        "ALTER TABLE recipients ADD COLUMN delivery_status INTEGER",
+        "ALTER TABLE recipients ADD COLUMN delivery_checked_at REAL",
+    ),
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)
@@ -480,6 +484,42 @@ class StateStore:
             )
 
     # ---------- reporting ----------
+
+    # ---------- delivery reports (see delivery.py) ----------
+
+    def messages_awaiting_delivery(
+        self, *, sent_after: float, final: Iterable[int],
+    ) -> list[tuple[str, int]]:
+        """(phone, message_id) of sent SMS from `sent_after` on whose delivery
+        status isn't final yet — the ones worth asking Kavenegar about."""
+        final = tuple(final)
+        rows = self._conn().execute(
+            "SELECT phone, message_id FROM recipients "
+            "WHERE status=? AND message_id IS NOT NULL AND sent_at >= ? "
+            f"AND (delivery_status IS NULL OR delivery_status NOT IN ({','.join('?' * len(final))})) "
+            "ORDER BY sent_at",
+            (SENT, sent_after, *final),
+        ).fetchall()
+        return [(r["phone"], r["message_id"]) for r in rows]
+
+    def record_delivery(self, statuses: dict[str, int], checked_at: float) -> None:
+        """Store Kavenegar's delivery status per phone, in one transaction."""
+        if not statuses:
+            return
+        with self._tx() as conn:
+            conn.executemany(
+                "UPDATE recipients SET delivery_status=?, delivery_checked_at=? WHERE phone=?",
+                [(status, checked_at, phone) for phone, status in statuses.items()],
+            )
+
+    def delivery_counts(self) -> dict[int | None, int]:
+        """Sent rows by delivery status; None = not checked yet."""
+        rows = self._conn().execute(
+            "SELECT delivery_status, COUNT(*) AS n FROM recipients WHERE status=? "
+            "GROUP BY delivery_status",
+            (SENT,),
+        ).fetchall()
+        return {r["delivery_status"]: r["n"] for r in rows}
 
     def average_cost(self) -> int | None:
         """What this campaign paid per SMS so far (rials, rounded up), if any."""

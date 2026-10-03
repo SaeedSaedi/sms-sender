@@ -765,6 +765,27 @@ def test_bad_send_window_is_a_usage_error(tmp_path, monkeypatch):
     assert "08:00-21:00" in result.output
 
 
+def test_delivery_command_syncs_and_status_shows_the_breakdown(tmp_path, monkeypatch):
+    from sms_sender.sender import Sender
+
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    db = tmp_path / "s.db"
+    store = StateStore(db)
+    store.upsert_pending([("09120000001", "09120000001"), ("09120000002", "09120000002")])
+    for message_id, phone in enumerate(("09120000001", "09120000002"), start=1):
+        store.claim(phone)
+        store.mark_sent(phone, message_id=message_id, status_code=200)
+    monkeypatch.setattr(Sender, "delivery_statuses", lambda self, ids: {1: 10, 2: 11})
+
+    result = CliRunner().invoke(
+        cli, ["delivery", "--state", str(db), "--log-file", str(tmp_path / "test.log")],
+    )
+    assert result.exit_code == 0, result.output
+    assert "checked 2 SMS, 2 with a status" in result.output
+    status = CliRunner().invoke(cli, ["status", "--state", str(db)])
+    assert "delivery   delivered 1 · undelivered 1" in status.output
+
+
 def test_status_never_creates_a_db(tmp_path):
     result = CliRunner().invoke(cli, ["status", "--state", str(tmp_path / "nope.db")])
     assert result.exit_code == 0

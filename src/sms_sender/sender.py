@@ -163,6 +163,7 @@ class _SDK(Protocol):
     def account_info(self) -> dict: ...
     def account_config(self) -> dict: ...
     def status_by_receptor(self, receptor: str, startdate: int, enddate: int) -> list[dict]: ...
+    def message_status(self, message_ids: list[int]) -> list[dict]: ...
 
 
 def _parse_api_exception(exc: APIException) -> tuple[int | None, str]:
@@ -214,6 +215,7 @@ class _KavenegarHTTP:
         self._account_url = self.BASE.format(key=api_key, path="account/info")
         self._config_url = self.BASE.format(key=api_key, path="account/config")
         self._status_by_receptor_url = self.BASE.format(key=api_key, path="sms/statusbyreceptor")
+        self._status_url = self.BASE.format(key=api_key, path="sms/status")
         self._timeout = timeout
         self._session = requests.Session()
 
@@ -274,6 +276,10 @@ class _KavenegarHTTP:
             self._status_by_receptor_url,
             {"receptor": receptor, "startdate": startdate, "enddate": enddate},
         )
+        return body.get("entries") or []
+
+    def message_status(self, message_ids: list[int]) -> list[dict]:
+        body = self._post(self._status_url, {"messageid": ",".join(map(str, message_ids))})
         return body.get("entries") or []
 
     def account_config(self) -> dict:
@@ -450,6 +456,28 @@ class Sender:
             debug_mode=_flag(data.get("debugmode")),
             resend_failed=_flag(data.get("resendfailed")),
         )
+
+    def delivery_statuses(self, message_ids: list[int]) -> dict[int, int]:
+        """Kavenegar's delivery status per message ID (`sms/status`: at most
+        500 IDs per call, and only within 48 h of sending). Read-only.
+        Raises HaltError on account problems, SendError when unreachable."""
+        try:
+            entries = self._sdk.message_status(message_ids)
+        except HTTPException as e:
+            raise SendError(None, f"http: {e}") from e
+        except APIException as e:
+            code, message = _parse_api_exception(e)
+            if code == _NO_RECORD:
+                return {}
+            if classify(code) is Action.HALT:
+                raise HaltError(code, message) from e
+            raise SendError(code, message) from e
+        statuses = {}
+        for entry in entries:
+            message_id, status = _safe_int(entry.get("messageid")), _safe_int(entry.get("status"))
+            if message_id is not None and status is not None:
+                statuses[message_id] = status
+        return statuses
 
     def find_messages(self, phone: str, start: float, end: float) -> list[ProviderMessage]:
         """Messages Kavenegar sent to `phone` between `start` and `end` (unix
