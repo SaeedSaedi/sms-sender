@@ -16,6 +16,18 @@ logs/
 .coverage
 .idea/
 .vscode/
+.python-version
+
+# Local data — state DBs and segment / user-id lists (PII — never commit).
+# DBs go in data/db/, recipient lists in data/segments/.
+data/
+old/
+
+# Safety net for lists or exports left in the repo root anyway
+# (e.g. `export-failed` writes ./failed.csv by default).
+/*.csv
+/*.txt
+/*.xls*
 
 # Recipient number lists (PII — never commit)
 test-numbers.txt
