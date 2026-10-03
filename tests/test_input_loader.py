@@ -28,10 +28,41 @@ def test_txt_skips_blanks_and_comments(tmp_path):
 def test_csv_takes_first_cell(tmp_path):
     p = write(tmp_path, "in.csv", "phone,name\n09123456789,Ali\n+989120000000,Sara\n")
     r = load(p)
-    # header row is invalid (not a phone), real rows succeed
+    # The header row is skipped, not recorded as an invalid phone.
     assert [x.phone for x in r.valid] == ["09123456789", "09120000000"]
-    assert len(r.invalid) == 1
-    assert r.invalid[0].raw == "phone"
+    assert r.invalid == []
+    assert r.header == "phone"
+
+
+def test_excel_style_header_is_skipped_not_invalid(tmp_path):
+    # Real segment exports: BOM + "Phone Number" + one number per row.
+    p = tmp_path / "seg.csv"
+    p.write_bytes("﻿Phone Number\n09123456789\n09120000000\n".encode("utf-8"))
+    r = load(p)
+    assert [x.phone for x in r.valid] == ["09123456789", "09120000000"]
+    assert r.invalid == []
+    assert r.header == "Phone Number"
+
+
+def test_only_the_first_row_can_be_a_header(tmp_path):
+    p = write(tmp_path, "in.txt", "Phone Number\nnope\n09123456789\n")
+    r = load(p)
+    assert r.header == "Phone Number"
+    assert [x.raw for x in r.invalid] == ["nope"]
+
+
+def test_first_row_with_digits_is_data(tmp_path):
+    p = write(tmp_path, "in.txt", "0812345678\n09123456789\n")
+    r = load(p)
+    assert r.header is None
+    assert [x.raw for x in r.invalid] == ["0812345678"]
+
+
+def test_persian_digit_first_row_is_data(tmp_path):
+    p = write(tmp_path, "in.txt", "۰۹۱۲۳۴۵۶۷۸۹\n")
+    r = load(p)
+    assert r.header is None
+    assert [x.phone for x in r.valid] == ["09123456789"]
 
 
 def test_dedup(tmp_path):

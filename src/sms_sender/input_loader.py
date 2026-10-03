@@ -2,8 +2,10 @@
 
 Both formats expect one phone number per row. CSV rows may carry extra
 columns; the first non-empty cell is taken as the phone. Lines starting
-with `#` are treated as comments. Invalid numbers are returned in a
-separate list so the caller can record them as permanent failures.
+with `#` are treated as comments. A first row with no digits at all is a
+column header (Excel exports start with e.g. `Phone Number`) and is
+skipped. Invalid numbers are returned in a separate list so the caller
+can record them as permanent failures.
 
 With a `TokenColumns` spec the file is read as a CSV with a header row
 instead: the first column is the phone, and the mapped columns become
@@ -57,6 +59,7 @@ class LoadResult:
     valid: list[LoadedRow]
     invalid: list[InvalidRow]
     duplicates_collapsed: int
+    header: str | None = None  # first row, when it was skipped as a column header
 
 
 def _iter_text_lines(path: Path) -> Iterable[tuple[int, str]]:
@@ -91,6 +94,8 @@ def load(path: str | Path, token_columns: TokenColumns | None = None) -> LoadRes
     invalid: list[InvalidRow] = []
     seen: set[str] = set()
     duplicates = 0
+    header: str | None = None
+    first_row = True
 
     for line_no, line in _iter_text_lines(p):
         stripped = line.strip()
@@ -99,6 +104,12 @@ def load(path: str | Path, token_columns: TokenColumns | None = None) -> LoadRes
         raw = _extract_first_cell(stripped) if suffix == ".csv" else stripped
         if not raw:
             continue
+        if first_row:
+            first_row = False
+            # str.isdigit() also matches Persian digits, so "۰۹۱۲…" is data.
+            if not any(ch.isdigit() for ch in raw):
+                header = raw
+                continue
         try:
             canonical = normalize(raw)
         except InvalidPhoneError as e:
@@ -110,7 +121,9 @@ def load(path: str | Path, token_columns: TokenColumns | None = None) -> LoadRes
         seen.add(canonical)
         valid.append(LoadedRow(phone=canonical, raw=raw))
 
-    return LoadResult(valid=valid, invalid=invalid, duplicates_collapsed=duplicates)
+    return LoadResult(
+        valid=valid, invalid=invalid, duplicates_collapsed=duplicates, header=header,
+    )
 
 
 def _load_with_token_columns(p: Path, spec: TokenColumns) -> LoadResult:

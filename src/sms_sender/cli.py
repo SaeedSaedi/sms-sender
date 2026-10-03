@@ -442,6 +442,8 @@ def dry_run(input_path: str, token_column: tuple[str, ...], value_map: tuple[str
     result = _load_input(input_path, _parse_token_columns(token_column, value_map, {}))
     click.echo(f"valid={len(result.valid)} invalid={len(result.invalid)} "
                f"duplicates_collapsed={result.duplicates_collapsed}")
+    if result.header is not None:
+        click.echo(f"  (skipped header row {result.header!r})")
     for r in result.valid[:10]:
         tokens = "".join(f"  {k}={v}" for k, v in r.tokens.items())
         click.echo(f"  {r.phone}  (raw={r.raw!r}){tokens}")
@@ -545,7 +547,8 @@ def preview(
             f"expires={info.expire_date or '?'} type={info.type or '?'}"
         )
 
-    base_url = f"https://api.kavenegar.com/v1/{api_key}/verify/lookup.json"
+    # Never echo the real key, even when --send / --check-account loaded it.
+    base_url = "https://api.kavenegar.com/v1/<API_KEY>/verify/lookup.json"
     for p in phones:
         params = sender.build_params(p, row_tokens.get(p))
         click.echo(f"\nPOST {base_url}")

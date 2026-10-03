@@ -45,6 +45,8 @@ normalized to `09XXXXXXXXX`:
 ```
 
 Persian (`۰۱۲۳…`) and Arabic-Indic (`٠١٢…`) digits are converted automatically.
+A first row with no digits at all (e.g. an Excel `Phone Number` header) is
+skipped as a column header instead of being counted as an invalid number.
 
 ## Usage
 

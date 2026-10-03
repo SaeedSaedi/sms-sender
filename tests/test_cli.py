@@ -359,6 +359,40 @@ def test_preview_redacts_api_key_in_url():
     assert "<API_KEY>" in result.output
 
 
+def test_preview_check_account_never_prints_the_real_key(monkeypatch):
+    """--check-account / --send load the real key; the printed URL must
+    still show the placeholder."""
+    from sms_sender.sender import AccountInfo, Sender
+
+    monkeypatch.setattr(cli_module, "load_api_key", lambda: "SECRET_KEY_DO_NOT_PRINT")
+    monkeypatch.setattr(
+        Sender, "account_info",
+        lambda self: AccountInfo(remaining_credit=1, expire_date=None, type=None),
+    )
+    result = CliRunner().invoke(
+        cli,
+        [
+            "preview",
+            "--phone", "09123456789",
+            "--template", "t",
+            "--token", "x",
+            "--check-account",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "SECRET_KEY_DO_NOT_PRINT" not in result.output
+    assert "<API_KEY>" in result.output
+
+
+def test_dry_run_reports_skipped_header(tmp_path):
+    inp = tmp_path / "seg.csv"
+    inp.write_text("Phone Number\n09123456789\n", encoding="utf-8")
+    result = CliRunner().invoke(cli, ["dry-run", "--input", str(inp)])
+    assert result.exit_code == 0, result.output
+    assert "valid=1 invalid=0" in result.output
+    assert "skipped header row 'Phone Number'" in result.output
+
+
 def test_send_end_to_end_through_real_sender(tmp_path, monkeypatch):
     """Real CLI → Click → Runner → Sender → _KavenegarHTTP → patched HTTP.
 

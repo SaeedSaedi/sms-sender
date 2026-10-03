@@ -40,6 +40,19 @@ def write_input(tmp_path: Path, phones: list[str]) -> Path:
     return p
 
 
+def test_run_start_logs_the_template(tmp_path, caplog):
+    """The log is the campaign history today, so each run records its template."""
+    from types import SimpleNamespace
+
+    inp = write_input(tmp_path, ["09120000001"])
+    sender = FakeSender()
+    sender.cfg = SimpleNamespace(template="transaction-1")
+    with caplog.at_level("INFO", logger="sms_sender.runner"):
+        Runner(input_path=inp, state=StateStore(tmp_path / "s.db"), sender=sender, workers=1).run()
+    starts = [r for r in caplog.records if r.getMessage() == "run_start"]
+    assert [r.template for r in starts] == ["transaction-1"]
+
+
 def test_happy_path_marks_all_sent(tmp_path):
     inp = write_input(tmp_path, ["09120000001", "09120000002", "09120000003"])
     state = StateStore(tmp_path / "s.db")

@@ -318,6 +318,7 @@ class Runner:
                 "valid": len(loaded.valid),
                 "invalid": len(loaded.invalid),
                 "duplicates_collapsed": loaded.duplicates_collapsed,
+                "header": loaded.header,
             },
         )
 
@@ -350,6 +351,8 @@ class Runner:
                 "to_send": len(phones),
                 "new": new_count,
                 "workers": self.workers,
+                # Campaign history: which template this run sent (fakes have no cfg).
+                "template": getattr(getattr(self.sender, "cfg", None), "template", None),
             },
         )
 
