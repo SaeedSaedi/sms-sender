@@ -622,6 +622,32 @@ def _stub_make_runner(captured: dict):
     return fake
 
 
+def test_stopped_run_exits_1_and_says_how_to_continue(tmp_path, monkeypatch):
+    """Ctrl-C used to exit 0 when nothing had failed, although recipients
+    were left unsent."""
+    from sms_sender.runner import RunSummary
+
+    class _StoppedRunner:
+        def run(self):
+            return RunSummary(
+                total_input=3, new_recipients=3, duplicates_collapsed=0, invalid=0,
+                sent=1, failed_permanent=0, failed_retriable=0, halted=False,
+                stopped=True,
+            )
+
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    monkeypatch.setattr(cli_module, "make_runner", lambda **_kw: _StoppedRunner())
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(
+        cli,
+        ["send", "--input", str(inp), "--template", "t", "--state", str(tmp_path / "s.db"),
+         "--log-file", str(tmp_path / "test.log")],
+    )
+    assert result.exit_code == 1, result.output
+    assert "Re-run the same command to continue" in result.output
+
+
 def test_send_approval_test_uses_env_var(tmp_path, monkeypatch):
     """`--approval-test` with no flag value falls back to SMS_SENDER_TEST_NUMBER."""
     monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")

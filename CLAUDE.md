@@ -61,6 +61,14 @@ cli.send → make_runner → Runner.run
 
 `Runner` is the only place that knows about the state machine *and* the sender — the two are otherwise independent.
 
+### Driving the runner without a terminal ([runner.py](src/sms_sender/runner.py))
+
+`Runner.run()` holds the run lock and goes through `_prepare` (load input, seed state, settle leftovers) → `_preflight_checks` (account, approval test, smoke test) → `_fan_out`. It's built to be driven by the dashboard worker as well as the CLI:
+
+- **Progress** goes to a `Reporter` (`note`, `start`, `advance`, `finish`). The default `TqdmReporter` is the CLI's bar and notes; tests and the worker pass their own. Library code never prints or calls `tqdm` directly.
+- **`cancel()`** works from any thread. Nothing new is claimed, requests in flight finish and are recorded, and the rest stay claimable. Ctrl-C / SIGTERM do the same (a second one forces). The summary reports `stopped=True`, and the CLI exits 1 with a "re-run to continue" hint.
+- **Signal handlers** are installed only with `install_signal_handlers=True` (the default) and restored when the run ends, so an embedding process keeps its own.
+
 ### End-of-run report ([runner.py](src/sms_sender/runner.py))
 
 `RunSummary` carries `elapsed_sec`, `sends_per_sec`, and a `top_errors` tuple — the runner buckets every `PermanentSendError` / `SendError` message into a thread-safe `Counter[str]` keyed by `[code] message`, then emits the top 3 at the end. `tqdm`'s postfix shows `sent / fail / ok%` while running. `format_report(summary)` renders the human-readable block printed to stdout; `_summary_log_fields(summary)` flattens it for the structured logger. The `top_errors` keying intentionally collapses on message text (not phone) so the same misconfiguration shows up once with a count.

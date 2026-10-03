@@ -1,4 +1,11 @@
-"""Orchestrate: load input → seed state → fan out workers → progress + log."""
+"""Orchestrate a run: load input → seed state → preflight → fan out → report.
+
+`run()` goes through three stages — `_prepare`, `_preflight_checks`,
+`_fan_out` — and is built to be driven without a terminal: progress goes
+to a `Reporter` (the CLI's draws the tqdm bar), `cancel()` stops it from
+another thread, and the Ctrl-C / SIGTERM handlers are optional and restored
+afterwards.
+"""
 from __future__ import annotations
 
 import logging
@@ -7,14 +14,15 @@ import threading
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterator, Protocol
 
 from tqdm import tqdm
 
 from . import input_loader
-from .input_loader import TokenColumns
+from .input_loader import LoadResult, TokenColumns
 from .locking import RunLock
 from .rate import TokenBucket
 from .reconcile import DEFAULT_MIN_AGE_SEC, REQUEUE_NOT_FOUND, reconcile_unknown
@@ -54,10 +62,67 @@ class RunSummary:
     unknown: int = 0
     # Rows reconciliation couldn't settle on its own (an operator decides).
     needs_review: int = 0
+    # Ctrl-C, SIGTERM or `cancel()` stopped the run before it finished;
+    # re-running the same command continues where it stopped.
+    stopped: bool = False
 
 
 class PreflightError(Exception):
     """Preflight check failed — abort before fanning out."""
+
+
+@dataclass
+class SendCounts:
+    """Running tallies of one fan-out, handed to the Reporter as it goes."""
+    total: int = 0
+    sent: int = 0
+    failed_permanent: int = 0
+    failed_retriable: int = 0
+    unknown: int = 0
+    already_done: int = 0
+
+    @property
+    def processed(self) -> int:
+        return self.sent + self.failed_permanent + self.failed_retriable + self.unknown
+
+
+class Reporter(Protocol):
+    """Where a run reports progress: notes for the operator, and a tick per
+    finished recipient. The dashboard worker passes one that writes its DB."""
+
+    def note(self, text: str) -> None: ...
+    def start(self, total: int) -> None: ...
+    def advance(self, counts: SendCounts) -> None: ...
+    def finish(self) -> None: ...
+
+
+class TqdmReporter:
+    """The CLI's progress bar and notes — what the tool has always printed."""
+
+    def __init__(self) -> None:
+        self._bar: tqdm | None = None
+
+    def note(self, text: str) -> None:
+        tqdm.write(text)
+
+    def start(self, total: int) -> None:
+        self._bar = tqdm(total=total, unit="sms", dynamic_ncols=True)
+
+    def advance(self, counts: SendCounts) -> None:
+        if self._bar is None:
+            return
+        self._bar.update(1)
+        ok_pct = (counts.sent / counts.processed * 100.0) if counts.processed else 0.0
+        self._bar.set_postfix(
+            sent=counts.sent,
+            fail=counts.failed_permanent + counts.failed_retriable,
+            ok=f"{ok_pct:.0f}%",
+        )
+
+    def finish(self) -> None:
+        if self._bar is not None:
+            self._bar.close()
+            self._bar = None
 
 
 def _click_approval_prompt(test_number: str, recipient_count: int) -> bool:
@@ -97,6 +162,8 @@ class Runner:
         token_columns: TokenColumns | None = None,
         reconcile_min_age_sec: float = DEFAULT_MIN_AGE_SEC,
         reconcile_requeue_not_found: bool = REQUEUE_NOT_FOUND,
+        reporter: Reporter | None = None,
+        install_signal_handlers: bool = True,
     ):
         self.input_path = Path(input_path)
         self.reconcile_min_age_sec = reconcile_min_age_sec
@@ -109,13 +176,25 @@ class Runner:
         self.approval_test_number = approval_test_number
         self._approval_prompt: ApprovalPrompt = approval_prompt or _click_approval_prompt
         self.token_columns = token_columns
+        self._reporter: Reporter = reporter or TqdmReporter()
+        self.install_signal_handlers = install_signal_handlers
         # phone → per-recipient tokens, filled from the input by `run()`.
         # None means every recipient gets the static tokens in SenderConfig.
         self._row_tokens: dict[str, dict[str, str]] | None = None
         self._bucket = TokenBucket(rate_per_sec)
+        # `_stop`: claim nothing more (a halt or a cancel). `_cancelled`: the
+        # operator asked for it, so the run reports itself as stopped.
         self._stop = threading.Event()
+        self._cancelled = threading.Event()
         self._error_counter: Counter[str] = Counter()
         self._error_lock = threading.Lock()
+
+    def cancel(self) -> None:
+        """Stop gracefully, from any thread: no further recipient is claimed,
+        requests already in flight finish and are recorded, and the rest stay
+        claimable for the next run. Ctrl-C does the same in the CLI."""
+        self._cancelled.set()
+        self._stop.set()
 
     def _record_error(self, status_code: int | None, message: str) -> None:
         """Bucket failures by `[code] message` for the end-of-run report."""
@@ -124,23 +203,37 @@ class Runner:
         with self._error_lock:
             self._error_counter[key] += 1
 
-    def _install_signal_handlers(self) -> None:
+    @contextmanager
+    def _signals(self) -> Iterator[None]:
+        """Ctrl-C / SIGTERM → graceful stop; a second one forces it. The
+        previous handlers come back afterwards, so an embedding process
+        keeps its own."""
+        if not self.install_signal_handlers:
+            yield
+            return
+
         def handler(signum, _frame):
-            if self._stop.is_set():
+            if self._cancelled.is_set():
                 logger.warning("force_exit", extra={"signal": signum})
                 raise KeyboardInterrupt
             logger.warning(
                 "graceful_shutdown_requested",
                 extra={"signal": signum, "hint": "press_again_to_force"},
             )
-            self._stop.set()
+            self.cancel()
 
+        previous = {}
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
-                signal.signal(sig, handler)
+                previous[sig] = signal.signal(sig, handler)
             except ValueError:
-                # Not on the main thread (e.g., tests) — skip.
+                # Not on the main thread (e.g. a worker thread) — skip.
                 pass
+        try:
+            yield
+        finally:
+            for sig, old in previous.items():
+                signal.signal(sig, old)
 
     def _send_one(self, phone: str) -> tuple[str, str]:
         if self._stop.is_set():
@@ -248,7 +341,7 @@ class Runner:
             },
         )
         if info.remaining_credit is not None:
-            tqdm.write(
+            self._reporter.note(
                 f"Account: credit={info.remaining_credit} "
                 f"expires={info.expire_date or '?'} type={info.type or '?'}"
             )
@@ -281,9 +374,9 @@ class Runner:
             if sample is None:
                 raise PreflightError("approval test needs a recipient row to borrow tokens from")
             tokens = self._row_tokens[sample]
-            tqdm.write(f"Approval test uses the tokens of {sample}.")
+            self._reporter.note(f"Approval test uses the tokens of {sample}.")
         logger.info("approval_test_target", extra={"phone": target})
-        tqdm.write(f"Approval test: sending to {target} synchronously …")
+        self._reporter.note(f"Approval test: sending to {target} synchronously …")
 
         try:
             result = self.sender.send(target, tokens=tokens)
@@ -308,7 +401,7 @@ class Runner:
             logger.warning("approval_declined", extra={"phone": target})
             raise PreflightError("approval declined by operator; aborting before fan-out")
         logger.info("approval_granted", extra={"phone": target})
-        tqdm.write("Approval granted.")
+        self._reporter.note("Approval granted.")
 
     def _reconcile_unknown(self, when: str) -> None:
         """Settle `unknown` rows that are old enough, by asking Kavenegar.
@@ -331,7 +424,7 @@ class Runner:
             )
             return
         if result.checked:
-            tqdm.write(
+            self._reporter.note(
                 f"Checked {result.checked} unknown row(s) with Kavenegar: "
                 f"{result.sent} had been sent, {result.requeued} had not (safe to "
                 f"send again), {result.needs_review} need review."
@@ -358,25 +451,51 @@ class Runner:
 
         target = phones[0]
         logger.info("smoke_test_target", extra={"phone": target})
-        tqdm.write(f"Smoke test: sending to {target} synchronously …")
+        self._reporter.note(f"Smoke test: sending to {target} synchronously …")
         outcome, _ = self._send_one(target)
         if outcome != "sent":
             raise PreflightError(
                 f"smoke test to {target} did not succeed (outcome={outcome}); "
                 "fix the issue (template/tokens/account) before sending the rest"
             )
-        tqdm.write("Smoke test passed.")
+        self._reporter.note("Smoke test passed.")
 
     def run(self) -> RunSummary:
         # One process per DB: a second run would treat our `in_flight` rows
         # as orphans and send them again. Raises RunLockError if taken.
-        with RunLock(self.state.db_path):
+        with RunLock(self.state.db_path), self._signals():
             return self._run()
 
     def _run(self) -> RunSummary:
-        self._install_signal_handlers()
+        loaded, new_count, phones = self._prepare()
+        started = time.monotonic()
+        try:
+            phones, smoke_sent = self._preflight_checks(phones)
+        except PreflightError as e:
+            logger.error("preflight_failed", extra={"detail": str(e)})
+            self._reporter.note(f"Preflight failed: {e}")
+            return self._build_summary(
+                loaded=loaded, new_count=new_count, counts=SendCounts(),
+                halted=True, started=started,
+            )
 
-        # 1. Load input.
+        counts, halted = self._fan_out(phones)
+        counts.sent += smoke_sent
+
+        # On a long run, rows that went `unknown` early may be old enough now.
+        if not halted and not self._stop.is_set():
+            self._reconcile_unknown("end")
+
+        summary = self._build_summary(
+            loaded=loaded, new_count=new_count, counts=counts,
+            halted=halted, started=started,
+        )
+        logger.info("run_end", extra=_summary_log_fields(summary))
+        return summary
+
+    def _prepare(self) -> tuple[LoadResult, int, list[str]]:
+        """Load the input, seed the state DB, settle leftovers from earlier
+        runs, and return (input, new rows, phones to send in order)."""
         loaded = input_loader.load(self.input_path, self.token_columns)
         if self.token_columns is not None:
             self._row_tokens = {r.phone: r.tokens for r in loaded.valid}
@@ -391,7 +510,6 @@ class Runner:
             },
         )
 
-        # 2. Seed state.
         if loaded.invalid:
             self.state.record_invalid_many(
                 [(inv.raw, inv.reason) for inv in loaded.invalid]
@@ -400,7 +518,7 @@ class Runner:
         orphans = self.state.mark_orphans_unknown()
         if orphans:
             logger.warning("orphans_marked_unknown", extra={"n": orphans})
-            tqdm.write(
+            self._reporter.note(
                 f"{orphans} recipient(s) were mid-send when the last run stopped. They are "
                 "marked unknown and NOT resent: they may already have the SMS."
             )
@@ -408,7 +526,6 @@ class Runner:
         # got go out in this run like everyone else.
         self._reconcile_unknown("start")
 
-        # 3. Snapshot work to do.
         phones = self.state.list_claimable_phones()
         if self._row_tokens is not None:
             # Per-recipient tokens live in the input file, so a claimable row
@@ -416,7 +533,7 @@ class Runner:
             not_in_input = sum(1 for p in phones if p not in self._row_tokens)
             if not_in_input:
                 logger.warning("skipped_not_in_input", extra={"n": not_in_input})
-                tqdm.write(
+                self._reporter.note(
                     f"Skipping {not_in_input} claimable row(s) that aren't in "
                     f"{self.input_path.name} (no per-recipient tokens for them)."
                 )
@@ -431,106 +548,82 @@ class Runner:
                 "template": getattr(getattr(self.sender, "cfg", None), "template", None),
             },
         )
+        return loaded, new_count, phones
 
-        sent = failed_permanent = failed_retriable = already_done = unknown_seen = 0
-        halted = False
-        started = time.monotonic()
-
-        # 4. Preflight: account check → optional approval-test (manual gate)
-        #    → optional smoke-test (auto). Any failure aborts before fan-out.
-        try:
-            self._preflight(phones)
-            self._approval_test(phones)
-            self._smoke_test_run(phones)
-        except PreflightError as e:
-            logger.error("preflight_failed", extra={"detail": str(e)})
-            tqdm.write(f"Preflight failed: {e}")
-            return self._build_summary(
-                loaded=loaded, new_count=new_count,
-                sent=sent, failed_permanent=failed_permanent,
-                failed_retriable=failed_retriable, halted=True,
-                started=started,
-            )
-
-        # The smoke test consumed phones[0] synchronously — refresh the queue.
+    def _preflight_checks(self, phones: list[str]) -> tuple[list[str], int]:
+        """Account check → optional approval test (manual gate) → optional
+        smoke test (auto). Raises PreflightError to abort before fan-out.
+        Returns the phones still to send and how many the smoke test sent."""
+        self._preflight(phones)
+        self._approval_test(phones)
+        self._smoke_test_run(phones)
         if self.smoke_test and self.preflight and phones:
-            smoked = phones[0]
-            phones = [p for p in phones if p != smoked]
-            sent += 1  # the smoke send already succeeded by this point
+            # The smoke test consumed phones[0] synchronously.
+            return phones[1:], 1
+        return phones, 0
 
-        # 5. Fan out.
-        if phones:
-            with tqdm(total=len(phones), unit="sms", dynamic_ncols=True) as bar:
-                with ThreadPoolExecutor(max_workers=self.workers) as ex:
-                    futures = {ex.submit(self._send_one, p): p for p in phones}
-                    try:
-                        for fut in as_completed(futures):
-                            try:
-                                outcome, _ = fut.result()
-                            except HaltError:
-                                halted = True
-                                break
-                            if outcome == "sent":
-                                sent += 1
-                            elif outcome == "failed_permanent":
-                                failed_permanent += 1
-                            elif outcome == "failed_retriable":
-                                failed_retriable += 1
-                            elif outcome == "unknown":
-                                unknown_seen += 1
-                            elif outcome in ("already_done", "skipped"):
-                                already_done += 1
-                            bar.update(1)
-                            processed = sent + failed_permanent + failed_retriable + unknown_seen
-                            ok_pct = (sent / processed * 100.0) if processed else 0.0
-                            bar.set_postfix(
-                                sent=sent,
-                                fail=failed_permanent + failed_retriable,
-                                ok=f"{ok_pct:.0f}%",
-                            )
-                    finally:
-                        if halted or self._stop.is_set():
-                            for f in futures:
-                                f.cancel()
-
-        # On a long run, rows that went `unknown` early may be old enough now.
-        if not halted and not self._stop.is_set():
-            self._reconcile_unknown("end")
-
-        summary = self._build_summary(
-            loaded=loaded, new_count=new_count,
-            sent=sent, failed_permanent=failed_permanent,
-            failed_retriable=failed_retriable, already_done=already_done,
-            halted=halted, started=started,
-        )
-        logger.info("run_end", extra=_summary_log_fields(summary))
-        return summary
+    def _fan_out(self, phones: list[str]) -> tuple[SendCounts, bool]:
+        """Send to every phone across the worker pool. Returns the tallies
+        and whether a HaltError stopped the run."""
+        counts = SendCounts(total=len(phones))
+        halted = False
+        if not phones:
+            return counts, halted
+        self._reporter.start(len(phones))
+        try:
+            with ThreadPoolExecutor(max_workers=self.workers) as ex:
+                futures = {ex.submit(self._send_one, p): p for p in phones}
+                try:
+                    for fut in as_completed(futures):
+                        try:
+                            outcome, _ = fut.result()
+                        except HaltError:
+                            halted = True
+                            break
+                        if outcome == "sent":
+                            counts.sent += 1
+                        elif outcome == "failed_permanent":
+                            counts.failed_permanent += 1
+                        elif outcome == "failed_retriable":
+                            counts.failed_retriable += 1
+                        elif outcome == "unknown":
+                            counts.unknown += 1
+                        elif outcome in ("already_done", "skipped"):
+                            counts.already_done += 1
+                        self._reporter.advance(counts)
+                finally:
+                    if halted or self._stop.is_set():
+                        for f in futures:
+                            f.cancel()
+        finally:
+            self._reporter.finish()
+        return counts, halted
 
     def _build_summary(
-        self, *, loaded, new_count: int,
-        sent: int, failed_permanent: int, failed_retriable: int,
-        already_done: int = 0, halted: bool, started: float,
+        self, *, loaded: LoadResult, new_count: int, counts: SendCounts,
+        halted: bool, started: float,
     ) -> RunSummary:
         elapsed = max(0.0, time.monotonic() - started)
-        rate = (sent / elapsed) if elapsed > 0 else 0.0
+        rate = (counts.sent / elapsed) if elapsed > 0 else 0.0
         with self._error_lock:
             top = tuple(self._error_counter.most_common(3))
-        counts = self.state.counts()
+        db_counts = self.state.counts()
         return RunSummary(
             total_input=len(loaded.valid) + len(loaded.invalid),
             new_recipients=new_count,
             duplicates_collapsed=loaded.duplicates_collapsed,
             invalid=len(loaded.invalid),
-            sent=sent,
-            failed_permanent=failed_permanent,
-            failed_retriable=failed_retriable,
+            sent=counts.sent,
+            failed_permanent=counts.failed_permanent,
+            failed_retriable=counts.failed_retriable,
             halted=halted,
             elapsed_sec=round(elapsed, 3),
             sends_per_sec=round(rate, 3),
             top_errors=top,
-            already_done=already_done,
-            unknown=counts.get(UNKNOWN, 0),
-            needs_review=counts.get(NEEDS_REVIEW, 0),
+            already_done=counts.already_done,
+            unknown=db_counts.get(UNKNOWN, 0),
+            needs_review=db_counts.get(NEEDS_REVIEW, 0),
+            stopped=self._cancelled.is_set(),
         )
 
 
@@ -550,6 +643,7 @@ def _summary_log_fields(s: RunSummary) -> dict:
         "unknown": s.unknown,
         "needs_review": s.needs_review,
         "halted": s.halted,
+        "stopped": s.stopped,
         "elapsed_sec": s.elapsed_sec,
         "sends_per_sec": s.sends_per_sec,
         "top_errors": top,
@@ -573,6 +667,8 @@ def format_report(s: RunSummary) -> str:
         lines.append(f"  unknown           {s.unknown}  (may have been sent; never resent blindly)")
     if s.needs_review:
         lines.append(f"  needs_review      {s.needs_review}  (Kavenegar check was ambiguous)")
+    if s.stopped:
+        lines.append("  stopped           True  (re-run the same command to continue)")
     lines += [
         f"  halted            {s.halted}",
         f"  elapsed           {s.elapsed_sec:.2f}s ({s.sends_per_sec:.2f} sends/sec)",

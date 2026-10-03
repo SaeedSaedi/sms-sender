@@ -40,6 +40,109 @@ def write_input(tmp_path: Path, phones: list[str]) -> Path:
     return p
 
 
+class RecordingReporter:
+    """Captures what a run reports, instead of drawing a tqdm bar."""
+
+    def __init__(self):
+        self.notes: list[str] = []
+        self.starts: list[int] = []
+        self.ticks: list[int] = []
+        self.finished = 0
+
+    def note(self, text):
+        self.notes.append(text)
+
+    def start(self, total):
+        self.starts.append(total)
+
+    def advance(self, counts):
+        self.ticks.append(counts.processed + counts.already_done)
+
+    def finish(self):
+        self.finished += 1
+
+
+def test_progress_goes_to_the_reporter(tmp_path):
+    inp = write_input(tmp_path, ["09120000001", "09120000002", "09120000003"])
+    reporter = RecordingReporter()
+    Runner(
+        input_path=inp, state=StateStore(tmp_path / "s.db"), sender=FakeSender(),
+        workers=1, reporter=reporter,
+    ).run()
+    assert reporter.starts == [3]
+    assert reporter.ticks == [1, 2, 3]
+    assert reporter.finished == 1
+
+
+def test_cancel_stops_claiming_and_the_next_run_sends_the_rest(tmp_path):
+    """The dashboard's pause: a request in flight finishes and is recorded,
+    nothing new is claimed, and the remaining rows stay claimable."""
+    phones = [f"0912000000{i}" for i in range(1, 6)]
+    inp = write_input(tmp_path, phones)
+    state = StateStore(tmp_path / "s.db")
+
+    class CancelOnSecondSend(FakeSender):
+        def send(self, phone, tokens=None):
+            result = super().send(phone, tokens)
+            if len(self.calls) == 2:
+                runner.cancel()  # e.g. the operator pressed Pause mid-send
+            return result
+
+    sender = CancelOnSecondSend()
+    runner = Runner(
+        input_path=inp, state=state, sender=sender, workers=1, reporter=RecordingReporter(),
+    )
+    summary = runner.run()
+    assert summary.stopped is True
+    assert (summary.sent, len(sender.calls)) == (2, 2)
+    assert state.counts() == {SENT: 2, PENDING: 3}
+    assert "stopped" in format_report(summary)
+
+    rest = FakeSender()
+    Runner(
+        input_path=inp, state=state, sender=rest, workers=1, reporter=RecordingReporter(),
+    ).run()
+    assert sorted(rest.calls) == sorted(set(phones) - set(sender.calls))
+
+
+def test_signal_handlers_are_restored_after_the_run(tmp_path):
+    import signal
+
+    before = signal.getsignal(signal.SIGINT)
+    seen = []
+
+    class Peek(FakeSender):
+        def send(self, phone, tokens=None):
+            seen.append(signal.getsignal(signal.SIGINT))
+            return super().send(phone, tokens)
+
+    Runner(
+        input_path=write_input(tmp_path, ["09120000001"]), state=StateStore(tmp_path / "s.db"),
+        sender=Peek(), workers=1, reporter=RecordingReporter(),
+    ).run()
+    assert seen and seen[0] is not before  # the run's own handler was active
+    assert signal.getsignal(signal.SIGINT) is before
+
+
+def test_an_embedding_process_keeps_its_signal_handlers(tmp_path):
+    import signal
+
+    before = signal.getsignal(signal.SIGINT)
+    seen = []
+
+    class Peek(FakeSender):
+        def send(self, phone, tokens=None):
+            seen.append(signal.getsignal(signal.SIGINT))
+            return super().send(phone, tokens)
+
+    Runner(
+        input_path=write_input(tmp_path, ["09120000001"]), state=StateStore(tmp_path / "s.db"),
+        sender=Peek(), workers=1, reporter=RecordingReporter(),
+        install_signal_handlers=False,
+    ).run()
+    assert seen == [before]
+
+
 def test_run_start_logs_the_template(tmp_path, caplog):
     """The log is the campaign history today, so each run records its template."""
     from types import SimpleNamespace

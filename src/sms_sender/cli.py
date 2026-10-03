@@ -331,11 +331,13 @@ def _do_send(
             "needs_review rows may already have the SMS. Only if you're sure they "
             f"don't: `sms-sender reset --status needs_review --state {db_path}`."
         )
+    if summary.stopped:
+        click.echo("Stopped before finishing. Re-run the same command to continue.")
     notify(notify_target, summary)
     if summary.halted:
         sys.exit(2)
     if (summary.failed_permanent or summary.failed_retriable
-            or summary.unknown or summary.needs_review):
+            or summary.unknown or summary.needs_review or summary.stopped):
         sys.exit(1)
 
 
