@@ -7,6 +7,8 @@ release the row.
 """
 from __future__ import annotations
 
+import json
+import math
 import sqlite3
 import threading
 import time
@@ -58,13 +60,31 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         """,
         "CREATE INDEX idx_attempts_phone ON attempts(phone)",
     ),
+    (  # 2 → 3: which campaign this DB is, what it sends with, last run
+        "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+    ),
+    (  # 3 → 4: whether each accepted SMS reached the phone (Kavenegar sms/status)
+        "ALTER TABLE recipients ADD COLUMN delivery_status INTEGER",
+        "ALTER TABLE recipients ADD COLUMN delivery_checked_at REAL",
+    ),
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)
 
+# `--campaign <slug>` keeps each campaign's state DB here (gitignored).
+CAMPAIGN_DB_DIR = Path("data/db")
+
+
+def campaign_db_path(campaign: str) -> Path:
+    return CAMPAIGN_DB_DIR / f"{campaign}.db"
+
 
 class StateSchemaError(RuntimeError):
     """The DB was written by a newer sms-sender than this one."""
+
+
+class CampaignMismatchError(ValueError):
+    """The DB belongs to another campaign, or was sent with other settings."""
 
 
 # Status values
@@ -79,6 +99,8 @@ FAILED_RETRIABLE = "failed_retriable"
 UNKNOWN = "unknown"
 # Reconciliation found more than one candidate message: an operator decides.
 NEEDS_REVIEW = "needs_review"
+# On the opt-out list: never sent. Not claimable.
+SUPPRESSED = "suppressed"
 
 CLAIMABLE = (PENDING, FAILED_RETRIABLE)
 
@@ -227,6 +249,25 @@ class StateStore:
 
     # ---------- run lifecycle ----------
 
+    def suppress(self, phones: Iterable[str]) -> int:
+        """Move opted-out phones out of the send queue. Only claimable rows
+        change — a row that was already sent stays `sent`. Returns rows
+        changed. Chunked: SQLite caps the IN-list."""
+        changed = 0
+        batch = list(phones)
+        for start in range(0, len(batch), 500):
+            chunk = batch[start:start + 500]
+            placeholders = ",".join("?" * len(chunk))
+            with self._tx() as conn:
+                cur = conn.execute(
+                    f"UPDATE recipients SET status=?, last_error='on the opt-out list' "
+                    f"WHERE phone IN ({placeholders}) "
+                    f"AND status IN ({','.join('?' * len(CLAIMABLE))})",
+                    (SUPPRESSED, *chunk, *CLAIMABLE),
+                )
+                changed += cur.rowcount
+        return changed
+
     def reset_status(self, from_status: str) -> int:
         """Promote rows in `from_status` back to pending. Returns rows changed."""
         with self._tx() as conn:
@@ -322,6 +363,67 @@ class StateStore:
             "SELECT * FROM attempts WHERE phone=? ORDER BY id", (phone,)
         ).fetchall()
 
+    # ---------- campaign identity (meta) ----------
+
+    def get_meta(self, key: str) -> str | None:
+        row = self._conn().execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self._tx() as conn:
+            conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value))
+
+    def bind_campaign(
+        self, name: str | None, settings: dict | None, *, allow_change: bool = False,
+    ) -> list[str]:
+        """Tie this DB to one campaign and to what it sends.
+
+        The first run records both. Later runs must match: one DB is one
+        campaign, and two message versions in it would make its history
+        meaningless. Settings may still change while nothing can have gone
+        out yet — that's how a wrong template gets fixed — and later only
+        with `allow_change`. Returns the names of changed settings.
+        """
+        with self._tx() as conn:
+            def get(key: str) -> str | None:
+                row = conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+                return row["value"] if row else None
+
+            def put(key: str, value: str) -> None:
+                conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value))
+
+            stored_name = get("campaign")
+            if name and stored_name and stored_name != name:
+                raise CampaignMismatchError(
+                    f"{self.db_path} belongs to campaign {stored_name!r}, not {name!r}"
+                )
+            if name and not stored_name:
+                put("campaign", name)
+            if settings is None:
+                return []
+
+            encoded = json.dumps(settings, sort_keys=True, ensure_ascii=False)
+            raw = get("settings")
+            if raw is None:
+                put("settings", encoded)
+                return []
+            stored = json.loads(raw)
+            changed = sorted(k for k in set(stored) | set(settings) if stored.get(k) != settings.get(k))
+            if not changed:
+                return []
+            may_have_gone_out = conn.execute(
+                "SELECT 1 FROM recipients WHERE status IN (?, ?, ?, ?) LIMIT 1",
+                (SENT, IN_FLIGHT, UNKNOWN, NEEDS_REVIEW),
+            ).fetchone()
+            if may_have_gone_out and not allow_change:
+                raise CampaignMismatchError(
+                    f"{self.db_path} already sent with different settings "
+                    f"({', '.join(changed)} changed). Use a new campaign, or pass "
+                    "--allow-settings-change if mixing both versions is intended."
+                )
+            put("settings", encoded)
+            return changed
+
     # ---------- settling `unknown` rows (see reconcile.py) ----------
 
     def list_unknown(self) -> list[tuple[str, float | None]]:
@@ -382,6 +484,49 @@ class StateStore:
             )
 
     # ---------- reporting ----------
+
+    # ---------- delivery reports (see delivery.py) ----------
+
+    def messages_awaiting_delivery(
+        self, *, sent_after: float, final: Iterable[int],
+    ) -> list[tuple[str, int]]:
+        """(phone, message_id) of sent SMS from `sent_after` on whose delivery
+        status isn't final yet — the ones worth asking Kavenegar about."""
+        final = tuple(final)
+        rows = self._conn().execute(
+            "SELECT phone, message_id FROM recipients "
+            "WHERE status=? AND message_id IS NOT NULL AND sent_at >= ? "
+            f"AND (delivery_status IS NULL OR delivery_status NOT IN ({','.join('?' * len(final))})) "
+            "ORDER BY sent_at",
+            (SENT, sent_after, *final),
+        ).fetchall()
+        return [(r["phone"], r["message_id"]) for r in rows]
+
+    def record_delivery(self, statuses: dict[str, int], checked_at: float) -> None:
+        """Store Kavenegar's delivery status per phone, in one transaction."""
+        if not statuses:
+            return
+        with self._tx() as conn:
+            conn.executemany(
+                "UPDATE recipients SET delivery_status=?, delivery_checked_at=? WHERE phone=?",
+                [(status, checked_at, phone) for phone, status in statuses.items()],
+            )
+
+    def delivery_counts(self) -> dict[int | None, int]:
+        """Sent rows by delivery status; None = not checked yet."""
+        rows = self._conn().execute(
+            "SELECT delivery_status, COUNT(*) AS n FROM recipients WHERE status=? "
+            "GROUP BY delivery_status",
+            (SENT,),
+        ).fetchall()
+        return {r["delivery_status"]: r["n"] for r in rows}
+
+    def average_cost(self) -> int | None:
+        """What this campaign paid per SMS so far (rials, rounded up), if any."""
+        row = self._conn().execute(
+            "SELECT AVG(cost) FROM recipients WHERE cost IS NOT NULL"
+        ).fetchone()
+        return math.ceil(row[0]) if row and row[0] is not None else None
 
     def counts(self) -> dict[str, int]:
         rows = self._conn().execute(

@@ -622,6 +622,203 @@ def _stub_make_runner(captured: dict):
     return fake
 
 
+def _send_args(*extra: str) -> list[str]:
+    return ["send", "--input", "in.txt", "--template", "t", "--log-file", "test.log", *extra]
+
+
+def test_campaign_gets_its_own_db_under_data(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    captured: dict = {}
+    monkeypatch.setattr(cli_module, "make_runner", _stub_make_runner(captured))
+    Path("in.txt").write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(cli, _send_args("--campaign", "coin-price-7"))
+    assert result.exit_code == 0, result.output
+    assert captured["db_path"] == str(Path("data/db/coin-price-7.db"))
+    assert captured["campaign"] == "coin-price-7"
+    assert Path("data/db").is_dir()
+
+
+def test_explicit_state_wins_over_campaign(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    captured: dict = {}
+    monkeypatch.setattr(cli_module, "make_runner", _stub_make_runner(captured))
+    Path("in.txt").write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(
+        cli, _send_args("--campaign", "x", "--state", "mine.db", "--allow-settings-change"),
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["db_path"] == "mine.db"
+    assert captured["allow_settings_change"] is True
+
+
+def test_invalid_campaign_name_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    Path("in.txt").write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(cli, _send_args("--campaign", "Bad Name"))
+    assert result.exit_code == 2
+    assert "--campaign" in result.output
+
+
+def test_send_with_changed_settings_after_sending_exits_2(tmp_path, monkeypatch):
+    """Real runner path; it stops at the campaign check, before any network."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    store = StateStore("s.db")
+    store.bind_campaign(None, {"template": "old", "tokens": {}, "token_columns": {},
+                               "value_maps": {}})
+    store.upsert_pending([("09120000001", "09120000001")])
+    store.claim("09120000001")
+    store.mark_sent("09120000001", message_id=1, status_code=200)
+    Path("in.txt").write_text("09120000002\n", encoding="utf-8")
+    result = CliRunner().invoke(cli, _send_args("--template", "new", "--state", "s.db"))
+    assert result.exit_code == 2, result.output
+    assert "different settings" in result.output
+
+
+def test_status_shows_campaign_template_and_last_run(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.chdir(tmp_path)
+    Path("data/db").mkdir(parents=True)
+    store = StateStore("data/db/promo.db")
+    store.bind_campaign("promo", {"template": "coin-price"})
+    store.set_meta("last_run", json.dumps({
+        "at": 0, "sent": 5, "failed_permanent": 1, "failed_retriable": 0,
+        "halted": False, "stopped": True,
+    }))
+    store.upsert_pending([("09120000001", "09120000001")])
+    result = CliRunner().invoke(cli, ["status", "--campaign", "promo"])
+    assert result.exit_code == 0, result.output
+    assert "campaign   promo" in result.output
+    assert "template   coin-price" in result.output
+    assert "sent 5, failed 1, stopped" in result.output
+    assert "pending" in result.output
+
+
+def test_send_rejects_static_token_with_underscore(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    Path("in.txt").write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(cli, _send_args("--token3", "tether_usdt"))
+    assert result.exit_code == 2
+    assert "'_'" in result.output
+
+
+def test_opt_out_lists_reach_the_runner_normalized(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    captured: dict = {}
+    monkeypatch.setattr(cli_module, "make_runner", _stub_make_runner(captured))
+    Path("in.txt").write_text("09120000001\n", encoding="utf-8")
+    Path("optout-a.txt").write_text("Phone Number\n+98 912 000 0002\n", encoding="utf-8")
+    Path("optout-b.csv").write_text("09120000003,stop\nnot-a-phone\n", encoding="utf-8")
+    result = CliRunner().invoke(
+        cli, _send_args("--opt-out", "optout-a.txt", "--opt-out", "optout-b.csv"),
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["opt_out"] == frozenset({"09120000002", "09120000003"})
+
+
+def test_reset_suppressed_needs_confirmation(tmp_path):
+    db = tmp_path / "s.db"
+    store = StateStore(db)
+    store.upsert_pending([("09120000001", "09120000001")])
+    store.suppress(["09120000001"])
+    result = CliRunner().invoke(
+        cli, ["reset", "--status", "suppressed", "--state", str(db)], input="n\n",
+    )
+    assert result.exit_code != 0
+    assert "opt-out" in result.output
+    assert store.counts() == {"suppressed": 1}
+
+
+@pytest.mark.parametrize("args, env, expected", [
+    ((), None, None),                                   # conftest switches it off
+    (("--send-window", "off"), None, None),
+    (("--send-window", "08:00-21:00"), None, "08:00–21:00"),
+    ((), "09:00-18:00", "09:00–18:00"),                 # from the env var
+])
+def test_send_window_reaches_the_runner(tmp_path, monkeypatch, args, env, expected):
+    from sms_sender.window import ENV_SEND_WINDOW
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    if env is not None:
+        monkeypatch.setenv(ENV_SEND_WINDOW, env)
+    captured: dict = {}
+    monkeypatch.setattr(cli_module, "make_runner", _stub_make_runner(captured))
+    Path("in.txt").write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(cli, _send_args(*args))
+    assert result.exit_code == 0, result.output
+    window = captured["send_window"]
+    assert (str(window).split(" ")[0] if window else None) == expected
+
+
+def test_bad_send_window_is_a_usage_error(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    Path("in.txt").write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(cli, _send_args("--send-window", "8-21"))
+    assert result.exit_code == 2
+    assert "08:00-21:00" in result.output
+
+
+def test_delivery_command_syncs_and_status_shows_the_breakdown(tmp_path, monkeypatch):
+    from sms_sender.sender import Sender
+
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    db = tmp_path / "s.db"
+    store = StateStore(db)
+    store.upsert_pending([("09120000001", "09120000001"), ("09120000002", "09120000002")])
+    for message_id, phone in enumerate(("09120000001", "09120000002"), start=1):
+        store.claim(phone)
+        store.mark_sent(phone, message_id=message_id, status_code=200)
+    monkeypatch.setattr(Sender, "delivery_statuses", lambda self, ids: {1: 10, 2: 11})
+
+    result = CliRunner().invoke(
+        cli, ["delivery", "--state", str(db), "--log-file", str(tmp_path / "test.log")],
+    )
+    assert result.exit_code == 0, result.output
+    assert "checked 2 SMS, 2 with a status" in result.output
+    status = CliRunner().invoke(cli, ["status", "--state", str(db)])
+    assert "delivery   delivered 1 · undelivered 1" in status.output
+
+
+def test_status_never_creates_a_db(tmp_path):
+    result = CliRunner().invoke(cli, ["status", "--state", str(tmp_path / "nope.db")])
+    assert result.exit_code == 0
+    assert "no state DB" in result.output
+    assert not (tmp_path / "nope.db").exists()
+
+
+def test_stopped_run_exits_1_and_says_how_to_continue(tmp_path, monkeypatch):
+    """Ctrl-C used to exit 0 when nothing had failed, although recipients
+    were left unsent."""
+    from sms_sender.runner import RunSummary
+
+    class _StoppedRunner:
+        def run(self):
+            return RunSummary(
+                total_input=3, new_recipients=3, duplicates_collapsed=0, invalid=0,
+                sent=1, failed_permanent=0, failed_retriable=0, halted=False,
+                stopped=True,
+            )
+
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    monkeypatch.setattr(cli_module, "make_runner", lambda **_kw: _StoppedRunner())
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n", encoding="utf-8")
+    result = CliRunner().invoke(
+        cli,
+        ["send", "--input", str(inp), "--template", "t", "--state", str(tmp_path / "s.db"),
+         "--log-file", str(tmp_path / "test.log")],
+    )
+    assert result.exit_code == 1, result.output
+    assert "Re-run the same command to continue" in result.output
+
+
 def test_send_approval_test_uses_env_var(tmp_path, monkeypatch):
     """`--approval-test` with no flag value falls back to SMS_SENDER_TEST_NUMBER."""
     monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")

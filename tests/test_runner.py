@@ -40,6 +40,309 @@ def write_input(tmp_path: Path, phones: list[str]) -> Path:
     return p
 
 
+class RecordingReporter:
+    """Captures what a run reports, instead of drawing a tqdm bar."""
+
+    def __init__(self):
+        self.notes: list[str] = []
+        self.starts: list[int] = []
+        self.ticks: list[int] = []
+        self.finished = 0
+
+    def note(self, text):
+        self.notes.append(text)
+
+    def start(self, total):
+        self.starts.append(total)
+
+    def advance(self, counts):
+        self.ticks.append(counts.processed + counts.already_done)
+
+    def finish(self):
+        self.finished += 1
+
+
+def test_progress_goes_to_the_reporter(tmp_path):
+    inp = write_input(tmp_path, ["09120000001", "09120000002", "09120000003"])
+    reporter = RecordingReporter()
+    Runner(
+        input_path=inp, state=StateStore(tmp_path / "s.db"), sender=FakeSender(),
+        workers=1, reporter=reporter,
+    ).run()
+    assert reporter.starts == [3]
+    assert reporter.ticks == [1, 2, 3]
+    assert reporter.finished == 1
+
+
+def test_cancel_stops_claiming_and_the_next_run_sends_the_rest(tmp_path):
+    """The dashboard's pause: a request in flight finishes and is recorded,
+    nothing new is claimed, and the remaining rows stay claimable."""
+    phones = [f"0912000000{i}" for i in range(1, 6)]
+    inp = write_input(tmp_path, phones)
+    state = StateStore(tmp_path / "s.db")
+
+    class CancelOnSecondSend(FakeSender):
+        def send(self, phone, tokens=None):
+            result = super().send(phone, tokens)
+            if len(self.calls) == 2:
+                runner.cancel()  # e.g. the operator pressed Pause mid-send
+            return result
+
+    sender = CancelOnSecondSend()
+    runner = Runner(
+        input_path=inp, state=state, sender=sender, workers=1, reporter=RecordingReporter(),
+    )
+    summary = runner.run()
+    assert summary.stopped is True
+    assert (summary.sent, len(sender.calls)) == (2, 2)
+    assert state.counts() == {SENT: 2, PENDING: 3}
+    assert "stopped" in format_report(summary)
+
+    rest = FakeSender()
+    Runner(
+        input_path=inp, state=state, sender=rest, workers=1, reporter=RecordingReporter(),
+    ).run()
+    assert sorted(rest.calls) == sorted(set(phones) - set(sender.calls))
+
+
+def test_signal_handlers_are_restored_after_the_run(tmp_path):
+    import signal
+
+    before = signal.getsignal(signal.SIGINT)
+    seen = []
+
+    class Peek(FakeSender):
+        def send(self, phone, tokens=None):
+            seen.append(signal.getsignal(signal.SIGINT))
+            return super().send(phone, tokens)
+
+    Runner(
+        input_path=write_input(tmp_path, ["09120000001"]), state=StateStore(tmp_path / "s.db"),
+        sender=Peek(), workers=1, reporter=RecordingReporter(),
+    ).run()
+    assert seen and seen[0] is not before  # the run's own handler was active
+    assert signal.getsignal(signal.SIGINT) is before
+
+
+def test_an_embedding_process_keeps_its_signal_handlers(tmp_path):
+    import signal
+
+    before = signal.getsignal(signal.SIGINT)
+    seen = []
+
+    class Peek(FakeSender):
+        def send(self, phone, tokens=None):
+            seen.append(signal.getsignal(signal.SIGINT))
+            return super().send(phone, tokens)
+
+    Runner(
+        input_path=write_input(tmp_path, ["09120000001"]), state=StateStore(tmp_path / "s.db"),
+        sender=Peek(), workers=1, reporter=RecordingReporter(),
+        install_signal_handlers=False,
+    ).run()
+    assert seen == [before]
+
+
+def test_campaign_settings_capture_what_is_sent_not_how_fast():
+    from sms_sender.runner import campaign_settings
+    from sms_sender.sender import SenderConfig
+
+    columns = TokenColumns(columns={"token20": "coin"}, value_maps={"coin": {"BTC": "بیت‌کوین"}})
+    cfg = SenderConfig(api_key="k", template="transaction-1", token="x", token10="y")
+    assert campaign_settings(cfg, columns) == {
+        "template": "transaction-1",
+        "tokens": {"token": "x", "token10": "y"},
+        "token_columns": {"token20": "coin"},
+        "value_maps": {"coin": {"BTC": "بیت‌کوین"}},
+    }
+    faster = SenderConfig(api_key="other", template="transaction-1", token="x", token10="y",
+                          timeout=99, max_attempts=1)
+    assert campaign_settings(faster, columns) == campaign_settings(cfg, columns)
+
+
+def test_rerun_with_other_settings_refuses_before_touching_rows(tmp_path):
+    import json
+
+    import pytest
+
+    from sms_sender.state import CampaignMismatchError
+
+    db = tmp_path / "s.db"
+    Runner(
+        input_path=write_input(tmp_path, ["09120000001"]), state=StateStore(db),
+        sender=FakeSender(), workers=1, campaign="promo", settings={"template": "a"},
+    ).run()
+    assert json.loads(StateStore(db).get_meta("last_run"))["sent"] == 1
+
+    later = FakeSender()
+    with pytest.raises(CampaignMismatchError):
+        Runner(
+            input_path=write_input(tmp_path, ["09120000002"]), state=StateStore(db),
+            sender=later, workers=1, campaign="promo", settings={"template": "b"},
+        ).run()
+    assert later.calls == []
+    assert StateStore(db).counts() == {SENT: 1}  # the new phone wasn't even seeded
+
+
+def test_opted_out_recipients_are_never_sent(tmp_path):
+    from sms_sender.state import SUPPRESSED
+
+    db = tmp_path / "s.db"
+    already = StateStore(db)
+    already.upsert_pending([("09120000003", "09120000003")])
+    already.claim("09120000003")
+    already.mark_sent("09120000003", message_id=1, status_code=200)
+
+    inp = write_input(tmp_path, ["09120000001", "09120000002", "09120000003"])
+    reporter = RecordingReporter()
+    sender = FakeSender()
+    summary = Runner(
+        input_path=inp, state=StateStore(db), sender=sender, workers=1, reporter=reporter,
+        opt_out=frozenset({"09120000002", "09120000003"}),
+    ).run()
+    assert sender.calls == ["09120000001"]
+    # The opted-out one is suppressed; the one that already had it stays sent.
+    assert StateStore(db).counts() == {SENT: 2, SUPPRESSED: 1}
+    assert summary.suppressed == 1
+    assert any("opt-out" in n for n in reporter.notes)
+    assert "suppressed" in format_report(summary)
+
+
+def test_run_outside_the_sending_window_does_not_start(tmp_path):
+    from datetime import datetime
+
+    from sms_sender.window import TEHRAN, parse_window
+
+    sender = FakeSender()
+    reporter = RecordingReporter()
+    summary = Runner(
+        input_path=write_input(tmp_path, ["09120000001"]), state=StateStore(tmp_path / "s.db"),
+        sender=sender, workers=1, reporter=reporter,
+        send_window=parse_window("08:00-21:00"),
+        clock=lambda: datetime(2026, 10, 4, 22, 15, tzinfo=TEHRAN),
+    ).run()
+    assert summary.halted is True
+    assert sender.calls == []
+    assert any("outside the sending window" in n and "22:15" in n for n in reporter.notes)
+
+
+def test_run_stops_when_the_sending_window_closes(tmp_path):
+    """Inside the window for the preflight check and two sends, then 21:00:
+    nothing more is claimed, and the rest wait for the next run."""
+    from datetime import datetime
+
+    from sms_sender.window import TEHRAN, parse_window
+
+    inside = iter([datetime(2026, 10, 4, 20, 59, tzinfo=TEHRAN)] * 3)
+    closed = datetime(2026, 10, 4, 21, 0, tzinfo=TEHRAN)
+    state = StateStore(tmp_path / "s.db")
+    sender = FakeSender()
+    reporter = RecordingReporter()
+    summary = Runner(
+        input_path=write_input(tmp_path, [f"0912000000{i}" for i in range(1, 5)]),
+        state=state, sender=sender, workers=1, reporter=reporter,
+        send_window=parse_window("08:00-21:00"), clock=lambda: next(inside, closed),
+    ).run()
+    assert len(sender.calls) == 2
+    assert summary.stopped is True and summary.halted is False
+    assert state.counts() == {SENT: 2, PENDING: 2}
+    assert any("sending window" in n and "closed" in n for n in reporter.notes)
+
+
+class AccountFakeSender(FakeSender):
+    """FakeSender with an account: credit, settings, and a cost per SMS."""
+
+    def __init__(self, credit=10_000, config=None, cost=None):
+        super().__init__()
+        self.credit, self.config, self.cost = credit, config, cost
+
+    def account_info(self):
+        return AccountInfo(remaining_credit=self.credit, expire_date=None, type="master")
+
+    def account_config(self):
+        from sms_sender.sender import AccountConfig
+
+        if isinstance(self.config, BaseException):
+            raise self.config
+        return self.config or AccountConfig(debug_mode=False, resend_failed=False)
+
+    def send(self, phone, tokens=None):
+        super().send(phone, tokens)
+        return SendResult(message_id=1, status_code=200, cost=self.cost)
+
+
+def _run(tmp_path, sender, phones, **kw):
+    reporter = RecordingReporter()
+    summary = Runner(
+        input_path=write_input(tmp_path, phones), state=StateStore(tmp_path / "s.db"),
+        sender=sender, workers=1, reporter=reporter, **kw,
+    ).run()
+    return summary, reporter
+
+
+def test_debug_mode_account_stops_before_sending(tmp_path):
+    from sms_sender.sender import AccountConfig
+
+    sender = AccountFakeSender(config=AccountConfig(debug_mode=True, resend_failed=False))
+    summary, reporter = _run(tmp_path, sender, ["09120000001"])
+    assert summary.halted is True
+    assert sender.calls == []
+    assert any("debug mode" in n for n in reporter.notes)
+
+
+def test_resend_failed_setting_is_flagged_but_does_not_block(tmp_path):
+    from sms_sender.sender import AccountConfig
+
+    sender = AccountFakeSender(config=AccountConfig(debug_mode=False, resend_failed=True))
+    summary, reporter = _run(tmp_path, sender, ["09120000001"])
+    assert summary.sent == 1
+    assert any("resend failed" in n for n in reporter.notes)
+
+
+def test_unreadable_account_settings_do_not_block(tmp_path):
+    sender = AccountFakeSender(config=HaltError(407, "no access to this method"))
+    summary, _ = _run(tmp_path, sender, ["09120000001"])
+    assert summary.sent == 1
+
+
+def test_not_enough_credit_for_the_estimate_stops_after_the_test_sms(tmp_path):
+    """The approval test costs 1,200; 3 recipients need ~3,600; 3,000 left."""
+    sender = AccountFakeSender(credit=3_000, cost=1_200)
+    summary, reporter = _run(
+        tmp_path, sender, ["09120000001", "09120000002", "09120000003"],
+        approval_test_number="09150000077", approval_prompt=lambda *_: True,
+    )
+    assert summary.halted is True
+    assert sender.calls == ["09150000077"]  # only the approval test went out
+    assert summary.cost == 1_200
+    assert any("not enough credit" in n and "3600" in n for n in reporter.notes)
+
+
+def test_enough_credit_shows_the_estimate_and_sums_the_real_cost(tmp_path):
+    sender = AccountFakeSender(credit=10_000, cost=1_200)
+    summary, reporter = _run(
+        tmp_path, sender, ["09120000001", "09120000002", "09120000003"],
+        approval_test_number="09150000077", approval_prompt=lambda *_: True,
+    )
+    assert summary.sent == 3
+    assert any("3 SMS × 1200 = 3600 rials" in n for n in reporter.notes)
+    assert summary.cost == 4 * 1_200  # approval test + 3 recipients
+    assert "4,800 rials" in format_report(summary)
+
+
+def test_resumed_campaign_estimates_from_what_it_already_paid(tmp_path):
+    db = tmp_path / "s.db"
+    earlier = StateStore(db)
+    earlier.upsert_pending([("09120000009", "09120000009")])
+    earlier.claim("09120000009")
+    earlier.mark_sent("09120000009", message_id=1, status_code=200, cost=1_100)
+
+    sender = AccountFakeSender(credit=2_000, cost=1_100)
+    summary, _ = _run(tmp_path, sender, ["09120000001", "09120000002"])
+    assert summary.halted is True  # 2 × 1,100 > 2,000
+    assert sender.calls == []
+
+
 def test_run_start_logs_the_template(tmp_path, caplog):
     """The log is the campaign history today, so each run records its template."""
     from types import SimpleNamespace

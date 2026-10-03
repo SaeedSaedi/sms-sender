@@ -35,6 +35,24 @@ _API_EXC_RE_INSIDE = re.compile(r"\[(\d+)\s+(.+?)\]")
 TOKEN_MAX_SPACES: dict[str, int] = {
     "token": 0, "token2": 0, "token3": 0, "token10": 5, "token20": 8,
 }
+TOKEN_MAX_LEN = 100
+
+
+def token_problem(name: str, value: str) -> str | None:
+    """Why Kavenegar would reject `value` as token `name` (error 431), or
+    None if it's fine: at most 100 characters, no line break or underscore,
+    and no more spaces than the token allows."""
+    if len(value) > TOKEN_MAX_LEN:
+        return f"{name} is {len(value)} characters; Kavenegar allows at most {TOKEN_MAX_LEN}"
+    if any(ch in value for ch in "\r\n\t"):
+        return f"{name} contains a line break or tab, which Kavenegar rejects"
+    if "_" in value:
+        return f"{name} contains '_', which Kavenegar rejects"
+    spaces = value.count(" ")
+    if spaces > TOKEN_MAX_SPACES[name]:
+        return f"{name} allows at most {TOKEN_MAX_SPACES[name]} space(s); got {spaces}"
+    return None
+
 
 # Lookup methods (e.g. sms/statusbyreceptor) answer an empty result with this
 # code — "رکوردی با مشخصات مورد نظر پیدا نشد" (no record found) — not with [].
@@ -133,10 +151,19 @@ class ProviderMessage:
     status: int | None  # Kavenegar delivery status, e.g. 10 = delivered
 
 
+@dataclass(frozen=True)
+class AccountConfig:
+    """Kavenegar account settings that change what a campaign does."""
+    debug_mode: bool | None     # on: nothing is delivered, every SMS is cancelled
+    resend_failed: bool | None  # on: Kavenegar resends undelivered SMS once itself
+
+
 class _SDK(Protocol):
     def verify_lookup(self, params: dict) -> list[dict]: ...
     def account_info(self) -> dict: ...
+    def account_config(self) -> dict: ...
     def status_by_receptor(self, receptor: str, startdate: int, enddate: int) -> list[dict]: ...
+    def message_status(self, message_ids: list[int]) -> list[dict]: ...
 
 
 def _parse_api_exception(exc: APIException) -> tuple[int | None, str]:
@@ -186,7 +213,9 @@ class _KavenegarHTTP:
     def __init__(self, api_key: str, timeout: float):
         self._verify_url = self.BASE.format(key=api_key, path="verify/lookup")
         self._account_url = self.BASE.format(key=api_key, path="account/info")
+        self._config_url = self.BASE.format(key=api_key, path="account/config")
         self._status_by_receptor_url = self.BASE.format(key=api_key, path="sms/statusbyreceptor")
+        self._status_url = self.BASE.format(key=api_key, path="sms/status")
         self._timeout = timeout
         self._session = requests.Session()
 
@@ -194,9 +223,17 @@ class _KavenegarHTTP:
         try:
             resp = self._session.post(url, data=params or {}, timeout=self._timeout)
         except requests.exceptions.RequestException as e:
-            if _never_sent(e):
-                raise _NotSent(redact_secrets(str(e))) from e
-            raise _OutcomeUnknown(redact_secrets(str(e))) from e
+            raise _network_error(e) from e
+        return self._parse(resp)
+
+    def _get(self, url: str) -> dict:
+        try:
+            resp = self._session.get(url, timeout=self._timeout)
+        except requests.exceptions.RequestException as e:
+            raise _network_error(e) from e
+        return self._parse(resp)
+
+    def _parse(self, resp: requests.Response) -> dict:
         try:
             body = resp.json()
         except ValueError as e:
@@ -240,6 +277,27 @@ class _KavenegarHTTP:
             {"receptor": receptor, "startdate": startdate, "enddate": enddate},
         )
         return body.get("entries") or []
+
+    def message_status(self, message_ids: list[int]) -> list[dict]:
+        body = self._post(self._status_url, {"messageid": ",".join(map(str, message_ids))})
+        return body.get("entries") or []
+
+    def account_config(self) -> dict:
+        # GET with no parameters only *reads* the settings; any parameter
+        # would change that setting on the account. Never pass one here.
+        body = self._get(self._config_url)
+        entries = body.get("entries") or {}
+        if isinstance(entries, list):
+            entries = entries[0] if entries else {}
+        return entries
+
+
+def _network_error(exc: requests.exceptions.RequestException) -> HTTPException:
+    """A request failure, as "it never left" (safe to retry) or "it may
+    have been processed" (never retried blindly)."""
+    if _never_sent(exc):
+        return _NotSent(redact_secrets(str(exc)))
+    return _OutcomeUnknown(redact_secrets(str(exc)))
 
 
 class Sender:
@@ -382,6 +440,45 @@ class Sender:
             type=data.get("type"),
         )
 
+    def account_config(self) -> AccountConfig:
+        """Read (never change) the account settings that matter to a run.
+        Raises HaltError on account problems, SendError when unreachable."""
+        try:
+            data = self._sdk.account_config()
+        except HTTPException as e:
+            raise SendError(None, f"http: {e}") from e
+        except APIException as e:
+            code, message = _parse_api_exception(e)
+            if classify(code) is Action.HALT:
+                raise HaltError(code, message) from e
+            raise SendError(code, message) from e
+        return AccountConfig(
+            debug_mode=_flag(data.get("debugmode")),
+            resend_failed=_flag(data.get("resendfailed")),
+        )
+
+    def delivery_statuses(self, message_ids: list[int]) -> dict[int, int]:
+        """Kavenegar's delivery status per message ID (`sms/status`: at most
+        500 IDs per call, and only within 48 h of sending). Read-only.
+        Raises HaltError on account problems, SendError when unreachable."""
+        try:
+            entries = self._sdk.message_status(message_ids)
+        except HTTPException as e:
+            raise SendError(None, f"http: {e}") from e
+        except APIException as e:
+            code, message = _parse_api_exception(e)
+            if code == _NO_RECORD:
+                return {}
+            if classify(code) is Action.HALT:
+                raise HaltError(code, message) from e
+            raise SendError(code, message) from e
+        statuses = {}
+        for entry in entries:
+            message_id, status = _safe_int(entry.get("messageid")), _safe_int(entry.get("status"))
+            if message_id is not None and status is not None:
+                statuses[message_id] = status
+        return statuses
+
     def find_messages(self, phone: str, start: float, end: float) -> list[ProviderMessage]:
         """Messages Kavenegar sent to `phone` between `start` and `end` (unix
         seconds; Kavenegar allows at most one day). Read-only — this is how
@@ -433,6 +530,16 @@ def _log_retry(phone: str, state: RetryCallState) -> None:
             "detail": getattr(exc, "message", repr(exc)),
         },
     )
+
+
+def _flag(value: object) -> bool | None:
+    """Kavenegar setting values ("enabled" / "disabled", …) → bool; None if unrecognized."""
+    text = str(value).strip().lower() if value is not None else ""
+    if text in ("enabled", "enable", "true", "1", "on", "yes"):
+        return True
+    if text in ("disabled", "disable", "false", "0", "off", "no"):
+        return False
+    return None
 
 
 def _safe_int(value: object) -> int | None:

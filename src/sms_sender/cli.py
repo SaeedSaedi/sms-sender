@@ -2,14 +2,18 @@
 from __future__ import annotations
 
 import csv
+import json
 import logging
 import os
+import re
 import sys
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Iterator, TypeVar
 
 import click
+from click.core import ParameterSource
 
 from . import input_loader, logging_config
 from .config import load_api_key
@@ -21,8 +25,25 @@ from .profile import ProfileError, load_profile, to_default_map
 from .rate import parse_rate
 from .reconcile import DEFAULT_MIN_AGE_SEC, REQUEUE_NOT_FOUND, reconcile_unknown
 from .runner import format_report, make_runner
-from .sender import TOKEN_MAX_SPACES, HaltError, Sender, SenderConfig
-from .state import NEEDS_REVIEW, UNKNOWN, StateStore
+from .delivery import describe as describe_delivery
+from .delivery import sync_delivery
+from .sender import (
+    TOKEN_MAX_SPACES,
+    HaltError,
+    SendError,
+    Sender,
+    SenderConfig,
+    token_problem,
+)
+from .window import DEFAULT_WINDOW, ENV_SEND_WINDOW, parse_window
+from .state import (
+    NEEDS_REVIEW,
+    SUPPRESSED,
+    UNKNOWN,
+    CampaignMismatchError,
+    StateStore,
+    campaign_db_path,
+)
 
 TEST_NUMBER_ENV = "SMS_SENDER_TEST_NUMBER"
 
@@ -32,20 +53,16 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 def _validate_token(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
-    # Kavenegar's space limits (see TOKEN_MAX_SPACES). Validating at the CLI
+    # Kavenegar's token rules (see `token_problem`). Validating at the CLI
     # saves a wasted preflight round-trip on misuse.
     if value is None:
         return None
     name = param.name or ""
-    limit = TOKEN_MAX_SPACES.get(name)
-    if limit is None:
+    if name not in TOKEN_MAX_SPACES:
         return value
-    spaces = value.count(" ")
-    if spaces > limit:
-        raise click.BadParameter(
-            f"--{name} allows at most {limit} space(s); got {spaces}",
-            ctx=ctx, param=param,
-        )
+    problem = token_problem(name, value)
+    if problem:
+        raise click.BadParameter(f"--{problem}", ctx=ctx, param=param)
     return value
 
 
@@ -117,6 +134,44 @@ def _load_input(input_path: str, token_columns: TokenColumns | None) -> input_lo
         return input_loader.load(input_path, token_columns)
     except InputError as e:
         raise click.UsageError(str(e)) from e
+
+
+def _load_opt_out(paths: tuple[str, ...]) -> frozenset[str] | None:
+    """Phones that must never get the campaign, from one or more lists.
+    Lines that aren't phone numbers are skipped."""
+    if not paths:
+        return None
+    phones: set[str] = set()
+    for path in paths:
+        phones.update(r.phone for r in _load_input(path, None).valid)
+    return frozenset(phones)
+
+
+_CAMPAIGN_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+
+_campaign_option = click.option(
+    "--campaign", default=None, metavar="SLUG",
+    help="Campaign name, e.g. 'coin-price-7'. Gives the campaign its own state "
+         "DB, data/db/<SLUG>.db, unless --state is given.",
+)
+
+
+def _resolve_db_path(db_path: str, campaign: str | None) -> str:
+    """Which state DB a command uses: --state (flag or profile) wins, then
+    `--campaign X` → data/db/X.db, then the built-in default."""
+    if campaign is None:
+        return db_path
+    if not _CAMPAIGN_RE.match(campaign):
+        raise click.BadParameter(
+            f"{campaign!r}: use lowercase letters, digits and dashes, e.g. coin-price-7",
+            param_hint="--campaign",
+        )
+    source = click.get_current_context().get_parameter_source("db_path")
+    if source not in (ParameterSource.DEFAULT, None):
+        return db_path
+    path = campaign_db_path(campaign)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return str(path)
 
 
 @contextmanager
@@ -192,6 +247,26 @@ def _send_options(f: F) -> F:
             "--state", "db_path", default="./sms_state.db", show_default=True,
             type=click.Path(dir_okay=False),
             help="SQLite file used for resume + dedup. Re-runs reuse the same DB.",
+        ),
+        _campaign_option,
+        click.option(
+            "--opt-out", "opt_out", multiple=True,
+            type=click.Path(exists=True, dir_okay=False),
+            help="A list of phones that must never get this campaign (same "
+                 "formats as --input). Repeatable. Matching recipients become "
+                 "`suppressed`; anyone already sent stays `sent`.",
+        ),
+        click.option(
+            "--send-window", "send_window", default=DEFAULT_WINDOW, show_default=True,
+            envvar=ENV_SEND_WINDOW, metavar="HH:MM-HH:MM",
+            help="Only send inside this daily window, in Tehran time; 'off' to send "
+                 "any time. Outside it the run won't start, and a run stops "
+                 "(resumably) when the window closes.",
+        ),
+        click.option(
+            "--allow-settings-change", is_flag=True,
+            help="Let a campaign that already sent continue with a different "
+                 "template or tokens (both message versions end up in one campaign).",
         ),
         click.option(
             "--log-file", default="./logs/sms-sender.log", show_default=True,
@@ -274,9 +349,14 @@ def _do_send(
     verbose: bool, quiet: bool,
     # Defaulted so the wizard (static tokens only) needn't pass them.
     token_column: tuple[str, ...] = (), value_map: tuple[str, ...] = (),
+    campaign: str | None = None, allow_settings_change: bool = False,
+    opt_out: tuple[str, ...] = (),
+    # None: the env var, else 08:00-21:00 (the wizard doesn't pass it).
+    send_window: str | None = None,
 ) -> None:
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    db_path = _resolve_db_path(db_path, campaign)
     console_level = (
         logging.DEBUG if verbose else (logging.WARNING if quiet else logging.INFO)
     )
@@ -291,6 +371,12 @@ def _do_send(
         {"token": token, "token2": token2, "token3": token3,
          "token10": token10, "token20": token20},
     )
+    if send_window is None:
+        send_window = os.environ.get(ENV_SEND_WINDOW, DEFAULT_WINDOW)
+    try:
+        window = parse_window(send_window)
+    except ValueError as e:
+        raise click.UsageError(str(e)) from e
 
     # `load_api_key` calls `load_dotenv`, which makes `.env`-set values
     # (including SMS_SENDER_TEST_NUMBER) visible to `_resolve_test_number`.
@@ -311,12 +397,16 @@ def _do_send(
         rate_per_sec=rate_per_sec,
         approval_test_number=approval_test_number,
         token_columns=token_columns,
+        campaign=campaign,
+        allow_settings_change=allow_settings_change,
+        opt_out=_load_opt_out(opt_out),
+        send_window=window,
     )
     try:
         summary = runner.run()
     except InputError as e:
         raise click.UsageError(str(e)) from e
-    except RunLockError as e:
+    except (RunLockError, CampaignMismatchError) as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(2)
 
@@ -331,11 +421,13 @@ def _do_send(
             "needs_review rows may already have the SMS. Only if you're sure they "
             f"don't: `sms-sender reset --status needs_review --state {db_path}`."
         )
+    if summary.stopped:
+        click.echo("Stopped before finishing. Re-run the same command to continue.")
     notify(notify_target, summary)
     if summary.halted:
         sys.exit(2)
     if (summary.failed_permanent or summary.failed_retriable
-            or summary.unknown or summary.needs_review):
+            or summary.unknown or summary.needs_review or summary.stopped):
         sys.exit(1)
 
 
@@ -364,6 +456,7 @@ def retry_failed(include_permanent: bool, **kwargs: Any) -> None:
     DB is promoted, regardless of whether it appears in `--input`. The
     subsequent `send` then claims them all (unless they were already sent).
     """
+    kwargs["db_path"] = _resolve_db_path(kwargs["db_path"], kwargs.get("campaign"))
     store = StateStore(kwargs["db_path"])
     with _db_lock(kwargs["db_path"]):
         n = store.reset_status("failed_retriable")
@@ -378,9 +471,34 @@ def retry_failed(include_permanent: bool, **kwargs: Any) -> None:
 
 @cli.command()
 @click.option("--state", "db_path", default="./sms_state.db", show_default=True)
-def status(db_path: str) -> None:
-    """Print row counts by status from the state DB."""
+@_campaign_option
+def status(db_path: str, campaign: str | None) -> None:
+    """Print the campaign, its template and last run, and row counts by status."""
+    db_path = _resolve_db_path(db_path, campaign)
+    if not Path(db_path).exists():
+        click.echo(f"(no state DB at {db_path})")
+        return
     store = StateStore(db_path)
+    name, settings, last_run = (
+        store.get_meta("campaign"), store.get_meta("settings"), store.get_meta("last_run"),
+    )
+    if name:
+        click.echo(f"campaign   {name}")
+    if settings:
+        click.echo(f"template   {json.loads(settings).get('template')}")
+    if last_run:
+        run = json.loads(last_run)
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(run["at"]))
+        flags = "".join(
+            f", {flag}" for flag in ("halted", "stopped") if run.get(flag)
+        )
+        click.echo(
+            f"last run   {when}: sent {run['sent']}, "
+            f"failed {run['failed_permanent'] + run['failed_retriable']}{flags}"
+        )
+    delivered = store.delivery_counts()
+    if delivered:
+        click.echo(f"delivery   {describe_delivery(delivered)}")
     counts = store.counts()
     if not counts:
         click.echo("(empty)")
@@ -393,8 +511,10 @@ def status(db_path: str) -> None:
 @cli.command("export-failed")
 @click.option("--state", "db_path", default="./sms_state.db", show_default=True)
 @click.option("--out", default="./failed.csv", show_default=True, type=click.Path(dir_okay=False))
-def export_failed(db_path: str, out: str) -> None:
+@_campaign_option
+def export_failed(db_path: str, out: str, campaign: str | None) -> None:
     """Dump permanent failures to a CSV the user can fix and re-feed."""
+    db_path = _resolve_db_path(db_path, campaign)
     store = StateStore(db_path)
     p = Path(out)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -413,12 +533,15 @@ def export_failed(db_path: str, out: str) -> None:
               help="Path to the SQLite state DB.")
 @click.option(
     "--status", "from_status", default="failed_permanent", show_default=True,
-    type=click.Choice(["failed_permanent", "failed_retriable", "sent", UNKNOWN, NEEDS_REVIEW]),
+    type=click.Choice([
+        "failed_permanent", "failed_retriable", "sent", UNKNOWN, NEEDS_REVIEW, SUPPRESSED,
+    ]),
     help="Which status to promote back to pending so it gets resent.",
 )
 @click.option("--yes", "-y", is_flag=True,
               help="Skip the confirmation prompt for risky resets (e.g. --status sent).")
-def reset(db_path: str, from_status: str, yes: bool) -> None:
+@_campaign_option
+def reset(db_path: str, from_status: str, yes: bool, campaign: str | None) -> None:
     """Promote rows in a given status back to pending so the next `send` retries them.
 
     Useful after fixing a template/token issue: rows that were marked
@@ -429,6 +552,7 @@ def reset(db_path: str, from_status: str, yes: bool) -> None:
     second one. They need an explicit confirmation (or `--yes`). For
     `unknown`, prefer `sms-sender reconcile`, which checks with Kavenegar.
     """
+    db_path = _resolve_db_path(db_path, campaign)
     store = StateStore(db_path)
     risky = {
         "sent": "Resetting status=sent will cause the next `send` to deliver a "
@@ -439,6 +563,8 @@ def reset(db_path: str, from_status: str, yes: bool) -> None:
         NEEDS_REVIEW: "These rows may already have the SMS (the Kavenegar check found "
                       "several candidate messages). Resetting them sends again. "
                       "Are you sure?",
+        SUPPRESSED: "These recipients are on the opt-out list. Resetting them sends "
+                    "them the campaign. Are you sure?",
     }
     if from_status in risky and not yes:
         click.confirm(risky[from_status], abort=True)
@@ -450,13 +576,15 @@ def reset(db_path: str, from_status: str, yes: bool) -> None:
 @cli.command()
 @click.option("--state", "db_path", default="./sms_state.db", show_default=True)
 @click.option("--yes", "-y", is_flag=True, help="Skip the confirmation prompt.")
-def purge(db_path: str, yes: bool) -> None:
+@_campaign_option
+def purge(db_path: str, yes: bool, campaign: str | None) -> None:
     """Delete the state DB and start fresh. ALL send history is lost.
 
     The next `send` will treat every input number as new. Use only when you
     actually want to re-send to numbers that were already sent — there is no
     undo.
     """
+    db_path = _resolve_db_path(db_path, campaign)
     db = Path(db_path)
     sidecars = [db.with_name(db.name + s) for s in ("", "-wal", "-shm", "-journal")]
     existing = [p for p in sidecars if p.exists()]
@@ -494,8 +622,10 @@ def purge(db_path: str, yes: bool) -> None:
     "--log-file", default="./logs/sms-sender.log", show_default=True,
     type=click.Path(dir_okay=False),
 )
+@_campaign_option
 def reconcile(
     db_path: str, min_age: float, requeue_not_found: bool, timeout: float, log_file: str,
+    campaign: str | None,
 ) -> None:
     """Ask Kavenegar what happened to `unknown` rows. Never sends anything.
 
@@ -504,6 +634,7 @@ def reconcile(
     so the next `send` delivers it.
     """
     logging_config.setup(log_file=log_file, console_level=logging.WARNING)
+    db_path = _resolve_db_path(db_path, campaign)
     if not Path(db_path).exists():
         raise click.UsageError(f"No state DB at {db_path}.")
     store = StateStore(db_path)
@@ -531,6 +662,38 @@ def reconcile(
     left = store.counts()
     if left.get(UNKNOWN) or left.get(NEEDS_REVIEW):
         sys.exit(1)
+
+
+@cli.command()
+@click.option("--state", "db_path", default="./sms_state.db", show_default=True,
+              type=click.Path(dir_okay=False))
+@_campaign_option
+@click.option("--timeout", default=15.0, show_default=True, type=float)
+@click.option(
+    "--log-file", default="./logs/sms-sender.log", show_default=True,
+    type=click.Path(dir_okay=False),
+)
+def delivery(db_path: str, campaign: str | None, timeout: float, log_file: str) -> None:
+    """Fetch delivery reports for SMS sent in the last 48 h. Never sends anything.
+
+    Kavenegar only reports delivery for 48 hours after sending, so run this a
+    few times in that window (e.g. after 10 minutes, an hour, a day). Safe to
+    run while a send is in progress.
+    """
+    logging_config.setup(log_file=log_file, console_level=logging.WARNING)
+    db_path = _resolve_db_path(db_path, campaign)
+    if not Path(db_path).exists():
+        raise click.UsageError(f"No state DB at {db_path}.")
+    store = StateStore(db_path)
+    # Read-only lookups: the template is never used.
+    sender = Sender(SenderConfig(api_key=load_api_key(), template="", timeout=timeout))
+    try:
+        result = sync_delivery(store, sender)
+    except SendError as e:  # incl. HaltError
+        click.echo(f"Error: Kavenegar didn't answer: [{e.status_code}] {e.message}", err=True)
+        sys.exit(2 if isinstance(e, HaltError) else 1)
+    click.echo(f"checked {result.checked} SMS, {result.updated} with a status")
+    click.echo(f"delivery   {describe_delivery(store.delivery_counts()) or '(nothing sent)'}")
 
 
 @cli.command("dry-run")

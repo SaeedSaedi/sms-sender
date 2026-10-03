@@ -193,6 +193,104 @@ def test_per_recipient_tokens_layer_over_static_ones():
     }]
 
 
+# ---------- delivery reports (sms/status) ----------
+
+
+def test_message_status_posts_comma_joined_ids_and_parses(monkeypatch):
+    from sms_sender.sender import _KavenegarHTTP
+
+    http = _KavenegarHTTP("k", timeout=1)
+    seen = {}
+
+    def post(url, data=None, timeout=None, **_kw):
+        seen.update(url=url, data=data)
+        return _FakeJSONResp({
+            "return": {"status": 200, "message": "ok"},
+            "entries": [{"messageid": 11, "status": 10, "statustext": "…"},
+                        {"messageid": 12, "status": 4}],
+        })
+
+    monkeypatch.setattr(http._session, "post", post)
+    assert Sender(cfg(), sdk=http).delivery_statuses([11, 12]) == {11: 10, 12: 4}
+    assert seen["url"].endswith("/sms/status.json")
+    assert seen["data"] == {"messageid": "11,12"}
+
+
+def test_delivery_statuses_449_means_none():
+    sdk = FakeSDK([])
+
+    def no_record(_ids):
+        raise APIException("APIException[449] رکوردی با مشخصات مورد نظر پیدا نشد")
+
+    sdk.message_status = no_record
+    assert Sender(cfg(), sdk=sdk).delivery_statuses([1]) == {}
+
+
+# ---------- account settings (read-only) ----------
+
+
+def test_account_config_is_read_with_a_plain_get(monkeypatch):
+    """GET without parameters only reads the settings; any parameter would
+    change that setting on the account, so none may ever be sent."""
+    from sms_sender.sender import AccountConfig, _KavenegarHTTP
+
+    http = _KavenegarHTTP("k", timeout=1)
+    seen = {}
+
+    def get(url, **kwargs):
+        seen.update(url=url, kwargs=kwargs)
+        return _FakeJSONResp({
+            "return": {"status": 200, "message": "ok"},
+            "entries": {"apilogs": "justfaults", "debugmode": "disabled", "resendfailed": "enabled"},
+        })
+
+    monkeypatch.setattr(http._session, "get", get)
+    monkeypatch.setattr(
+        http._session, "post", lambda *a, **kw: pytest.fail("account/config must never be POSTed"),
+    )
+    assert Sender(cfg(), sdk=http).account_config() == AccountConfig(
+        debug_mode=False, resend_failed=True,
+    )
+    assert seen["url"].endswith("/account/config.json")
+    assert set(seen["kwargs"]) == {"timeout"}  # no data, no params
+
+
+def test_account_config_unrecognized_values_are_unknown():
+    sdk = FakeSDK([])
+    sdk.account_config = lambda: {"debugmode": "maybe"}
+    config = Sender(cfg(), sdk=sdk).account_config()
+    assert (config.debug_mode, config.resend_failed) == (None, None)
+
+
+# ---------- Kavenegar's token rules (error 431) ----------
+
+
+@pytest.mark.parametrize("name, value, fragment", [
+    ("token", "x" * 101, "at most 100"),
+    ("token20", "two\nlines", "line break"),
+    ("token3", "has_underscore", "'_'"),
+    ("token", "no spaces allowed", "space"),
+    ("token10", "a b c d e f g", "space"),  # 6 spaces > 5
+])
+def test_token_problem_names_the_rule(name, value, fragment):
+    from sms_sender.sender import token_problem
+
+    problem = token_problem(name, value)
+    assert problem is not None and fragment in problem and name in problem
+
+
+@pytest.mark.parametrize("name, value", [
+    ("token", "x" * 100),
+    ("token3", "190,400"),                   # comma: sent fine in production
+    ("token20", "wallet/usoon-oil(usoon)"),  # slashes, parens: sent fine
+    ("token10", "نفت خام OIL(USOON)"),        # 2 spaces ≤ 5
+])
+def test_token_problem_accepts_real_production_values(name, value):
+    from sms_sender.sender import token_problem
+
+    assert token_problem(name, value) is None
+
+
 # ---------- looking up what Kavenegar sent (reconciliation) ----------
 
 

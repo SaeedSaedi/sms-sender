@@ -22,11 +22,13 @@ sms-sender send --input … --notify slack:https://hooks.slack.com/… # post ru
 sms-sender send --input trades.csv --template … \
     --token-column token10=first_name --token-column token=trade_side \
     --value-map trade_side:Buy=خرید --value-map trade_side:Sell=فروش  # per-recipient tokens from CSV columns
-sms-sender status            # row counts by status
+sms-sender send --campaign coin-price-7 --input …   # own DB: data/db/coin-price-7.db
+sms-sender status            # row counts by status (+ campaign, template, last run)
 sms-sender export-failed     # dump failed_permanent to CSV
 sms-sender dry-run --input … # parse + normalize, no API calls
 sms-sender reset --status failed_permanent   # promote rows back to pending
 sms-sender reconcile --state data/db/x.db    # ask Kavenegar about `unknown` rows (never sends)
+sms-sender delivery --campaign coin-price-7   # delivery reports for the last 48 h (never sends)
 sms-sender purge -y          # delete state DB (no undo)
 
 # Tests
@@ -61,6 +63,20 @@ cli.send → make_runner → Runner.run
 
 `Runner` is the only place that knows about the state machine *and* the sender — the two are otherwise independent.
 
+### Campaigns ([state.py](src/sms_sender/state.py) `meta`, [cli.py](src/sms_sender/cli.py) `_resolve_db_path`)
+
+One state DB is one campaign. `--campaign <slug>` (every command that takes `--state`) picks `data/db/<slug>.db`; an explicit `--state` — flag or profile — wins, decided with Click's `get_parameter_source`. The `meta` table (schema v3) holds the campaign name, its settings, and the last run's numbers (`status` prints them; `status` never creates a DB).
+
+Settings are what the campaign *sends* — `runner.campaign_settings`: template, static tokens, token columns, value maps — not workers, rate, timeouts or the input file (one campaign can be fed several segments). `StateStore.bind_campaign`, called first thing in `Runner._prepare`, records them on the first run. Later, different settings are accepted only while nothing can have gone out (no `sent` / `in_flight` / `unknown` / `needs_review` rows) — that's how a wrong template gets fixed — and otherwise only with `--allow-settings-change`. A mismatch raises `CampaignMismatchError` before any row is touched (CLI exit 2).
+
+### Driving the runner without a terminal ([runner.py](src/sms_sender/runner.py))
+
+`Runner.run()` holds the run lock and goes through `_prepare` (load input, seed state, settle leftovers) → `_preflight_checks` (account, approval test, smoke test) → `_fan_out`. It's built to be driven by the dashboard worker as well as the CLI:
+
+- **Progress** goes to a `Reporter` (`note`, `start`, `advance`, `finish`). The default `TqdmReporter` is the CLI's bar and notes; tests and the worker pass their own. Library code never prints or calls `tqdm` directly.
+- **`cancel()`** works from any thread. Nothing new is claimed, requests in flight finish and are recorded, and the rest stay claimable. Ctrl-C / SIGTERM do the same (a second one forces). The summary reports `stopped=True`, and the CLI exits 1 with a "re-run to continue" hint.
+- **Signal handlers** are installed only with `install_signal_handlers=True` (the default) and restored when the run ends, so an embedding process keeps its own.
+
 ### End-of-run report ([runner.py](src/sms_sender/runner.py))
 
 `RunSummary` carries `elapsed_sec`, `sends_per_sec`, and a `top_errors` tuple — the runner buckets every `PermanentSendError` / `SendError` message into a thread-safe `Counter[str]` keyed by `[code] message`, then emits the top 3 at the end. `tqdm`'s postfix shows `sent / fail / ok%` while running. `format_report(summary)` renders the human-readable block printed to stdout; `_summary_log_fields(summary)` flattens it for the structured logger. The `top_errors` keying intentionally collapses on message text (not phone) so the same misconfiguration shows up once with a count.
@@ -79,21 +95,25 @@ cli.send → make_runner → Runner.run
 
 ### Per-recipient tokens ([input_loader.py](src/sms_sender/input_loader.py))
 
-`--token-column TOKEN=COLUMN` (repeatable) switches the loader to header-CSV mode: the first column is the phone, and each mapped column becomes that recipient's token (`LoadedRow.tokens`). `--value-map COLUMN:FROM=TO` translates values before sending. An empty cell, a value missing from its column's value map, or too many spaces for the token (`TOKEN_MAX_SPACES` in `sender.py`) makes the row invalid — raw text is never sent. `Runner` keeps `phone → tokens` from the input and passes them to `Sender.send(phone, tokens=…)`, where they layer over the static `SenderConfig` tokens; the CLI rejects a token set both ways. Tokens are **not** stored in the state DB, so a claimable DB row that isn't in the current input is skipped rather than sent without its tokens. The approval test borrows the tokens of the test number's own row, else the first recipient's. In a profile, use TOML lists: `token_column = ["token10=first_name"]`.
+`--token-column TOKEN=COLUMN` (repeatable) switches the loader to header-CSV mode: the first column is the phone, and each mapped column becomes that recipient's token (`LoadedRow.tokens`). `--value-map COLUMN:FROM=TO` translates values before sending. An empty cell, a value missing from its column's value map, or a value Kavenegar would reject makes the row invalid — raw text is never sent. Kavenegar's token rules (error 431) live in one place, `sender.token_problem`: at most 100 characters, no line break or `_`, and at most `TOKEN_MAX_SPACES[name]` spaces. They apply to static `--token…` values (CLI callback) and to every CSV row (loader). `Runner` keeps `phone → tokens` from the input and passes them to `Sender.send(phone, tokens=…)`, where they layer over the static `SenderConfig` tokens; the CLI rejects a token set both ways. Tokens are **not** stored in the state DB, so a claimable DB row that isn't in the current input is skipped rather than sent without its tokens. The approval test borrows the tokens of the test number's own row, else the first recipient's. In a profile, use TOML lists: `token_column = ["token10=first_name"]`.
 
 ### Preflight (`Runner._preflight` → `_approval_test` → `_smoke_test_run`)
 
 Before fan-out, three best-effort checks run in order. Any `PreflightError` aborts the run with `halted=True` and exit code 2.
 
 - **Account check** (`Sender.account_info`) — calls Kavenegar `account/info`. A `HaltError` (401/403/418/etc.) aborts the run *before* any send. A non-halt `SendError` (e.g., transient network) just logs a warning and continues. Zero remaining credit also halts. Gated by `Runner.preflight` (default true).
+- **Account settings** (`Sender.account_config`) — right after the account check, a **GET without parameters** to `account/config` (any parameter would *change* that setting, so `_KavenegarHTTP.account_config` must never send one). `debugmode` on → `PreflightError` (nothing would be delivered); `resendfailed` on → a note (Kavenegar resends undelivered SMS once by itself). Unreadable settings never block.
+- **Cost estimate** (`_check_credit`) — after the approval test: its `cost` (else the campaign's `StateStore.average_cost()`) × recipients, compared with the credit from the account check; more than the credit → `PreflightError`. Skipped while either number is unknown. `RunSummary.cost` sums what the run actually paid (approval test included).
 - **Approval test** — opt-in via `--approval-test` + `--test-number 09…` (or `SMS_SENDER_TEST_NUMBER` env). Sends one SMS to the operator's own number out-of-band — bypassing the state DB, the rate limiter, and the executor (same model as `account_info`) — then prompts `y/N` at the terminal. Decline / EOF / closed stdin all abort. If the test send itself fails (Halt, Permanent, retries-exhausted), the run aborts *before* the prompt — there's no point asking the operator to approve something they didn't receive. Independent of `Runner.preflight`. **The test number is NOT removed from the recipient list** — if it appears in the input file it gets a normal in-band send too, by design.
 - **Smoke test** — opt-in via `--smoke-test`. The first claimable phone is sent **synchronously** through the same `_send_one` path. If the outcome is anything other than `sent` (e.g., `PermanentSendError` for a missing template), the run aborts. The smoke phone consumes its DB row exactly once; subsequent fan-out skips it. Gated by `Runner.preflight` AND `Runner.smoke_test`.
+
+- **Sending window** ([window.py](src/sms_sender/window.py)) — checked first. Default 08:00–21:00 Tehran (`--send-window`, env `SMS_SENDER_SEND_WINDOW`, `off`). Outside it `_preflight_checks` raises `PreflightError` (exit 2) before anything is sent; mid-run, `_send_one` stops claiming once it closes, and the run ends `stopped` (resumable). Independent of `Runner.preflight`. `Runner(clock=…)` makes it testable, and `tests/conftest.py` switches the window off so the suite doesn't depend on the time of day.
 
 The approval test runs *before* the smoke test on purpose: the operator gets a chance to manually decline before any auto-validated send happens. Tests inject a custom `approval_prompt` callable; the default uses `click.confirm` and treats `click.Abort` (closed stdin, Ctrl-C) as decline so CI is safe.
 
 ### State machine (owned by `state.py`)
 
-Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_permanent`, `failed_retriable` (= definitely not sent), `unknown` (= may have been sent), `needs_review` (= reconciliation couldn't decide). `CLAIMABLE = (pending, failed_retriable)`. The details that matter:
+Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_permanent`, `failed_retriable` (= definitely not sent), `unknown` (= may have been sent), `needs_review` (= reconciliation couldn't decide), `suppressed` (= on the opt-out list). `CLAIMABLE = (pending, failed_retriable)`. `--opt-out FILE` (repeatable) → `Runner(opt_out=…)` → `StateStore.suppress` turns matching claimable rows into `suppressed` right after seeding; rows already `sent` stay `sent`. The details that matter:
 
 - **`claim()` is the dedup gate.** It runs `UPDATE … WHERE phone=? AND status IN CLAIMABLE`; if `rowcount == 0` the worker silently skips. Two workers racing on the same phone — one wins the UPDATE, the other gets `None`. `sent` and `failed_permanent` rows can never be claimed.
 - **Connection-per-thread.** SQLite connections aren't shareable; `StateStore` keeps one per thread via `threading.local`. WAL mode + `BEGIN IMMEDIATE` keep concurrent writers from blocking each other badly.
@@ -108,6 +128,10 @@ Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_perm
 `unknown` rows are settled by asking Kavenegar what it actually sent, never by resending. `reconcile_unknown` looks each phone up with `sms/statusbyreceptor` (`Sender.find_messages`) in a window around its last claim (−120 s … +900 s; Kavenegar allows ≤ 1 day). Message IDs the DB already accounts for (`known_message_ids`: sent rows plus recorded calls, e.g. the approval test) never count. Exactly one other message → `sent`; several → `needs_review`, which only `reset --status needs_review` (with confirmation) makes claimable. None → `needs_review` too, by default (`reconcile.REQUEUE_NOT_FOUND = False`): a live lookup on 2026-10-04 didn't find a 5-day-old lookup message, so "not found" isn't yet trusted as "never sent". With `requeue_not_found` (CLI `--requeue-not-found`, `Runner(reconcile_requeue_not_found=True)`) it becomes `failed_retriable`, claimable again; flip the default once a fresh lookup message is confirmed findable. Kavenegar reports an empty lookup as error 449, which `find_messages` turns into `[]`. Rows younger than the min age (300 s) wait. The settle methods only change rows that are still `unknown`, and each decision is an `attempts` row of kind `reconcile`.
 
 The runner reconciles at the start of every run (so rows Kavenegar never got go out with everyone else) and at the end (long runs). It's best-effort: if the lookup fails — even a `HaltError` — the rows just stay `unknown`. `sms-sender reconcile` does the same standalone under the run lock; exit 1 while rows remain `unknown` / `needs_review`, 2 if Kavenegar refuses the lookup.
+
+### Delivery reports ([delivery.py](src/sms_sender/delivery.py))
+
+`sent` means Kavenegar *accepted* an SMS. `sync_delivery` asks `sms/status` (`Sender.delivery_statuses`: ≤ 500 message IDs per call) about sent rows from the last 48 h whose delivery status isn't final, and stores it in `recipients.delivery_status` / `delivery_checked_at` (schema v4). Final: 6, 10 (delivered), 13, 14, 100; 11 (undelivered) is re-checked because it can still turn into 10. Kavenegar only answers for 48 h, so `sms-sender delivery` has to run inside that window (the dashboard will schedule it). It doesn't take the run lock — it only writes the delivery columns — so it's safe during a send. `status` prints the breakdown (`delivery.describe`).
 
 ### Error taxonomy (split across `sender.py` + `classifier.py`)
 
@@ -125,7 +149,7 @@ Unknown codes default to `PERMANENT` deliberately — don't burn credit looping 
 
 `tenacity` only retries `_RetriableSendError` (notice the leading underscore — it never escapes `Sender`). `HaltError`, `PermanentSendError` and `UncertainSendError` bypass retry by design. Which network errors count as "never sent" is decided in one place, `sender._never_sent`: only a failed TCP connection (possibly through the proxy). Everything later — and any bare `HTTPException` from an SDK — is uncertain. Each retry logs `send_retry` with the phone; since only never-sent calls and 409/451 are retried, these are not possible double sends.
 
-### Why `_KavenegarHTTP` exists ([sender.py:92](src/sms_sender/sender.py#L92))
+### Why `_KavenegarHTTP` exists ([sender.py:202](src/sms_sender/sender.py#L202))
 
 The packaged `kavenegar` SDK calls `requests.post()` with no timeout, so a hung connection would hang the worker forever. We POST directly via `requests` and re-raise the SDK's `APIException` / `HTTPException` types so the rest of the code is unchanged. If you swap or upgrade the SDK, preserve this wrapper.
 
@@ -138,8 +162,8 @@ Canonical form is `09XXXXXXXXX`. The normalizer accepts `+98…`, `0098…`, `98
 | Code | Meaning |
 |---|---|
 | 0 | every recipient sent |
-| 1 | run finished with some `failed_permanent`, `failed_retriable`, `unknown` or `needs_review` |
-| 2 | `HaltError`, preflight failure, or declined approval-test aborted the run; or another process holds the state DB |
+| 1 | run finished with some `failed_permanent`, `failed_retriable`, `unknown` or `needs_review`; or it stopped early (`RunSummary.stopped`: Ctrl-C / SIGTERM / `Runner.cancel()`, or the sending window closed) |
+| 2 | `HaltError`, preflight failure, or declined approval-test aborted the run; another process holds the state DB; or the DB belongs to another campaign / was sent with other settings |
 
 ## Conventions
 

@@ -69,6 +69,51 @@ sms-sender send \
 Re-run the same command after a crash, network outage, or credit top-up — it
 picks up exactly where it left off.
 
+### One campaign, one state DB
+
+Give each campaign a name and it gets its own state DB, `data/db/<name>.db`.
+There's nothing to purge between campaigns, and each one keeps its history:
+
+```bash
+sms-sender send --campaign coin-price-7 --input data/segments/seg2.csv --template coin-price ...
+sms-sender status --campaign coin-price-7   # template, last run, counts
+```
+
+The DB remembers what the campaign sends (template, static tokens, token
+columns). A later run with different settings is refused once anything may
+have gone out, so one campaign never mixes two message versions; before that,
+fixing a wrong template is fine. `--allow-settings-change` overrides it.
+`--state` (or `state` in a profile) still picks a DB explicitly and wins over
+`--campaign`; in a profile, write `campaign = "coin-price-7"`.
+
+### Opt-out list
+
+People who must never get a campaign go in one or more lists (same formats as
+`--input`):
+
+```bash
+sms-sender send --campaign coin-price-7 --input ... --opt-out data/opt-out.txt
+```
+
+Matching recipients become `suppressed` and are never sent; anyone who
+already got the campaign stays `sent`. In a profile:
+`opt_out = ["data/opt-out.txt"]`.
+
+### Sending hours
+
+Campaign SMS only go out between **08:00 and 21:00 Tehran time** by default.
+Outside that window a run refuses to start (exit code 2); if the window closes
+mid-run, it stops claiming new recipients, says so, and the same command
+continues the next day.
+
+```bash
+sms-sender send ... --send-window 09:00-20:00   # a different window
+sms-sender send ... --send-window off           # any time
+```
+
+`SMS_SENDER_SEND_WINDOW` (env or `.env`) or `send_window` in a profile set it
+too.
+
 ### Per-recipient tokens
 
 When each recipient needs their own values (name, coin, …), take the tokens
@@ -91,8 +136,10 @@ sms-sender send --input trades.csv --template transaction-1 \
 
 `--value-map COLUMN:FROM=TO` translates a column's values before sending.
 Rows that can't be sent as-is — an empty cell, a value with no `--value-map`
-entry, or more spaces than the token allows — are recorded as invalid
-(see `export-failed`) rather than sent. `dry-run` and `preview` accept the same
+entry, or a value Kavenegar would reject (more spaces than the token allows,
+an underscore, a line break, more than 100 characters) — are recorded as
+invalid (see `export-failed`) rather than sent. Static `--token…` values are
+checked by the same rules. `dry-run` and `preview` accept the same
 flags, so you can check every row and the exact POST bodies first. In a
 profile, write the flags as lists:
 `token_column = ["token=trade_side", "token10=first_name"]`.
@@ -105,8 +152,14 @@ fanning out across 10k rows:
 ```bash
 sms-sender send --input numbers.csv --template my-tpl --token 12345 \
     --smoke-test            # send to the first phone synchronously, abort if it fails
-# Add --no-preflight to skip the account/info check (default is on).
+# Add --no-preflight to skip the account checks (default is on).
 ```
+
+Before sending, the account checks also read (never change) the Kavenegar
+account settings: a run on an account in **debug mode** stops, because nothing
+would be delivered. With `--approval-test`, the test SMS's real cost gives an
+**estimate** — cost × recipients — and a run the remaining credit can't cover
+stops before the fan-out. The end-of-run report shows what the run cost.
 
 You can also dry-run the exact request without sending:
 
@@ -153,6 +206,20 @@ It asks Kavenegar which messages went to each phone around the attempt
   sent (`failed_retriable`, delivered by the next `send`).
 
 Rows less than 5 minutes old wait (`--min-age`).
+
+### Delivery reports
+
+`sent` means Kavenegar accepted the SMS. Whether it reached the phone comes
+later:
+
+```bash
+sms-sender delivery --campaign coin-price-7   # ask Kavenegar, store the answers
+sms-sender status --campaign coin-price-7     # delivery: delivered 10,234 · undelivered 120 · …
+```
+
+Kavenegar only reports delivery for **48 hours** after sending, so run
+`delivery` a few times inside that window (e.g. after 10 minutes, an hour, a
+day). It never sends anything and is safe to run during a send.
 
 ### Throughput control
 
@@ -227,8 +294,8 @@ sms-sender dry-run --input ./numbers.csv          # parse + normalize only, no A
 | Code | Meaning |
 |---|---|
 | 0 | All recipients sent successfully. |
-| 1 | Run finished but some rows failed (permanent or retriable), or are `unknown` / `needs_review`. |
-| 2 | Run halted on an account-level error (no credit, bad API key, plan), or another `sms-sender` is already using the same state DB. Fix and re-run. |
+| 1 | Some rows failed (permanent or retriable) or are `unknown` / `needs_review`; or the run stopped early (Ctrl-C, or the sending window closed) and the same command continues it. |
+| 2 | Run halted on an account-level error (no credit, bad API key, plan), outside the sending window, another `sms-sender` is already using the same state DB, or the DB belongs to another campaign / was sent with other settings. Fix and re-run. |
 
 ## Architecture
 
@@ -246,16 +313,25 @@ CLI ──► InputLoader ──► StateStore (SQLite, WAL, immediate commit)
 State machine per recipient:
 
 ```
-            upsert
-   (input) ────────► pending ──claim──► in_flight ──ok──► sent
-                       ▲                      │
-                       │                      ├──permanent──► failed_permanent
-                       └────retriable─────────┴──halt/retries-exhausted──► failed_retriable
+(input) ─► pending ─claim─► in_flight ─┬─ accepted ───────────► sent
+                                       ├─ rejected ───────────► failed_permanent
+                                       ├─ not sent ───────────► failed_retriable
+                                       └─ may have been sent ─► unknown
 ```
 
-Re-runs reclaim `in_flight` (orphaned by crash) and `failed_retriable` rows.
-`sent` and `failed_permanent` rows are never touched again unless the DB
-is deleted.
+| Status | Meaning | Sent again? |
+|---|---|---|
+| `pending` | not sent yet | yes, by the next `send` |
+| `in_flight` | being sent right now | — one left behind by a crash becomes `unknown` |
+| `sent` | Kavenegar accepted it | never |
+| `failed_retriable` | definitely not sent: no credit, the request never reached Kavenegar, or retries ran out | yes, by the next `send` |
+| `failed_permanent` | Kavenegar rejected it: bad template, invalid number | only after `retry-failed --include-permanent` or `reset` |
+| `unknown` | may have been sent: a timeout after the request, a crash mid-send | never automatically; `reconcile` asks Kavenegar |
+| `needs_review` | `reconcile` couldn't decide | only after `reset --status needs_review` |
+| `suppressed` | on the opt-out list | only after `reset --status suppressed`, and only once it's off the list |
+
+Only `pending` and `failed_retriable` rows are ever claimed, so a `send` can
+never reach a row that has, or may have, the SMS.
 
 ## Testing
 
