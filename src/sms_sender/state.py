@@ -17,21 +17,36 @@ from typing import Iterable, Iterator
 
 from .redact import redact_secrets
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS recipients (
-    phone           TEXT PRIMARY KEY,
-    raw             TEXT NOT NULL,
-    status          TEXT NOT NULL,
-    message_id      INTEGER,
-    status_code     INTEGER,
-    attempts        INTEGER NOT NULL DEFAULT 0,
-    last_error      TEXT,
-    first_seen_at   REAL NOT NULL,
-    last_attempt_at REAL,
-    sent_at         REAL
-);
-CREATE INDEX IF NOT EXISTS idx_recipients_status ON recipients(status);
-"""
+# Schema upgrades, tracked with `PRAGMA user_version`: _MIGRATIONS[i] takes a
+# DB from version i to i + 1. Version 1 is the original schema; DBs created
+# before versioning report version 0 but already have it, so that step uses
+# IF NOT EXISTS and is a no-op for them. Append new steps; never edit one
+# that has shipped — existing DBs have already applied it.
+_MIGRATIONS: tuple[tuple[str, ...], ...] = (
+    (  # 0 → 1: original schema
+        """
+        CREATE TABLE IF NOT EXISTS recipients (
+            phone           TEXT PRIMARY KEY,
+            raw             TEXT NOT NULL,
+            status          TEXT NOT NULL,
+            message_id      INTEGER,
+            status_code     INTEGER,
+            attempts        INTEGER NOT NULL DEFAULT 0,
+            last_error      TEXT,
+            first_seen_at   REAL NOT NULL,
+            last_attempt_at REAL,
+            sent_at         REAL
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_recipients_status ON recipients(status)",
+    ),
+)
+
+SCHEMA_VERSION = len(_MIGRATIONS)
+
+
+class StateSchemaError(RuntimeError):
+    """The DB was written by a newer sms-sender than this one."""
 
 # Status values
 PENDING = "pending"
@@ -60,18 +75,43 @@ class StateStore:
     def __init__(self, db_path: str | Path):
         self.db_path = str(db_path)
         self._local = threading.local()
-        # Init schema once on the main thread.
-        with self._connect() as conn:
-            conn.executescript(SCHEMA)
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA synchronous=NORMAL")
-            conn.commit()
+        self._migrate()
 
     def _connect(self) -> sqlite3.Connection:
         # New connection — used for setup. Not cached.
         conn = sqlite3.connect(self.db_path, timeout=30, isolation_level=None)
         conn.row_factory = sqlite3.Row
         return conn
+
+    def _migrate(self) -> None:
+        """Bring the DB up to SCHEMA_VERSION in one transaction.
+
+        BEGIN IMMEDIATE serializes concurrent openers and the version is read
+        inside the transaction, so two processes opening an old DB at once
+        apply each step exactly once.
+        """
+        conn = self._connect()
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")  # can't be changed inside a transaction
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                version = conn.execute("PRAGMA user_version").fetchone()[0]
+                if version > SCHEMA_VERSION:
+                    raise StateSchemaError(
+                        f"{self.db_path} has schema version {version}, but this "
+                        f"sms-sender only knows up to {SCHEMA_VERSION}; upgrade sms-sender"
+                    )
+                for step in _MIGRATIONS[version:]:
+                    for statement in step:
+                        conn.execute(statement)
+                if version < SCHEMA_VERSION:
+                    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            except BaseException:
+                conn.execute("ROLLBACK")
+                raise
+            conn.execute("COMMIT")
+        finally:
+            conn.close()
 
     def _conn(self) -> sqlite3.Connection:
         conn = getattr(self._local, "conn", None)

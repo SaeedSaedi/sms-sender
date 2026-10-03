@@ -96,6 +96,7 @@ Statuses: `pending`, `in_flight`, `sent`, `failed_permanent`, `failed_retriable`
 - **Connection-per-thread.** SQLite connections aren't shareable; `StateStore` keeps one per thread via `threading.local`. WAL mode + `BEGIN IMMEDIATE` keep concurrent writers from blocking each other badly.
 - **Crash recovery via `reset_orphan_in_flight`.** Any `in_flight` row at startup is from a prior crash — Runner reclaims it before fanning out workers. So you can `Ctrl-C` mid-run and re-run safely.
 - **Invalid inputs are persisted with synthetic key `INVALID:<raw>`.** This keeps the `phone` PK constraint while letting `export-failed` surface them.
+- **Schema versions.** `PRAGMA user_version` + append-only steps in `state._MIGRATIONS`. Opening a DB upgrades it in place, in one transaction; a DB written by a newer sms-sender is refused (`StateSchemaError`). Never edit a step that has shipped — existing DBs already applied it; add a new one.
 
 ### Error taxonomy (split across `sender.py` + `classifier.py`)
 
