@@ -48,6 +48,7 @@ SCHEMA_VERSION = len(_MIGRATIONS)
 class StateSchemaError(RuntimeError):
     """The DB was written by a newer sms-sender than this one."""
 
+
 # Status values
 PENDING = "pending"
 IN_FLIGHT = "in_flight"
@@ -92,7 +93,7 @@ class StateStore:
         """
         conn = self._connect()
         try:
-            conn.execute("PRAGMA journal_mode=WAL")  # can't be changed inside a transaction
+            self._ensure_wal(conn)  # can't be changed inside a transaction
             conn.execute("BEGIN IMMEDIATE")
             try:
                 version = conn.execute("PRAGMA user_version").fetchone()[0]
@@ -113,12 +114,32 @@ class StateStore:
         finally:
             conn.close()
 
+    @staticmethod
+    def _ensure_wal(conn: sqlite3.Connection) -> None:
+        """Switch the DB to WAL. The mode is stored in the file, so this only
+        does work the first time a DB is opened.
+
+        The switch needs an exclusive lock, and SQLite reports a concurrent
+        opener as "database is locked" at once instead of waiting out the
+        busy timeout — so retry for a while.
+        """
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                if str(conn.execute("PRAGMA journal_mode").fetchone()[0]).lower() != "wal":
+                    conn.execute("PRAGMA journal_mode=WAL")
+                return
+            except sqlite3.OperationalError as e:
+                if "locked" not in str(e) or time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.02)
+
     def _conn(self) -> sqlite3.Connection:
         conn = getattr(self._local, "conn", None)
         if conn is None:
             conn = sqlite3.connect(self.db_path, timeout=30, isolation_level=None)
             conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA journal_mode=WAL")
+            # WAL itself is persistent (set by _migrate); synchronous is per-connection.
             conn.execute("PRAGMA synchronous=NORMAL")
             self._local.conn = conn
         return conn
