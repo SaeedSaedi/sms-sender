@@ -267,7 +267,7 @@ def _log_retry(phone: str, state: RetryCallState) -> None:
     """Leave a per-phone trace of every retry. A network-level failure
     (status=None, e.g. a read timeout) may still have been delivered, so these
     lines are how to find recipients that might have received the SMS twice.
-    A retried Kavenegar code (409/414/419) was rejected and never sent."""
+    A retried Kavenegar code (409/451) was rejected and never sent."""
     exc = state.outcome.exception() if state.outcome else None
     logger.warning(
         "send_retry",

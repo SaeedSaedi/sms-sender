@@ -110,7 +110,7 @@ Statuses: `pending`, `in_flight`, `sent`, `failed_permanent`, `failed_retriable`
 
 Unknown codes default to `PERMANENT` deliberately — don't burn credit looping on something we don't understand.
 
-`tenacity` only retries `_RetriableSendError` (notice the leading underscore — it never escapes `Sender`). `HaltError` and `PermanentSendError` bypass retry by design. Each retry logs `send_retry` with the phone: `status=None` is a network-level failure (e.g. read timeout) that Kavenegar may still have delivered, so grep those to find possible double sends; a retried Kavenegar code (409/414/419) was rejected and never sent.
+`tenacity` only retries `_RetriableSendError` (notice the leading underscore — it never escapes `Sender`). `HaltError` and `PermanentSendError` bypass retry by design. Each retry logs `send_retry` with the phone: `status=None` is a network-level failure (e.g. read timeout) that Kavenegar may still have delivered, so grep those to find possible double sends; a retried Kavenegar code (409/451) was rejected and never sent.
 
 ### Why `_KavenegarHTTP` exists ([sender.py:92](src/sms_sender/sender.py#L92))
 
