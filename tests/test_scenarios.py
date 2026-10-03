@@ -21,6 +21,7 @@ from sms_sender.sender import (
 from sms_sender.state import (
     FAILED_PERMANENT,
     FAILED_RETRIABLE,
+    NEEDS_REVIEW,
     PENDING,
     SENT,
     UNKNOWN,
@@ -235,7 +236,7 @@ def test_crash_leftovers_are_settled_with_kavenegar_on_the_next_run(tmp_path):
     sender = ReconcilingFakeSender({"09120000001": [ProviderMessage(4242, 10)]})
     summary = Runner(
         input_path=inp, state=StateStore(db), sender=sender, workers=1,
-        reconcile_min_age_sec=0,
+        reconcile_min_age_sec=0, reconcile_requeue_not_found=True,
     ).run()
     assert sorted(sender.calls) == ["09120000002", "09120000003"]
     assert summary.unknown == 0
@@ -254,9 +255,11 @@ def test_unknown_from_this_run_is_settled_at_the_end(tmp_path):
     summary = Runner(
         input_path=inp, state=state, sender=sender, workers=1, reconcile_min_age_sec=0,
     ).run()
-    assert sender.calls == ["09120000001"]          # exactly once in this run
-    assert summary.unknown == 0
-    assert state.counts() == {FAILED_RETRIABLE: 1}  # Kavenegar never got it: next run sends it
+    assert sender.calls == ["09120000001"]  # exactly once in this run
+    # Kavenegar has nothing for it; by default that's not yet trusted as
+    # "never sent", so an operator reviews it instead of a blind resend.
+    assert (summary.unknown, summary.needs_review) == (0, 1)
+    assert state.counts() == {NEEDS_REVIEW: 1}
 
 
 def test_failed_reconciliation_never_blocks_or_resends(tmp_path):

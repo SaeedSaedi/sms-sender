@@ -145,9 +145,12 @@ It asks Kavenegar which messages went to each phone around the attempt
 (`sms/statusbyreceptor`) and never sends anything:
 
 - one message found → `sent`
-- none found → `failed_retriable`; the next `send` delivers it
 - several found → `needs_review`; decide yourself, and only if you're sure
   they didn't get it: `sms-sender reset --status needs_review`
+- none found → `needs_review` as well, for now: it isn't yet confirmed that
+  this Kavenegar lookup lists `verify/lookup` messages, so "not found" doesn't
+  prove the SMS never left. Add `--requeue-not-found` to treat it as never
+  sent (`failed_retriable`, delivered by the next `send`).
 
 Rows less than 5 minutes old wait (`--min-age`).
 

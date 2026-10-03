@@ -6,7 +6,9 @@ it blindly could deliver a second SMS, so instead we look the phone up with
 `sms/statusbyreceptor` around the time of the attempt:
 
 - exactly one message we don't already know → it was ours: `sent`
-- none → it never went out: `failed_retriable`, the next run sends it
+- none → it never went out: `failed_retriable`, the next run sends it —
+  but only with `requeue_not_found` (see REQUEUE_NOT_FOUND); until then
+  `needs_review`
 - several → can't tell which is ours: `needs_review`, an operator decides
 
 Message IDs this DB already accounts for (sent rows, the approval test)
@@ -30,6 +32,13 @@ from .state import StateStore
 logger = logging.getLogger(__name__)
 
 DEFAULT_MIN_AGE_SEC = 300.0
+
+# Is "Kavenegar has no message for this phone" proof that the SMS never left?
+# Only if sms/statusbyreceptor lists verify/lookup messages. That isn't
+# confirmed against the live API yet: a 5-day-old lookup message wasn't found
+# (2026-10-04), which may just be how far back it keeps. Until a fresh message
+# is found, a not-found row goes to review instead of being sent again.
+REQUEUE_NOT_FOUND = False
 # Lookup window around a row's last claim: our clock vs Kavenegar's before
 # it, the claim's whole retry sequence after it (Kavenegar allows ≤ 1 day).
 WINDOW_BEFORE_SEC = 120
@@ -51,6 +60,7 @@ class ReconcileSummary:
 def reconcile_unknown(
     state: StateStore, sender: Sender, *,
     min_age_sec: float = DEFAULT_MIN_AGE_SEC,
+    requeue_not_found: bool = REQUEUE_NOT_FOUND,
     now: Callable[[], float] = time.time,
 ) -> ReconcileSummary:
     """Settle every `unknown` row old enough to check.
@@ -89,11 +99,19 @@ def reconcile_unknown(
             if changed:
                 known.add(message_id)
                 sent += 1
-        elif not candidates:
+        elif not candidates and requeue_not_found:
             outcome, detail = "reconciled_not_sent", "no message at kavenegar around the attempt"
             changed = state.settle_unknown_not_sent(phone, detail)
             if changed:
                 requeued += 1
+        elif not candidates:
+            outcome, detail = "needs_review", (
+                "no message at kavenegar around the attempt — not yet trusted as "
+                "proof it wasn't sent, so check before resending"
+            )
+            changed = state.settle_unknown_for_review(phone, detail)
+            if changed:
+                needs_review += 1
         else:
             outcome, detail = "needs_review", (
                 f"{len(candidates)} messages to this phone around the attempt: "

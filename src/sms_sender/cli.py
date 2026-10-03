@@ -19,7 +19,7 @@ from .notify import notify
 from .phone import InvalidPhoneError, normalize as normalize_phone
 from .profile import ProfileError, load_profile, to_default_map
 from .rate import parse_rate
-from .reconcile import DEFAULT_MIN_AGE_SEC, reconcile_unknown
+from .reconcile import DEFAULT_MIN_AGE_SEC, REQUEUE_NOT_FOUND, reconcile_unknown
 from .runner import format_report, make_runner
 from .sender import TOKEN_MAX_SPACES, HaltError, Sender, SenderConfig
 from .state import NEEDS_REVIEW, UNKNOWN, StateStore
@@ -483,16 +483,25 @@ def purge(db_path: str, yes: bool) -> None:
     "--min-age", "min_age", default=DEFAULT_MIN_AGE_SEC, show_default=True, type=float,
     help="Only check rows whose last attempt is at least this many seconds old.",
 )
+@click.option(
+    "--requeue-not-found/--review-not-found", default=REQUEUE_NOT_FOUND, show_default=True,
+    help="What 'Kavenegar has no message for this phone' means: requeue (it was "
+         "never sent) or needs_review. Review until Kavenegar's lookup is "
+         "confirmed to list verify/lookup messages.",
+)
 @click.option("--timeout", default=15.0, show_default=True, type=float)
 @click.option(
     "--log-file", default="./logs/sms-sender.log", show_default=True,
     type=click.Path(dir_okay=False),
 )
-def reconcile(db_path: str, min_age: float, timeout: float, log_file: str) -> None:
+def reconcile(
+    db_path: str, min_age: float, requeue_not_found: bool, timeout: float, log_file: str,
+) -> None:
     """Ask Kavenegar what happened to `unknown` rows. Never sends anything.
 
-    Found at Kavenegar → `sent`. Not found → `failed_retriable`, so the next
-    `send` delivers it. Several candidate messages → `needs_review`.
+    Found at Kavenegar → `sent`. Several candidate messages → `needs_review`.
+    Not found → `needs_review`, or `failed_retriable` with --requeue-not-found
+    so the next `send` delivers it.
     """
     logging_config.setup(log_file=log_file, console_level=logging.WARNING)
     if not Path(db_path).exists():
@@ -502,7 +511,9 @@ def reconcile(db_path: str, min_age: float, timeout: float, log_file: str) -> No
     sender = Sender(SenderConfig(api_key=load_api_key(), template="", timeout=timeout))
     with _db_lock(db_path):
         try:
-            result = reconcile_unknown(store, sender, min_age_sec=min_age)
+            result = reconcile_unknown(
+                store, sender, min_age_sec=min_age, requeue_not_found=requeue_not_found,
+            )
         except HaltError as e:
             click.echo(
                 f"Error: Kavenegar refused the lookup: [{e.status_code}] {e.message}",

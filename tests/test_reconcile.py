@@ -47,9 +47,21 @@ def test_one_unknown_message_at_kavenegar_means_it_was_sent(tmp_path):
     assert (check["outcome"], check["message_id"]) == ("reconciled_sent", 555)
 
 
-def test_no_message_at_kavenegar_means_safe_to_send_again(tmp_path):
+def test_no_message_goes_to_review_by_default(tmp_path):
+    """Until Kavenegar's lookup is confirmed to list verify/lookup messages,
+    "not found" isn't proof the SMS never left — so no automatic resend."""
     state = unknown_row(tmp_path)
     result = reconcile_unknown(state, FakeProvider([]), now=an_hour_later())
+    assert (result.requeued, result.needs_review) == (0, 1)
+    assert state.counts() == {NEEDS_REVIEW: 1}
+    assert state.list_claimable_phones() == []
+
+
+def test_with_requeue_no_message_means_safe_to_send_again(tmp_path):
+    state = unknown_row(tmp_path)
+    result = reconcile_unknown(
+        state, FakeProvider([]), requeue_not_found=True, now=an_hour_later(),
+    )
     assert result.requeued == 1
     assert state.counts() == {FAILED_RETRIABLE: 1}
     assert state.list_claimable_phones() == [PHONE]
@@ -71,7 +83,10 @@ def test_messages_already_accounted_for_are_not_ours(tmp_path):
     state.record_attempt(
         phone=PHONE, kind="send", outcome="accepted", started_at=1.0, message_id=777,
     )
-    result = reconcile_unknown(state, FakeProvider([ProviderMessage(777, 10)]), now=an_hour_later())
+    result = reconcile_unknown(
+        state, FakeProvider([ProviderMessage(777, 10)]), requeue_not_found=True,
+        now=an_hour_later(),
+    )
     assert result.requeued == 1
     assert state.counts() == {FAILED_RETRIABLE: 1}
 

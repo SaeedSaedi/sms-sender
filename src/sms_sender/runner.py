@@ -17,7 +17,7 @@ from . import input_loader
 from .input_loader import TokenColumns
 from .locking import RunLock
 from .rate import TokenBucket
-from .reconcile import DEFAULT_MIN_AGE_SEC, reconcile_unknown
+from .reconcile import DEFAULT_MIN_AGE_SEC, REQUEUE_NOT_FOUND, reconcile_unknown
 from .redact import redact_secrets
 from .sender import (
     Attempt,
@@ -96,9 +96,11 @@ class Runner:
         approval_prompt: ApprovalPrompt | None = None,
         token_columns: TokenColumns | None = None,
         reconcile_min_age_sec: float = DEFAULT_MIN_AGE_SEC,
+        reconcile_requeue_not_found: bool = REQUEUE_NOT_FOUND,
     ):
         self.input_path = Path(input_path)
         self.reconcile_min_age_sec = reconcile_min_age_sec
+        self.reconcile_requeue_not_found = reconcile_requeue_not_found
         self.state = state
         self.sender = sender
         self.workers = workers
@@ -320,6 +322,7 @@ class Runner:
         try:
             result = reconcile_unknown(
                 self.state, self.sender, min_age_sec=self.reconcile_min_age_sec,
+                requeue_not_found=self.reconcile_requeue_not_found,
             )
         except SendError as e:  # incl. HaltError: bad key, account problem
             logger.warning(

@@ -219,6 +219,12 @@ def test_find_messages_parses_kavenegar_entries():
     assert sdk.calls == [("09123456789", 1000, 2000)]
 
 
+def test_find_messages_treats_no_record_449_as_nothing_found():
+    """Seen live (2026-10-04): an empty lookup is error 449, not []."""
+    sdk = _LookupSDK(error=APIException("APIException[449] رکوردی با مشخصات مورد نظر پیدا نشد"))
+    assert Sender(cfg(), sdk=sdk).find_messages("09123456789", 1, 2) == []
+
+
 @pytest.mark.parametrize("failure, error_type", [
     (HTTPException("read timed out"), SendError),
     (APIException("APIException[403 invalid api key]"), HaltError),

@@ -36,6 +36,10 @@ TOKEN_MAX_SPACES: dict[str, int] = {
     "token": 0, "token2": 0, "token3": 0, "token10": 5, "token20": 8,
 }
 
+# Lookup methods (e.g. sms/statusbyreceptor) answer an empty result with this
+# code — "رکوردی با مشخصات مورد نظر پیدا نشد" (no record found) — not with [].
+_NO_RECORD = 449
+
 
 class SendError(Exception):
     """Base for non-retriable send errors. Carries the Kavenegar status code."""
@@ -389,6 +393,8 @@ class Sender:
             raise SendError(None, f"http: {e}") from e
         except APIException as e:
             code, message = _parse_api_exception(e)
+            if code == _NO_RECORD:
+                return []  # Kavenegar reports "nothing found" as an error code
             if classify(code) is Action.HALT:
                 raise HaltError(code, message) from e
             raise SendError(code, message) from e
