@@ -384,6 +384,43 @@ def test_preview_check_account_never_prints_the_real_key(monkeypatch):
     assert "<API_KEY>" in result.output
 
 
+def test_send_on_a_busy_db_exits_2(tmp_path, monkeypatch):
+    from sms_sender.locking import RunLock
+
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n", encoding="utf-8")
+    db = tmp_path / "s.db"
+    with RunLock(db):
+        result = CliRunner().invoke(
+            cli,
+            [
+                "send",
+                "--input", str(inp),
+                "--template", "t",
+                "--state", str(db),
+                "--log-file", str(tmp_path / "test.log"),
+            ],
+        )
+    assert result.exit_code == 2, result.output
+    assert "another sms-sender process" in result.output
+
+
+@pytest.mark.parametrize("args", [
+    ["reset", "--status", "failed_permanent"],
+    ["purge", "--yes"],
+])
+def test_db_changing_commands_refuse_a_busy_db(tmp_path, args):
+    from sms_sender.locking import RunLock
+
+    db = tmp_path / "s.db"
+    _seed_state(db)
+    with RunLock(db):
+        result = CliRunner().invoke(cli, [*args, "--state", str(db)])
+    assert result.exit_code == 2, result.output
+    assert db.exists()  # purge didn't delete it
+
+
 def test_dry_run_reports_skipped_header(tmp_path):
     inp = tmp_path / "seg.csv"
     inp.write_text("Phone Number\n09123456789\n", encoding="utf-8")

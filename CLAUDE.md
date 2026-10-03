@@ -95,6 +95,7 @@ Statuses: `pending`, `in_flight`, `sent`, `failed_permanent`, `failed_retriable`
 - **`claim()` is the dedup gate.** It runs `UPDATE … WHERE phone=? AND status IN CLAIMABLE`; if `rowcount == 0` the worker silently skips. Two workers racing on the same phone — one wins the UPDATE, the other gets `None`. `sent` and `failed_permanent` rows can never be claimed.
 - **Connection-per-thread.** SQLite connections aren't shareable; `StateStore` keeps one per thread via `threading.local`. WAL mode + `BEGIN IMMEDIATE` keep concurrent writers from blocking each other badly.
 - **Crash recovery via `reset_orphan_in_flight`.** Any `in_flight` row at startup is from a prior crash — Runner reclaims it before fanning out workers. So you can `Ctrl-C` mid-run and re-run safely.
+- **One process per DB (`locking.RunLock`).** `Runner.run` and the commands that change rows (`retry-failed`, `reset`, `purge`) hold `fcntl.flock` on `<db>.lock`. A second process exits with code 2 instead of treating the first one's `in_flight` rows as crash leftovers and sending them again. The OS drops the lock when the holder dies (even `kill -9`), so crash recovery still works. `status` / `export-failed` only read and don't lock.
 - **Invalid inputs are persisted with synthetic key `INVALID:<raw>`.** This keeps the `phone` PK constraint while letting `export-failed` surface them.
 - **Schema versions.** `PRAGMA user_version` + append-only steps in `state._MIGRATIONS`. Opening a DB upgrades it in place, in one transaction; a DB written by a newer sms-sender is refused (`StateSchemaError`). Never edit a step that has shipped — existing DBs already applied it; add a new one.
 
@@ -127,7 +128,7 @@ Canonical form is `09XXXXXXXXX`. The normalizer accepts `+98…`, `0098…`, `98
 |---|---|
 | 0 | every recipient sent |
 | 1 | run finished with some `failed_permanent` or `failed_retriable` |
-| 2 | `HaltError`, preflight failure, or declined approval-test aborted the run |
+| 2 | `HaltError`, preflight failure, or declined approval-test aborted the run; or another process holds the state DB |
 
 ## Conventions
 

@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 from . import input_loader
 from .input_loader import TokenColumns
+from .locking import RunLock
 from .rate import TokenBucket
 from .redact import redact_secrets
 from .sender import HaltError, PermanentSendError, SendError, Sender, SenderConfig
@@ -305,6 +306,12 @@ class Runner:
         tqdm.write("Smoke test passed.")
 
     def run(self) -> RunSummary:
+        # One process per DB: a second run would treat our `in_flight` rows
+        # as orphans and send them again. Raises RunLockError if taken.
+        with RunLock(self.state.db_path):
+            return self._run()
+
+    def _run(self) -> RunSummary:
         self._install_signal_handlers()
 
         # 1. Load input.

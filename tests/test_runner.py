@@ -53,6 +53,26 @@ def test_run_start_logs_the_template(tmp_path, caplog):
     assert [r.template for r in starts] == ["transaction-1"]
 
 
+def test_second_run_on_a_busy_db_refuses_and_touches_nothing(tmp_path):
+    """While one process is sending, another run on the same DB must not
+    reset its in_flight rows (that's how a double send would happen)."""
+    import pytest
+
+    from sms_sender.locking import RunLock, RunLockError
+
+    inp = write_input(tmp_path, ["09120000001", "09120000002"])
+    db = tmp_path / "s.db"
+    state = StateStore(db)
+    state.upsert_pending([("09120000001", "09120000001"), ("09120000002", "09120000002")])
+    state.claim("09120000001")  # the first process is mid-send on this one
+    sender = FakeSender()
+    with RunLock(db):
+        with pytest.raises(RunLockError):
+            Runner(input_path=inp, state=StateStore(db), sender=sender, workers=1).run()
+    assert sender.calls == []
+    assert state.counts() == {"in_flight": 1, PENDING: 1}
+
+
 def test_happy_path_marks_all_sent(tmp_path):
     inp = write_input(tmp_path, ["09120000001", "09120000002", "09120000003"])
     state = StateStore(tmp_path / "s.db")

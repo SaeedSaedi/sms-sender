@@ -5,14 +5,16 @@ import csv
 import logging
 import os
 import sys
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, Iterator, TypeVar
 
 import click
 
 from . import input_loader, logging_config
 from .config import load_api_key
 from .input_loader import InputError, TokenColumns
+from .locking import RunLock, RunLockError
 from .notify import notify
 from .phone import InvalidPhoneError, normalize as normalize_phone
 from .profile import ProfileError, load_profile, to_default_map
@@ -114,6 +116,21 @@ def _load_input(input_path: str, token_columns: TokenColumns | None) -> input_lo
         return input_loader.load(input_path, token_columns)
     except InputError as e:
         raise click.UsageError(str(e)) from e
+
+
+@contextmanager
+def _db_lock(db_path: str) -> Iterator[None]:
+    """Hold the state DB's run lock, or exit 2 if another process has it."""
+    lock = RunLock(db_path)
+    try:
+        lock.acquire()
+    except RunLockError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(2)
+    try:
+        yield
+    finally:
+        lock.release()
 
 
 @click.group(invoke_without_command=True)
@@ -298,6 +315,9 @@ def _do_send(
         summary = runner.run()
     except InputError as e:
         raise click.UsageError(str(e)) from e
+    except RunLockError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(2)
 
     click.echo("\n" + format_report(summary))
     notify(notify_target, summary)
@@ -333,9 +353,10 @@ def retry_failed(include_permanent: bool, **kwargs: Any) -> None:
     subsequent `send` then claims them all (unless they were already sent).
     """
     store = StateStore(kwargs["db_path"])
-    n = store.reset_status("failed_retriable")
-    if include_permanent:
-        n += store.reset_status("failed_permanent")
+    with _db_lock(kwargs["db_path"]):
+        n = store.reset_status("failed_retriable")
+        if include_permanent:
+            n += store.reset_status("failed_permanent")
     click.echo(f"Reset {n} row(s) to pending.")
     if n == 0:
         click.echo("Nothing to retry.")
@@ -402,7 +423,8 @@ def reset(db_path: str, from_status: str, yes: bool) -> None:
             "SECOND SMS to every already-sent recipient. Are you sure?",
             abort=True,
         )
-    n = store.reset_status(from_status)
+    with _db_lock(db_path):
+        n = store.reset_status(from_status)
     click.echo(f"Reset {n} rows from {from_status} → pending")
 
 
@@ -428,8 +450,10 @@ def purge(db_path: str, yes: bool) -> None:
             "This wipes all send history (sent, failed, attempts).",
             abort=True,
         )
-    for p in existing:
-        p.unlink()
+    # Never delete a DB out from under a running send.
+    with _db_lock(db_path):
+        for p in existing:
+            p.unlink()
     click.echo(f"Deleted {len(existing)} file(s).")
 
 

@@ -7,7 +7,8 @@
 Reliable bulk SMS sender for the **Kavenegar `verify/lookup`** endpoint.
 
 - **No double sends.** A SQLite state DB tracks every recipient — re-running
-  the same input only sends to numbers that haven't been confirmed yet.
+  the same input only sends to numbers that haven't been confirmed yet. Only
+  one `sms-sender` process can use a state DB at a time; a second one exits.
 - **Resumable.** A crash mid-run is safe: on restart, orphan in-flight rows
   are reclaimed and pending rows continue.
 - **Retries.** Network timeouts and transient `409` server errors back off
@@ -197,7 +198,7 @@ sms-sender dry-run --input ./numbers.csv          # parse + normalize only, no A
 |---|---|
 | 0 | All recipients sent successfully. |
 | 1 | Run finished but some rows failed (permanent or retriable). |
-| 2 | Run halted on an account-level error (no credit, bad API key, plan). Fix and re-run. |
+| 2 | Run halted on an account-level error (no credit, bad API key, plan), or another `sms-sender` is already using the same state DB. Fix and re-run. |
 
 ## Architecture
 
