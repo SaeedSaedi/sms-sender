@@ -17,21 +17,55 @@ from typing import Iterable, Iterator
 
 from .redact import redact_secrets
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS recipients (
-    phone           TEXT PRIMARY KEY,
-    raw             TEXT NOT NULL,
-    status          TEXT NOT NULL,
-    message_id      INTEGER,
-    status_code     INTEGER,
-    attempts        INTEGER NOT NULL DEFAULT 0,
-    last_error      TEXT,
-    first_seen_at   REAL NOT NULL,
-    last_attempt_at REAL,
-    sent_at         REAL
-);
-CREATE INDEX IF NOT EXISTS idx_recipients_status ON recipients(status);
-"""
+# Schema upgrades, tracked with `PRAGMA user_version`: _MIGRATIONS[i] takes a
+# DB from version i to i + 1. Version 1 is the original schema; DBs created
+# before versioning report version 0 but already have it, so that step uses
+# IF NOT EXISTS and is a no-op for them. Append new steps; never edit one
+# that has shipped — existing DBs have already applied it.
+_MIGRATIONS: tuple[tuple[str, ...], ...] = (
+    (  # 0 → 1: original schema
+        """
+        CREATE TABLE IF NOT EXISTS recipients (
+            phone           TEXT PRIMARY KEY,
+            raw             TEXT NOT NULL,
+            status          TEXT NOT NULL,
+            message_id      INTEGER,
+            status_code     INTEGER,
+            attempts        INTEGER NOT NULL DEFAULT 0,
+            last_error      TEXT,
+            first_seen_at   REAL NOT NULL,
+            last_attempt_at REAL,
+            sent_at         REAL
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_recipients_status ON recipients(status)",
+    ),
+    (  # 1 → 2: cost of each accepted SMS + one row per call to the provider
+        "ALTER TABLE recipients ADD COLUMN cost INTEGER",
+        """
+        CREATE TABLE attempts (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            phone       TEXT NOT NULL,
+            kind        TEXT NOT NULL,
+            outcome     TEXT NOT NULL,
+            started_at  REAL NOT NULL,
+            finished_at REAL,
+            status_code INTEGER,
+            message_id  INTEGER,
+            cost        INTEGER,
+            detail      TEXT
+        )
+        """,
+        "CREATE INDEX idx_attempts_phone ON attempts(phone)",
+    ),
+)
+
+SCHEMA_VERSION = len(_MIGRATIONS)
+
+
+class StateSchemaError(RuntimeError):
+    """The DB was written by a newer sms-sender than this one."""
+
 
 # Status values
 PENDING = "pending"
@@ -39,6 +73,12 @@ IN_FLIGHT = "in_flight"
 SENT = "sent"
 FAILED_PERMANENT = "failed_permanent"
 FAILED_RETRIABLE = "failed_retriable"
+# The request may have reached Kavenegar without a clear answer (timeout,
+# dropped connection, crash mid-send). Never claimable: resending could
+# deliver a second SMS, so it waits to be checked with the provider.
+UNKNOWN = "unknown"
+# Reconciliation found more than one candidate message: an operator decides.
+NEEDS_REVIEW = "needs_review"
 
 CLAIMABLE = (PENDING, FAILED_RETRIABLE)
 
@@ -60,12 +100,7 @@ class StateStore:
     def __init__(self, db_path: str | Path):
         self.db_path = str(db_path)
         self._local = threading.local()
-        # Init schema once on the main thread.
-        with self._connect() as conn:
-            conn.executescript(SCHEMA)
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA synchronous=NORMAL")
-            conn.commit()
+        self._migrate()
 
     def _connect(self) -> sqlite3.Connection:
         # New connection — used for setup. Not cached.
@@ -73,12 +108,62 @@ class StateStore:
         conn.row_factory = sqlite3.Row
         return conn
 
+    def _migrate(self) -> None:
+        """Bring the DB up to SCHEMA_VERSION in one transaction.
+
+        BEGIN IMMEDIATE serializes concurrent openers and the version is read
+        inside the transaction, so two processes opening an old DB at once
+        apply each step exactly once.
+        """
+        conn = self._connect()
+        try:
+            self._ensure_wal(conn)  # can't be changed inside a transaction
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                version = conn.execute("PRAGMA user_version").fetchone()[0]
+                if version > SCHEMA_VERSION:
+                    raise StateSchemaError(
+                        f"{self.db_path} has schema version {version}, but this "
+                        f"sms-sender only knows up to {SCHEMA_VERSION}; upgrade sms-sender"
+                    )
+                for step in _MIGRATIONS[version:]:
+                    for statement in step:
+                        conn.execute(statement)
+                if version < SCHEMA_VERSION:
+                    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            except BaseException:
+                conn.execute("ROLLBACK")
+                raise
+            conn.execute("COMMIT")
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _ensure_wal(conn: sqlite3.Connection) -> None:
+        """Switch the DB to WAL. The mode is stored in the file, so this only
+        does work the first time a DB is opened.
+
+        The switch needs an exclusive lock, and SQLite reports a concurrent
+        opener as "database is locked" at once instead of waiting out the
+        busy timeout — so retry for a while.
+        """
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                if str(conn.execute("PRAGMA journal_mode").fetchone()[0]).lower() != "wal":
+                    conn.execute("PRAGMA journal_mode=WAL")
+                return
+            except sqlite3.OperationalError as e:
+                if "locked" not in str(e) or time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.02)
+
     def _conn(self) -> sqlite3.Connection:
         conn = getattr(self._local, "conn", None)
         if conn is None:
             conn = sqlite3.connect(self.db_path, timeout=30, isolation_level=None)
             conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA journal_mode=WAL")
+            # WAL itself is persistent (set by _migrate); synchronous is per-connection.
             conn.execute("PRAGMA synchronous=NORMAL")
             self._local.conn = conn
         return conn
@@ -152,12 +237,23 @@ class StateStore:
             )
             return cur.rowcount
 
-    def reset_orphan_in_flight(self) -> int:
-        """On startup, any `in_flight` row is from a prior crash — reclaim it."""
+    def mark_orphans_unknown(self) -> int:
+        """On startup, any `in_flight` row is left over from a process that
+        stopped mid-send (the run lock rules out a live one). Its request may
+        or may not have reached Kavenegar, so it becomes `unknown` — never
+        `pending`, which would send it again blindly. Returns rows changed."""
+        now = time.time()
         with self._tx() as conn:
+            conn.execute(
+                "INSERT INTO attempts (phone, kind, outcome, started_at, detail) "
+                "SELECT phone, 'recovery', ?, ?, 'process stopped while the request was in flight' "
+                "FROM recipients WHERE status=?",
+                (UNKNOWN, now, IN_FLIGHT),
+            )
             cur = conn.execute(
-                "UPDATE recipients SET status=? WHERE status=?",
-                (PENDING, IN_FLIGHT),
+                "UPDATE recipients SET status=?, "
+                "last_error='process stopped while the request was in flight' WHERE status=?",
+                (UNKNOWN, IN_FLIGHT),
             )
             return cur.rowcount
 
@@ -187,14 +283,93 @@ class StateStore:
             ).fetchone()
         return Recipient(phone=row["phone"], raw=row["raw"], attempts=row["attempts"])
 
-    def mark_sent(self, phone: str, message_id: int | None, status_code: int) -> None:
+    def mark_sent(
+        self, phone: str, message_id: int | None, status_code: int, cost: int | None = None,
+    ) -> None:
         now = time.time()
         with self._tx() as conn:
             conn.execute(
-                "UPDATE recipients SET status=?, message_id=?, status_code=?, "
+                "UPDATE recipients SET status=?, message_id=?, status_code=?, cost=?, "
                 "sent_at=?, last_error=NULL WHERE phone=?",
-                (SENT, message_id, status_code, now, phone),
+                (SENT, message_id, status_code, cost, now, phone),
             )
+
+    def mark_unknown(self, phone: str, error: str) -> None:
+        """The request may have been accepted — park it until it's checked."""
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE recipients SET status=?, status_code=NULL, last_error=? WHERE phone=?",
+                (UNKNOWN, redact_secrets(error), phone),
+            )
+
+    def record_attempt(
+        self, *, phone: str, kind: str, outcome: str, started_at: float,
+        finished_at: float | None = None, status_code: int | None = None,
+        message_id: int | None = None, cost: int | None = None, detail: str | None = None,
+    ) -> None:
+        """Append one row to the audit trail of calls to the provider."""
+        with self._tx() as conn:
+            conn.execute(
+                "INSERT INTO attempts (phone, kind, outcome, started_at, finished_at, "
+                "status_code, message_id, cost, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (phone, kind, outcome, started_at, finished_at, status_code, message_id,
+                 cost, redact_secrets(detail) if detail else detail),
+            )
+
+    def attempts_for(self, phone: str) -> list[sqlite3.Row]:
+        """Every recorded call for one phone, oldest first."""
+        return self._conn().execute(
+            "SELECT * FROM attempts WHERE phone=? ORDER BY id", (phone,)
+        ).fetchall()
+
+    # ---------- settling `unknown` rows (see reconcile.py) ----------
+
+    def list_unknown(self) -> list[tuple[str, float | None]]:
+        """(phone, last_attempt_at) for every `unknown` row, oldest first."""
+        rows = self._conn().execute(
+            "SELECT phone, last_attempt_at FROM recipients WHERE status=? "
+            "ORDER BY last_attempt_at",
+            (UNKNOWN,),
+        ).fetchall()
+        return [(r["phone"], r["last_attempt_at"]) for r in rows]
+
+    def known_message_ids(self) -> set[int]:
+        """Every Kavenegar message ID this DB already accounts for — sent rows
+        and recorded calls (e.g. the approval test) — so reconciliation never
+        claims one of them for an `unknown` row."""
+        rows = self._conn().execute(
+            "SELECT message_id FROM recipients WHERE message_id IS NOT NULL "
+            "UNION SELECT message_id FROM attempts WHERE message_id IS NOT NULL"
+        ).fetchall()
+        return {r[0] for r in rows}
+
+    def settle_unknown_sent(self, phone: str, message_id: int) -> bool:
+        """Kavenegar has the message, so it was sent. Only an `unknown` row
+        changes; returns whether one did."""
+        with self._tx() as conn:
+            cur = conn.execute(
+                "UPDATE recipients SET status=?, message_id=?, status_code=200, "
+                "sent_at=last_attempt_at, last_error=NULL WHERE phone=? AND status=?",
+                (SENT, message_id, phone, UNKNOWN),
+            )
+            return cur.rowcount == 1
+
+    def settle_unknown_not_sent(self, phone: str, reason: str) -> bool:
+        """Kavenegar never got it, so it's safe to send again."""
+        return self._settle_unknown(phone, FAILED_RETRIABLE, reason)
+
+    def settle_unknown_for_review(self, phone: str, reason: str) -> bool:
+        """Can't tell which message is ours: an operator decides."""
+        return self._settle_unknown(phone, NEEDS_REVIEW, reason)
+
+    def _settle_unknown(self, phone: str, status: str, reason: str) -> bool:
+        with self._tx() as conn:
+            cur = conn.execute(
+                "UPDATE recipients SET status=?, status_code=NULL, last_error=? "
+                "WHERE phone=? AND status=?",
+                (status, reason, phone, UNKNOWN),
+            )
+            return cur.rowcount == 1
 
     def mark_failed(
         self, phone: str, status_code: int | None, error: str, *, permanent: bool

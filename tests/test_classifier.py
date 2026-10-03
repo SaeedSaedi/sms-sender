@@ -41,3 +41,19 @@ def test_no_overlap_between_classes():
     assert HALT_CODES & RETRY_CODES == set()
     assert HALT_CODES & PERMANENT_CODES == set()
     assert RETRY_CODES & PERMANENT_CODES == set()
+
+
+@pytest.mark.parametrize("code", [420, 427, 429, 501])
+def test_account_level_codes_halt(code):
+    # Every message would fail the same way — stop at the first one.
+    assert classify(code) is Action.HALT
+
+
+def test_ip_rate_limit_retries():
+    assert classify(451) is Action.RETRY
+
+
+@pytest.mark.parametrize("code", [414, 419])
+def test_request_shape_codes_are_permanent(code):
+    # Retrying the identical request can't succeed.
+    assert classify(code) is Action.PERMANENT

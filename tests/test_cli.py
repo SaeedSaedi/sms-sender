@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from sms_sender import cli as cli_module
@@ -358,6 +359,77 @@ def test_preview_redacts_api_key_in_url():
     assert "<API_KEY>" in result.output
 
 
+def test_preview_check_account_never_prints_the_real_key(monkeypatch):
+    """--check-account / --send load the real key; the printed URL must
+    still show the placeholder."""
+    from sms_sender.sender import AccountInfo, Sender
+
+    monkeypatch.setattr(cli_module, "load_api_key", lambda: "SECRET_KEY_DO_NOT_PRINT")
+    monkeypatch.setattr(
+        Sender, "account_info",
+        lambda self: AccountInfo(remaining_credit=1, expire_date=None, type=None),
+    )
+    result = CliRunner().invoke(
+        cli,
+        [
+            "preview",
+            "--phone", "09123456789",
+            "--template", "t",
+            "--token", "x",
+            "--check-account",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "SECRET_KEY_DO_NOT_PRINT" not in result.output
+    assert "<API_KEY>" in result.output
+
+
+def test_send_on_a_busy_db_exits_2(tmp_path, monkeypatch):
+    from sms_sender.locking import RunLock
+
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n", encoding="utf-8")
+    db = tmp_path / "s.db"
+    with RunLock(db):
+        result = CliRunner().invoke(
+            cli,
+            [
+                "send",
+                "--input", str(inp),
+                "--template", "t",
+                "--state", str(db),
+                "--log-file", str(tmp_path / "test.log"),
+            ],
+        )
+    assert result.exit_code == 2, result.output
+    assert "another sms-sender process" in result.output
+
+
+@pytest.mark.parametrize("args", [
+    ["reset", "--status", "failed_permanent"],
+    ["purge", "--yes"],
+])
+def test_db_changing_commands_refuse_a_busy_db(tmp_path, args):
+    from sms_sender.locking import RunLock
+
+    db = tmp_path / "s.db"
+    _seed_state(db)
+    with RunLock(db):
+        result = CliRunner().invoke(cli, [*args, "--state", str(db)])
+    assert result.exit_code == 2, result.output
+    assert db.exists()  # purge didn't delete it
+
+
+def test_dry_run_reports_skipped_header(tmp_path):
+    inp = tmp_path / "seg.csv"
+    inp.write_text("Phone Number\n09123456789\n", encoding="utf-8")
+    result = CliRunner().invoke(cli, ["dry-run", "--input", str(inp)])
+    assert result.exit_code == 0, result.output
+    assert "valid=1 invalid=0" in result.output
+    assert "skipped header row 'Phone Number'" in result.output
+
+
 def test_send_end_to_end_through_real_sender(tmp_path, monkeypatch):
     """Real CLI → Click → Runner → Sender → _KavenegarHTTP → patched HTTP.
 
@@ -414,6 +486,115 @@ def test_send_end_to_end_through_real_sender(tmp_path, monkeypatch):
     assert StateStore(db).counts() == {SENT: 2}
 
 
+def test_send_read_timeout_parks_the_row_as_unknown(tmp_path, monkeypatch):
+    """Real CLI → Runner → Sender → _KavenegarHTTP with a read timeout: the
+    request may have been accepted, so it's sent exactly once, recorded as
+    `unknown` with its attempt, and the exit code is 1."""
+    import requests
+    import sms_sender.sender as sender_mod
+
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY_NOT_A_REAL_ONE")
+    inp = tmp_path / "in.txt"
+    inp.write_text("09120000001\n", encoding="utf-8")
+    db = tmp_path / "s.db"
+    posts: list[str] = []
+
+    def timeout_post(self, url, data=None, timeout=None, **kw):
+        posts.append(url)
+        raise requests.exceptions.ReadTimeout("read timed out")
+
+    monkeypatch.setattr(sender_mod.requests.Session, "post", timeout_post)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "send",
+            "--input", str(inp),
+            "--template", "tpl",
+            "--state", str(db),
+            "--no-preflight",
+            "--log-file", str(tmp_path / "test.log"),
+        ],
+    )
+    assert result.exit_code == 1, result.output
+    assert len(posts) == 1  # never retried
+    store = StateStore(db)
+    assert store.counts() == {"unknown": 1}
+    assert [r["outcome"] for r in store.attempts_for("09120000001")] == ["unknown"]
+    assert "unknown" in result.output
+
+
+def _unknown_db(tmp_path) -> Path:
+    db = tmp_path / "s.db"
+    store = StateStore(db)
+    store.upsert_pending([("09120000001", "09120000001"), ("09120000002", "09120000002")])
+    for phone in ("09120000001", "09120000002"):
+        store.claim(phone)
+        store.mark_unknown(phone, "outcome unknown: read timed out")
+    return db
+
+
+def test_reconcile_command_settles_unknown_rows(tmp_path, monkeypatch):
+    from sms_sender.sender import ProviderMessage, Sender
+
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    db = _unknown_db(tmp_path)
+    at_kavenegar = {"09120000001": [ProviderMessage(4242, 10)]}
+    monkeypatch.setattr(
+        Sender, "find_messages", lambda self, phone, start, end: at_kavenegar.get(phone, []),
+    )
+    args = ["reconcile", "--state", str(db), "--min-age", "0",
+            "--log-file", str(tmp_path / "test.log")]
+
+    # Default: "not found" isn't trusted yet → review, exit 1.
+    result = CliRunner().invoke(cli, args)
+    assert result.exit_code == 1, result.output
+    assert "sent (found at Kavenegar)      1" in result.output
+    assert "needs review                   1" in result.output
+    assert StateStore(db).counts() == {SENT: 1, "needs_review": 1}
+
+
+def test_reconcile_command_can_requeue_not_found(tmp_path, monkeypatch):
+    from sms_sender.sender import Sender
+
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    db = _unknown_db(tmp_path)
+    monkeypatch.setattr(Sender, "find_messages", lambda self, phone, start, end: [])
+    result = CliRunner().invoke(
+        cli,
+        ["reconcile", "--state", str(db), "--min-age", "0", "--requeue-not-found",
+         "--log-file", str(tmp_path / "test.log")],
+    )
+    assert result.exit_code == 0, result.output
+    assert "not sent (safe to send again)  2" in result.output
+    assert StateStore(db).counts() == {FAILED_RETRIABLE: 2}
+
+
+def test_reconcile_command_leaves_recent_rows_and_exits_1(tmp_path, monkeypatch):
+    from sms_sender.sender import Sender
+
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    db = _unknown_db(tmp_path)
+    monkeypatch.setattr(
+        Sender, "find_messages", lambda *a, **kw: pytest.fail("looked up a recent row"),
+    )
+    result = CliRunner().invoke(
+        cli, ["reconcile", "--state", str(db), "--log-file", str(tmp_path / "test.log")],
+    )
+    assert result.exit_code == 1, result.output
+    assert "not checked yet                2" in result.output
+    assert StateStore(db).counts() == {"unknown": 2}
+
+
+def test_reset_unknown_needs_confirmation(tmp_path):
+    db = _unknown_db(tmp_path)
+    result = CliRunner().invoke(
+        cli, ["reset", "--status", "unknown", "--state", str(db)], input="n\n",
+    )
+    assert result.exit_code != 0
+    assert "may already have the SMS" in result.output
+    assert StateStore(db).counts() == {"unknown": 2}
+
+
 # ---------- approval test (manual gate) ----------
 
 
@@ -444,7 +625,7 @@ def _stub_make_runner(captured: dict):
 def test_send_approval_test_uses_env_var(tmp_path, monkeypatch):
     """`--approval-test` with no flag value falls back to SMS_SENDER_TEST_NUMBER."""
     monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
-    monkeypatch.setenv(cli_module.TEST_NUMBER_ENV, "09151097710")
+    monkeypatch.setenv(cli_module.TEST_NUMBER_ENV, "09150000077")
     captured: dict = {}
     monkeypatch.setattr(cli_module, "make_runner", _stub_make_runner(captured))
 
@@ -465,7 +646,7 @@ def test_send_approval_test_uses_env_var(tmp_path, monkeypatch):
         ],
     )
     assert result.exit_code == 0, result.output
-    assert captured["approval_test_number"] == "09151097710"
+    assert captured["approval_test_number"] == "09150000077"
 
 
 def test_send_test_number_overrides_env(tmp_path, monkeypatch):
@@ -517,11 +698,11 @@ def test_send_test_number_normalized(tmp_path, monkeypatch):
             "--log-file", str(tmp_path / "test.log"),
             "--no-preflight",
             "--approval-test",
-            "--test-number", "+98 915 109 7710",
+            "--test-number", "+98 915 000 0077",
         ],
     )
     assert result.exit_code == 0, result.output
-    assert captured["approval_test_number"] == "09151097710"
+    assert captured["approval_test_number"] == "09150000077"
 
 
 def test_send_approval_test_without_number_errors(tmp_path, monkeypatch):
@@ -623,3 +804,162 @@ def test_send_verbose_quiet_mutually_exclusive(tmp_path):
     )
     assert result.exit_code != 0
     assert "mutually exclusive" in result.output
+
+
+# ---------- per-recipient token columns ----------
+
+
+TRADE_FLAGS = [
+    "--token-column", "token=trade_side",
+    "--token-column", "token10=first_name",
+    "--token-column", "token20=last_token",
+    "--value-map", "trade_side:Buy=خرید",
+    "--value-map", "trade_side:Sell=فروش",
+]
+
+
+def _write_trade_csv(tmp_path: Path, extra_rows: str = "") -> Path:
+    p = tmp_path / "in.csv"
+    p.write_text(
+        "phone_number,first_name,last_token,trade_side\n"
+        "09120000001,علی,ترون,Buy\n"
+        "09120000002,سارا,بیت کوین,Sell\n" + extra_rows,
+        encoding="utf-8",
+    )
+    return p
+
+
+def test_send_token_columns_reach_the_post_body(tmp_path, monkeypatch):
+    """Real CLI → Runner → Sender → patched HTTP: each receptor's POST body
+    carries its own row's tokens, with trade_side translated to Persian."""
+    import sms_sender.sender as sender_mod
+
+    inp = _write_trade_csv(tmp_path)
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY_NOT_A_REAL_ONE")
+    bodies: list[dict] = []
+
+    class _Resp:
+        status_code = 200
+        def json(self):
+            return {"return": {"status": 200, "message": "OK"},
+                    "entries": [{"messageid": 1, "status": 5}]}
+
+    def fake_post(self, url, data=None, timeout=None, **_):
+        bodies.append(dict(data))
+        return _Resp()
+
+    monkeypatch.setattr(sender_mod.requests.Session, "post", fake_post)
+    result = CliRunner().invoke(cli, [
+        "send", "--input", str(inp), "--template", "transaction-1", *TRADE_FLAGS,
+        "--state", str(tmp_path / "s.db"), "--log-file", str(tmp_path / "t.log"),
+        "--no-preflight", "--workers", "1",
+    ])
+    assert result.exit_code == 0, result.output
+    assert sorted(bodies, key=lambda b: b["receptor"]) == [
+        {"receptor": "09120000001", "template": "transaction-1",
+         "token": "خرید", "token10": "علی", "token20": "ترون"},
+        {"receptor": "09120000002", "template": "transaction-1",
+         "token": "فروش", "token10": "سارا", "token20": "بیت کوین"},
+    ]
+
+
+def test_send_token_column_missing_from_header_is_usage_error(tmp_path, monkeypatch):
+    monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
+    inp = _write_trade_csv(tmp_path)
+    result = CliRunner().invoke(cli, [
+        "send", "--input", str(inp), "--template", "t",
+        "--token-column", "token10=nickname",
+        "--state", str(tmp_path / "s.db"), "--log-file", str(tmp_path / "t.log"),
+        "--no-preflight",
+    ])
+    assert result.exit_code == 2
+    assert "nickname" in result.output
+    assert StateStore(tmp_path / "s.db").counts() == {}  # nothing seeded
+
+
+@pytest.mark.parametrize("flags, message", [
+    (["--token-column", "token10"], "TOKEN=COLUMN"),
+    (["--token-column", "token9=first_name"], "unknown token"),
+    (["--token-column", "token10=first_name", "--token-column", "token10=last_token"],
+     "more than once"),
+    (["--token", "x", "--token-column", "token=trade_side"], "pick one"),
+    (["--value-map", "trade_side:Buy=خرید"], "only applies together"),
+    (["--token-column", "token=trade_side", "--value-map", "side:Buy=خرید"],
+     "isn't used"),
+    (["--token-column", "token=trade_side", "--value-map", "trade_side:Buy"],
+     "COLUMN:FROM=TO"),
+])
+def test_token_column_flag_errors(tmp_path, flags, message):
+    inp = _write_trade_csv(tmp_path)
+    result = CliRunner().invoke(
+        cli, ["preview", "--input", str(inp), "--template", "t", *flags],
+    )
+    assert result.exit_code == 2
+    assert message in result.output
+
+
+def test_preview_token_columns_show_each_rows_body(tmp_path):
+    inp = _write_trade_csv(tmp_path)
+    result = CliRunner().invoke(
+        cli, ["preview", "--input", str(inp), "--template", "t", *TRADE_FLAGS],
+    )
+    assert result.exit_code == 0, result.output
+    assert result.output.count("POST https://api.kavenegar.com/v1/<API_KEY>/") == 2
+    for line in ("token=خرید", "token10=علی", "token20=ترون",
+                 "token=فروش", "token10=سارا", "token20=بیت کوین"):
+        assert f"  {line}\n" in result.output
+
+
+def test_preview_phone_picks_its_row_from_input(tmp_path):
+    inp = _write_trade_csv(tmp_path)
+    result = CliRunner().invoke(cli, [
+        "preview", "--input", str(inp), "--phone", "+989120000002",
+        "--template", "t", *TRADE_FLAGS,
+    ])
+    assert result.exit_code == 0, result.output
+    assert result.output.count("POST ") == 1
+    assert "token10=سارا" in result.output
+
+    missing = CliRunner().invoke(cli, [
+        "preview", "--input", str(inp), "--phone", "09129999999",
+        "--template", "t", *TRADE_FLAGS,
+    ])
+    assert missing.exit_code == 2
+    assert "no valid row" in missing.output
+
+
+def test_preview_token_columns_require_input():
+    result = CliRunner().invoke(cli, [
+        "preview", "--phone", "09120000001", "--template", "t", *TRADE_FLAGS,
+    ])
+    assert result.exit_code == 2
+    assert "needs --input" in result.output
+
+
+def test_dry_run_token_columns_report_unsendable_rows(tmp_path):
+    inp = _write_trade_csv(tmp_path, extra_rows="09120000003,رضا,تتر,Hold\n")
+    result = CliRunner().invoke(cli, ["dry-run", "--input", str(inp), *TRADE_FLAGS])
+    assert result.exit_code == 0, result.output
+    assert "valid=2 invalid=1" in result.output
+    assert "token=خرید  token10=علی  token20=ترون" in result.output
+    assert "trade_side='Hold' has no entry in its value map" in result.output
+
+
+def test_profile_can_carry_token_columns(tmp_path):
+    """TOML lists feed the repeatable flags through Click's default_map."""
+    cfg = tmp_path / "sms-sender.toml"
+    cfg.write_text(
+        "[profile.trade]\n"
+        'template = "transaction-1"\n'
+        'token_column = ["token=trade_side", "token10=first_name", "token20=last_token"]\n'
+        'value_map = ["trade_side:Buy=خرید", "trade_side:Sell=فروش"]\n',
+        encoding="utf-8",
+    )
+    inp = _write_trade_csv(tmp_path)
+    result = CliRunner().invoke(cli, [
+        "--config", str(cfg), "--profile", "trade", "preview", "--input", str(inp),
+    ])
+    assert result.exit_code == 0, result.output
+    assert "template=transaction-1" in result.output
+    assert "token=فروش" in result.output
+    assert "token20=بیت کوین" in result.output

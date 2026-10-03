@@ -6,6 +6,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
+from sms_sender.input_loader import TokenColumns
 from sms_sender.runner import Runner, format_report
 from sms_sender.sender import (
     AccountInfo,
@@ -14,18 +15,20 @@ from sms_sender.sender import (
     SendError,
     SendResult,
 )
-from sms_sender.state import SENT, StateStore
+from sms_sender.state import PENDING, SENT, StateStore
 
 
 class FakeSender:
     def __init__(self):
         self.calls: list[str] = []
+        self.tokens: dict[str, dict[str, str] | None] = {}  # phone -> per-row tokens sent
         self._lock = threading.Lock()
         self.behavior = {}  # phone -> callable returning SendResult or raising
 
-    def send(self, phone: str) -> SendResult:
+    def send(self, phone: str, tokens: dict[str, str] | None = None) -> SendResult:
         with self._lock:
             self.calls.append(phone)
+            self.tokens[phone] = tokens
         if phone in self.behavior:
             return self.behavior[phone]()
         return SendResult(message_id=hash(phone) & 0xffff, status_code=200)
@@ -35,6 +38,80 @@ def write_input(tmp_path: Path, phones: list[str]) -> Path:
     p = tmp_path / "in.txt"
     p.write_text("\n".join(phones) + "\n", encoding="utf-8")
     return p
+
+
+def test_run_start_logs_the_template(tmp_path, caplog):
+    """The log is the campaign history today, so each run records its template."""
+    from types import SimpleNamespace
+
+    inp = write_input(tmp_path, ["09120000001"])
+    sender = FakeSender()
+    sender.cfg = SimpleNamespace(template="transaction-1")
+    with caplog.at_level("INFO", logger="sms_sender.runner"):
+        Runner(input_path=inp, state=StateStore(tmp_path / "s.db"), sender=sender, workers=1).run()
+    starts = [r for r in caplog.records if r.getMessage() == "run_start"]
+    assert [r.template for r in starts] == ["transaction-1"]
+
+
+def test_second_run_on_a_busy_db_refuses_and_touches_nothing(tmp_path):
+    """While one process is sending, another run on the same DB must not
+    reset its in_flight rows (that's how a double send would happen)."""
+    import pytest
+
+    from sms_sender.locking import RunLock, RunLockError
+
+    inp = write_input(tmp_path, ["09120000001", "09120000002"])
+    db = tmp_path / "s.db"
+    state = StateStore(db)
+    state.upsert_pending([("09120000001", "09120000001"), ("09120000002", "09120000002")])
+    state.claim("09120000001")  # the first process is mid-send on this one
+    sender = FakeSender()
+    with RunLock(db):
+        with pytest.raises(RunLockError):
+            Runner(input_path=inp, state=StateStore(db), sender=sender, workers=1).run()
+    assert sender.calls == []
+    assert state.counts() == {"in_flight": 1, PENDING: 1}
+
+
+def test_uncertain_send_is_parked_as_unknown_and_never_resent(tmp_path):
+    from sms_sender.sender import UncertainSendError
+    from sms_sender.state import UNKNOWN
+
+    inp = write_input(tmp_path, ["09120000001", "09120000002"])
+    state = StateStore(tmp_path / "s.db")
+    sender = FakeSender()
+    sender.behavior["09120000001"] = lambda: (_ for _ in ()).throw(
+        UncertainSendError(None, "outcome unknown: read timed out")
+    )
+    summary = Runner(input_path=inp, state=state, sender=sender, workers=1).run()
+    assert summary.sent == 1
+    assert summary.unknown == 1
+    assert state.counts() == {SENT: 1, UNKNOWN: 1}
+    assert "unknown" in format_report(summary)
+
+    # A later run with a healthy provider still doesn't touch it.
+    healthy = FakeSender()
+    Runner(input_path=inp, state=state, sender=healthy, workers=1).run()
+    assert healthy.calls == []
+
+
+def test_make_runner_records_each_call_in_the_db(tmp_path):
+    from sms_sender.runner import make_runner
+    from sms_sender.sender import Attempt, SenderConfig
+
+    inp = write_input(tmp_path, ["09120000001"])
+    runner = make_runner(
+        input_path=inp, db_path=tmp_path / "s.db",
+        sender_cfg=SenderConfig(api_key="k", template="t"),
+    )
+    runner.sender._on_attempt(Attempt(
+        phone="09120000001", outcome="accepted", started_at=1.0, finished_at=2.0,
+        status_code=200, message_id=7, cost=1100,
+    ))
+    rows = runner.state.attempts_for("09120000001")
+    assert [(r["kind"], r["outcome"], r["message_id"], r["cost"]) for r in rows] == [
+        ("send", "accepted", 7, 1100),
+    ]
 
 
 def test_happy_path_marks_all_sent(tmp_path):
@@ -239,7 +316,7 @@ def test_smoke_test_passes_then_runs_rest(tmp_path):
 # ---------- approval test (manual gate) ----------
 
 
-TEST_NUMBER = "09151097710"
+TEST_NUMBER = "09150000077"
 
 
 def test_approval_test_approved_proceeds(tmp_path):
@@ -567,3 +644,58 @@ def test_already_done_counts_lost_claim_race(tmp_path):
     # Sender never gets called for an already-sent row.
     assert sender.calls == []
     assert summary.sent == 0
+
+
+# ---------- per-recipient token columns ----------
+
+SIDE_SPEC = TokenColumns(
+    columns={"token": "side", "token10": "name"},
+    value_maps={"side": {"Buy": "خرید", "Sell": "فروش"}},
+)
+
+
+def write_csv(tmp_path: Path, rows: list[str]) -> Path:
+    p = tmp_path / "in.csv"
+    p.write_text("phone,name,side\n" + "\n".join(rows) + "\n", encoding="utf-8")
+    return p
+
+
+def test_token_columns_send_each_rows_own_tokens(tmp_path):
+    inp = write_csv(tmp_path, ["09120000001,علی,Buy", "09120000002,سارا,Sell"])
+    state = StateStore(tmp_path / "s.db")
+    sender = FakeSender()
+    summary = Runner(
+        input_path=inp, state=state, sender=sender, workers=2, token_columns=SIDE_SPEC,
+    ).run()
+    assert summary.sent == 2
+    assert sender.tokens == {
+        "09120000001": {"token": "خرید", "token10": "علی"},
+        "09120000002": {"token": "فروش", "token10": "سارا"},
+    }
+
+
+def test_token_columns_leave_db_rows_missing_from_input(tmp_path):
+    """A pending row seeded by some other input has no tokens to send — it
+    must be left alone rather than sent with the static tokens only."""
+    state = StateStore(tmp_path / "s.db")
+    state.upsert_pending([("09120000009", "09120000009")])
+    inp = write_csv(tmp_path, ["09120000001,علی,Buy"])
+    sender = FakeSender()
+    summary = Runner(
+        input_path=inp, state=state, sender=sender, workers=1, token_columns=SIDE_SPEC,
+    ).run()
+    assert sender.calls == ["09120000001"]
+    assert summary.sent == 1
+    assert state.status_for_phones(["09120000009"]) == {"09120000009": PENDING}
+
+
+def test_token_columns_approval_test_borrows_first_recipients_tokens(tmp_path):
+    inp = write_csv(tmp_path, ["09120000001,علی,Buy", "09120000002,سارا,Sell"])
+    state = StateStore(tmp_path / "s.db")
+    sender = FakeSender()
+    summary = Runner(
+        input_path=inp, state=state, sender=sender, workers=1, token_columns=SIDE_SPEC,
+        approval_test_number="09150000000", approval_prompt=lambda *_: True,
+    ).run()
+    assert summary.sent == 2
+    assert sender.tokens["09150000000"] == {"token": "خرید", "token10": "علی"}

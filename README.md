@@ -1,5 +1,6 @@
 # sms-sender
 
+[![Tests](https://github.com/SaeedSaedi/sms-sender/actions/workflows/tests.yml/badge.svg)](https://github.com/SaeedSaedi/sms-sender/actions/workflows/tests.yml)
 [![Release](https://img.shields.io/github/v/release/SaeedSaedi/sms-sender)](https://github.com/SaeedSaedi/sms-sender/releases)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/github/license/SaeedSaedi/sms-sender)](LICENSE)
@@ -7,12 +8,17 @@
 Reliable bulk SMS sender for the **Kavenegar `verify/lookup`** endpoint.
 
 - **No double sends.** A SQLite state DB tracks every recipient — re-running
-  the same input only sends to numbers that haven't been confirmed yet.
-- **Resumable.** A crash mid-run is safe: on restart, orphan in-flight rows
-  are reclaimed and pending rows continue.
-- **Retries.** Network timeouts and transient `409` server errors back off
-  and retry; per-recipient errors (bad template, invalid receptor) are marked
-  permanent and skipped on resume.
+  the same input only sends to numbers that haven't been confirmed yet. Only
+  one `sms-sender` process can use a state DB at a time; a second one exits.
+- **Resumable.** A crash mid-run is safe: on restart, rows that were mid-send
+  are marked `unknown` (they may already have the SMS) instead of being sent
+  again, and pending rows continue.
+- **Retries.** Requests that never reached Kavenegar (connection refused, DNS,
+  connect timeout) and its "try later" codes (`409`, `451`) back off and
+  retry. A timeout *after* the request went out is never retried — Kavenegar
+  may have sent it — so the row becomes `unknown`. Per-recipient errors (bad
+  template, invalid receptor) are marked permanent and skipped on resume.
+  Every call to Kavenegar is recorded in the state DB's `attempts` table.
 - **Progress + logs.** A `tqdm` bar shows sent / failed / left, and every
   important event is logged structured to a rotating log file.
 
@@ -45,6 +51,8 @@ normalized to `09XXXXXXXXX`:
 ```
 
 Persian (`۰۱۲۳…`) and Arabic-Indic (`٠١٢…`) digits are converted automatically.
+A first row with no digits at all (e.g. an Excel `Phone Number` header) is
+skipped as a column header instead of being counted as an invalid number.
 
 ## Usage
 
@@ -60,6 +68,34 @@ sms-sender send \
 
 Re-run the same command after a crash, network outage, or credit top-up — it
 picks up exactly where it left off.
+
+### Per-recipient tokens
+
+When each recipient needs their own values (name, coin, …), take the tokens
+from CSV columns instead of passing them statically. The CSV needs a header
+row, and its first column is the phone:
+
+```csv
+phone_number,first_name,last_token,trade_side
+09123456789,علی,ترون,Buy
+```
+
+```bash
+sms-sender send --input trades.csv --template transaction-1 \
+  --token-column token=trade_side \
+  --token-column token10=first_name \
+  --token-column token20=last_token \
+  --value-map trade_side:Buy=خرید \
+  --value-map trade_side:Sell=فروش
+```
+
+`--value-map COLUMN:FROM=TO` translates a column's values before sending.
+Rows that can't be sent as-is — an empty cell, a value with no `--value-map`
+entry, or more spaces than the token allows — are recorded as invalid
+(see `export-failed`) rather than sent. `dry-run` and `preview` accept the same
+flags, so you can check every row and the exact POST bodies first. In a
+profile, write the flags as lists:
+`token_column = ["token=trade_side", "token10=first_name"]`.
 
 ### Safer first runs
 
@@ -92,6 +128,31 @@ pending and re-send in one shot:
 sms-sender retry-failed --input numbers.csv --template my-tpl --token 12345
 # Add --include-permanent to also reset failed_permanent rows.
 ```
+
+### Unknown outcomes
+
+If a request may have reached Kavenegar without a clear answer (a read
+timeout, a dropped connection, or the process dying mid-send), the row
+becomes `unknown` and is **never resent automatically** — the recipient may
+already have the SMS. Every run checks old-enough `unknown` rows with
+Kavenegar first; you can also check them yourself:
+
+```bash
+sms-sender reconcile --state ./sms_state.db
+```
+
+It asks Kavenegar which messages went to each phone around the attempt
+(`sms/statusbyreceptor`) and never sends anything:
+
+- one message found → `sent`
+- several found → `needs_review`; decide yourself, and only if you're sure
+  they didn't get it: `sms-sender reset --status needs_review`
+- none found → `needs_review` as well, for now: it isn't yet confirmed that
+  this Kavenegar lookup lists `verify/lookup` messages, so "not found" doesn't
+  prove the SMS never left. Add `--requeue-not-found` to treat it as never
+  sent (`failed_retriable`, delivered by the next `send`).
+
+Rows less than 5 minutes old wait (`--min-age`).
 
 ### Throughput control
 
@@ -166,8 +227,8 @@ sms-sender dry-run --input ./numbers.csv          # parse + normalize only, no A
 | Code | Meaning |
 |---|---|
 | 0 | All recipients sent successfully. |
-| 1 | Run finished but some rows failed (permanent or retriable). |
-| 2 | Run halted on an account-level error (no credit, bad API key, plan). Fix and re-run. |
+| 1 | Run finished but some rows failed (permanent or retriable), or are `unknown` / `needs_review`. |
+| 2 | Run halted on an account-level error (no credit, bad API key, plan), or another `sms-sender` is already using the same state DB. Fix and re-run. |
 
 ## Architecture
 
@@ -201,3 +262,6 @@ is deleted.
 ```bash
 pytest
 ```
+
+GitHub Actions runs the suite on Python 3.10 and 3.14 for every push to
+`main` and every pull request (`.github/workflows/tests.yml`).

@@ -1,12 +1,17 @@
+import socket
+
 import pytest
 from kavenegar import APIException, HTTPException
 
 from sms_sender.sender import (
     HaltError,
     PermanentSendError,
+    ProviderMessage,
     SendError,
     Sender,
     SenderConfig,
+    UncertainSendError,
+    _NotSent,
 )
 
 
@@ -48,8 +53,13 @@ def test_success_first_try():
     assert sdk.calls == [{"receptor": "09123456789", "template": "t", "token": "123"}]
 
 
-def test_retries_then_succeeds_on_http_exception():
-    sdk = FakeSDK([HTTPException("timeout"), HTTPException("timeout"), [{"messageid": 9, "status": 200}]])
+def test_success_carries_the_cost():
+    sdk = FakeSDK([[{"messageid": 7, "status": 200, "cost": 1100}]])
+    assert Sender(cfg(), sdk=sdk).send("09123456789").cost == 1100
+
+
+def test_retries_when_the_request_never_left():
+    sdk = FakeSDK([_NotSent("refused"), _NotSent("refused"), [{"messageid": 9, "status": 200}]])
     s = Sender(cfg(max_attempts=3), sdk=sdk)
     r = s.send("09123456789")
     assert r.message_id == 9
@@ -57,12 +67,28 @@ def test_retries_then_succeeds_on_http_exception():
 
 
 def test_retries_exhausted_raises_send_error():
-    sdk = FakeSDK([HTTPException("t"), HTTPException("t"), HTTPException("t")])
+    sdk = FakeSDK([_NotSent("t"), _NotSent("t"), _NotSent("t")])
     s = Sender(cfg(max_attempts=3), sdk=sdk)
     with pytest.raises(SendError) as exc:
         s.send("09123456789")
-    # not Halt or Permanent, but the parent SendError class
-    assert not isinstance(exc.value, (HaltError, PermanentSendError))
+    # not Halt, Permanent or Uncertain: the parent SendError class
+    assert not isinstance(exc.value, (HaltError, PermanentSendError, UncertainSendError))
+    assert "retries exhausted" in exc.value.message
+    assert len(sdk.calls) == 3
+
+
+def test_network_failure_after_sending_is_uncertain_and_never_retried():
+    """A read timeout may mean Kavenegar accepted the SMS — retrying could
+    deliver it twice, so the send stops after one call."""
+    sdk = FakeSDK([HTTPException("read timed out"), [{"messageid": 9, "status": 200}]])
+    with pytest.raises(UncertainSendError):
+        Sender(cfg(max_attempts=3), sdk=sdk).send("09123456789")
+    assert len(sdk.calls) == 1
+
+
+def test_status_200_without_entries_is_uncertain():
+    with pytest.raises(UncertainSendError):
+        Sender(cfg(), sdk=FakeSDK([[]])).send("09123456789")
 
 
 def test_halt_on_account_error():
@@ -145,6 +171,193 @@ def test_build_params_is_pure_no_io():
     assert sdk.calls == []  # no API calls
 
 
+def test_retries_are_logged_per_phone(caplog):
+    """Every retry leaves a per-phone trace in the log. Only calls that never
+    left are retried, so these lines are not possible double sends."""
+    sdk = FakeSDK([_NotSent("connection refused"), [{"messageid": 7, "status": 200}]])
+    s = Sender(cfg(), sdk=sdk)
+    with caplog.at_level("WARNING", logger="sms_sender.sender"):
+        s.send("09123456789")
+    retries = [r for r in caplog.records if r.getMessage() == "send_retry"]
+    assert [(r.phone, r.attempt, r.status) for r in retries] == [("09123456789", 1, None)]
+    assert "connection refused" in retries[0].detail
+
+
+def test_per_recipient_tokens_layer_over_static_ones():
+    sdk = FakeSDK([[{"messageid": 7, "status": 200}]])
+    s = Sender(cfg(token="static", token2="y"), sdk=sdk)
+    s.send("09123456789", tokens={"token": "خرید", "token10": "علی"})
+    assert sdk.calls == [{
+        "receptor": "09123456789", "template": "t",
+        "token": "خرید", "token2": "y", "token10": "علی",
+    }]
+
+
+# ---------- looking up what Kavenegar sent (reconciliation) ----------
+
+
+class _LookupSDK(FakeSDK):
+    def __init__(self, entries=None, error=None):
+        super().__init__([])
+        self.entries = entries or []
+        self.error = error
+
+    def status_by_receptor(self, receptor, startdate, enddate):
+        self.calls.append((receptor, startdate, enddate))
+        if self.error:
+            raise self.error
+        return self.entries
+
+
+def test_find_messages_parses_kavenegar_entries():
+    sdk = _LookupSDK([
+        {"messageid": 85463238, "receptor": "09123456789", "status": 10, "statustext": "…"},
+        {"messageid": None},  # unusable entry is skipped
+    ])
+    found = Sender(cfg(), sdk=sdk).find_messages("09123456789", 1000.7, 2000.2)
+    assert found == [ProviderMessage(85463238, 10)]
+    assert sdk.calls == [("09123456789", 1000, 2000)]
+
+
+def test_find_messages_treats_no_record_449_as_nothing_found():
+    """Seen live (2026-10-04): an empty lookup is error 449, not []."""
+    sdk = _LookupSDK(error=APIException("APIException[449] رکوردی با مشخصات مورد نظر پیدا نشد"))
+    assert Sender(cfg(), sdk=sdk).find_messages("09123456789", 1, 2) == []
+
+
+@pytest.mark.parametrize("failure, error_type", [
+    (HTTPException("read timed out"), SendError),
+    (APIException("APIException[403 invalid api key]"), HaltError),
+    (APIException("APIException[417 invalid date]"), SendError),
+])
+def test_find_messages_errors(failure, error_type):
+    with pytest.raises(error_type) as exc:
+        Sender(cfg(), sdk=_LookupSDK(error=failure)).find_messages("09123456789", 1, 2)
+    if error_type is SendError:
+        assert not isinstance(exc.value, HaltError)
+
+
+def test_kavenegar_http_status_by_receptor_posts_the_window(monkeypatch):
+    from sms_sender.sender import _KavenegarHTTP
+
+    http = _KavenegarHTTP("k", timeout=1)
+    seen = {}
+
+    def post(url, data=None, timeout=None, **_kw):
+        seen.update(url=url, data=data)
+        return _FakeJSONResp({
+            "return": {"status": 200, "message": "ok"},
+            "entries": [{"messageid": 1, "status": 10}],
+        })
+
+    monkeypatch.setattr(http._session, "post", post)
+    assert http.status_by_receptor("09123456789", 100, 200) == [{"messageid": 1, "status": 10}]
+    assert seen["url"].endswith("/sms/statusbyreceptor.json")
+    assert seen["data"] == {"receptor": "09123456789", "startdate": 100, "enddate": 200}
+
+
+# ---------- every call is reported (audit trail) ----------
+
+
+def test_every_call_is_reported_with_its_outcome():
+    attempts = []
+    sdk = FakeSDK([_NotSent("refused"), [{"messageid": 9, "status": 200, "cost": 1100}]])
+    Sender(cfg(), sdk=sdk, on_attempt=attempts.append).send("09123456789")
+    assert [a.outcome for a in attempts] == ["retry", "accepted"]
+    assert "refused" in attempts[0].detail
+    accepted = attempts[1]
+    assert (accepted.phone, accepted.message_id, accepted.cost) == ("09123456789", 9, 1100)
+    assert accepted.started_at <= accepted.finished_at
+
+
+@pytest.mark.parametrize("failure, outcome", [
+    (HTTPException("read timed out"), "unknown"),
+    (APIException("APIException[424 template not found]"), "rejected"),
+    (APIException("APIException[418 insufficient credit]"), "halt"),
+])
+def test_failed_calls_are_reported(failure, outcome):
+    attempts = []
+    with pytest.raises(SendError):
+        Sender(cfg(), sdk=FakeSDK([failure]), on_attempt=attempts.append).send("09123456789")
+    assert [a.outcome for a in attempts] == [outcome]
+
+
+def test_a_failing_attempt_hook_never_changes_the_send_result():
+    def broken_hook(_attempt):
+        raise RuntimeError("audit DB is down")
+
+    sdk = FakeSDK([[{"messageid": 7, "status": 200}]])
+    r = Sender(cfg(), sdk=sdk, on_attempt=broken_hook).send("09123456789")
+    assert r.message_id == 7
+
+
+# ---------- which network errors may have reached Kavenegar ----------
+
+
+def test_never_sent_only_when_the_connection_itself_failed():
+    import requests as r
+    import urllib3
+
+    from sms_sender.sender import _never_sent
+
+    refused = urllib3.exceptions.NewConnectionError(None, "Failed to establish a new connection")
+    via_proxy = urllib3.exceptions.ProxyError("Unable to connect to proxy", refused)
+    url = "/v1/k/verify/lookup.json"
+
+    assert _never_sent(r.exceptions.ConnectTimeout("connect timed out"))
+    assert _never_sent(r.exceptions.ConnectionError(
+        urllib3.exceptions.MaxRetryError(None, url, reason=refused)))
+    assert _never_sent(r.exceptions.ProxyError(
+        urllib3.exceptions.MaxRetryError(None, url, reason=via_proxy)))
+
+    assert not _never_sent(r.exceptions.ReadTimeout("read timed out"))
+    assert not _never_sent(r.exceptions.ConnectionError(
+        urllib3.exceptions.ProtocolError("Connection aborted.", ConnectionResetError())))
+    assert not _never_sent(r.exceptions.ConnectionError("no structured cause"))
+
+
+def _http_to_localhost(monkeypatch, port: int, timeout: float):
+    from sms_sender.sender import _KavenegarHTTP
+
+    monkeypatch.setattr(
+        _KavenegarHTTP, "BASE", f"http://127.0.0.1:{port}/v1/{{key}}/{{path}}.json",
+    )
+    http = _KavenegarHTTP("k", timeout=timeout)
+    http._session.trust_env = False  # ignore any HTTP(S)_PROXY in the environment
+    return http
+
+
+def test_refused_connection_is_retried_as_never_sent(monkeypatch):
+    """Real sockets: nothing listens on the port, so the request never left."""
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+
+    attempts = []
+    http = _http_to_localhost(monkeypatch, port, timeout=1)
+    with pytest.raises(SendError) as exc:
+        Sender(cfg(max_attempts=2), sdk=http, on_attempt=attempts.append).send("09123456789")
+    assert not isinstance(exc.value, UncertainSendError)
+    assert [a.outcome for a in attempts] == ["retry", "retry"]
+
+
+def test_request_without_an_answer_is_uncertain_and_sent_once(monkeypatch):
+    """Real sockets: the server accepts the connection (listen backlog) and
+    receives the request, but never answers — a genuine read timeout."""
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(8)
+    try:
+        attempts = []
+        http = _http_to_localhost(monkeypatch, server.getsockname()[1], timeout=0.3)
+        with pytest.raises(UncertainSendError):
+            Sender(cfg(max_attempts=3), sdk=http, on_attempt=attempts.append).send("09123456789")
+        assert [a.outcome for a in attempts] == ["unknown"]
+    finally:
+        server.close()
+
+
 # ---------- _KavenegarHTTP redaction (regression for API key leak) ----------
 
 
@@ -167,8 +380,7 @@ def test_kavenegar_http_redacts_key_in_request_exception(monkeypatch):
     s = Sender(cfg(api_key=SECRET, max_attempts=1), sdk=http)
     with pytest.raises(SendError) as exc:
         s.send("09123456789")
-    # The retries-exhausted message wraps the inner _RetriableSendError text;
-    # the key must not appear anywhere in the surfaced message.
+    # The key must not appear anywhere in the surfaced message.
     assert SECRET not in exc.value.message
     assert "***" in exc.value.message
 
@@ -208,51 +420,49 @@ class _FakeJSONResp:
         return self._body
 
 
-def test_kavenegar_http_malformed_no_return_key_is_permanent(monkeypatch):
-    """A 200 with a JSON body missing the `return` key should be a permanent
-    failure, not retried indefinitely."""
+class _HTMLResp:
+    def __init__(self, status_code: int):
+        self.status_code = status_code
+
+    def json(self):
+        raise ValueError("not json")
+
+
+def _send_through_http(monkeypatch, response):
+    """Send once through the real _KavenegarHTTP with a canned response;
+    return (raised exception, number of HTTP posts)."""
     from sms_sender.sender import _KavenegarHTTP
 
     http = _KavenegarHTTP("k", timeout=1)
-    monkeypatch.setattr(
-        http._session, "post",
-        lambda *a, **kw: _FakeJSONResp({"unexpected": "shape"}),
-    )
-    s = Sender(cfg(api_key="k", max_attempts=5), sdk=http)
-    with pytest.raises(PermanentSendError):
-        s.send("09123456789")
+    posts = []
+    monkeypatch.setattr(http._session, "post", lambda *a, **kw: posts.append(1) or response)
+    with pytest.raises(SendError) as exc:
+        Sender(cfg(api_key="k", max_attempts=5), sdk=http).send("09123456789")
+    return exc.value, len(posts)
 
 
-def test_kavenegar_http_malformed_status_not_int_is_permanent(monkeypatch):
-    """A `return.status` that isn't an int (e.g., string) means the response
-    can't be classified — fail permanent rather than spin retries."""
-    from sms_sender.sender import _KavenegarHTTP
-
-    http = _KavenegarHTTP("k", timeout=1)
-    monkeypatch.setattr(
-        http._session, "post",
-        lambda *a, **kw: _FakeJSONResp({"return": {"status": "weird", "message": "?"}}),
-    )
-    s = Sender(cfg(api_key="k", max_attempts=5), sdk=http)
-    with pytest.raises(PermanentSendError):
-        s.send("09123456789")
+@pytest.mark.parametrize("response", [
+    _FakeJSONResp({"unexpected": "shape"}),                        # no `return` key
+    _FakeJSONResp({"return": {"status": "weird", "message": "?"}}),  # status not int
+    _HTMLResp(502),                                                # gateway page
+], ids=["no-return-key", "status-not-int", "html-5xx"])
+def test_garbled_200_or_5xx_reply_is_uncertain_and_sent_once(monkeypatch, response):
+    """The API (200) or a gateway that forwarded the call (5xx) may have
+    processed it: never retry, park it as unknown."""
+    error, posts = _send_through_http(monkeypatch, response)
+    assert isinstance(error, UncertainSendError)
+    assert posts == 1
 
 
-def test_kavenegar_http_non_json_body_is_permanent(monkeypatch):
-    """An HTML 5xx page (json() raises ValueError) should fail permanent."""
-    from sms_sender.sender import _KavenegarHTTP
-
-    http = _KavenegarHTTP("k", timeout=1)
-
-    class _HTMLResp:
-        status_code = 502
-        def json(self):
-            raise ValueError("not json")
-
-    monkeypatch.setattr(http._session, "post", lambda *a, **kw: _HTMLResp())
-    s = Sender(cfg(api_key="k", max_attempts=5), sdk=http)
-    with pytest.raises(PermanentSendError):
-        s.send("09123456789")
+@pytest.mark.parametrize("response", [
+    _FakeJSONResp({"unexpected": "shape"}, status_code=403),
+    _HTMLResp(404),
+], ids=["malformed-4xx", "html-404"])
+def test_garbled_4xx_reply_is_permanent(monkeypatch, response):
+    """A 4xx page never reached the API (bad URL, proxy refusal): permanent."""
+    error, posts = _send_through_http(monkeypatch, response)
+    assert isinstance(error, PermanentSendError)
+    assert posts == 1
 
 
 def test_send_falls_back_when_inner_is_unexpected(monkeypatch):
