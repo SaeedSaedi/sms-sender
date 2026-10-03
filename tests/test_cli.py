@@ -625,7 +625,7 @@ def _stub_make_runner(captured: dict):
 def test_send_approval_test_uses_env_var(tmp_path, monkeypatch):
     """`--approval-test` with no flag value falls back to SMS_SENDER_TEST_NUMBER."""
     monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
-    monkeypatch.setenv(cli_module.TEST_NUMBER_ENV, "09151097710")
+    monkeypatch.setenv(cli_module.TEST_NUMBER_ENV, "09150000077")
     captured: dict = {}
     monkeypatch.setattr(cli_module, "make_runner", _stub_make_runner(captured))
 
@@ -646,7 +646,7 @@ def test_send_approval_test_uses_env_var(tmp_path, monkeypatch):
         ],
     )
     assert result.exit_code == 0, result.output
-    assert captured["approval_test_number"] == "09151097710"
+    assert captured["approval_test_number"] == "09150000077"
 
 
 def test_send_test_number_overrides_env(tmp_path, monkeypatch):
@@ -698,11 +698,11 @@ def test_send_test_number_normalized(tmp_path, monkeypatch):
             "--log-file", str(tmp_path / "test.log"),
             "--no-preflight",
             "--approval-test",
-            "--test-number", "+98 915 109 7710",
+            "--test-number", "+98 915 000 0077",
         ],
     )
     assert result.exit_code == 0, result.output
-    assert captured["approval_test_number"] == "09151097710"
+    assert captured["approval_test_number"] == "09150000077"
 
 
 def test_send_approval_test_without_number_errors(tmp_path, monkeypatch):

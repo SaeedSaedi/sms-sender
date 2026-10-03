@@ -316,7 +316,7 @@ def test_smoke_test_passes_then_runs_rest(tmp_path):
 # ---------- approval test (manual gate) ----------
 
 
-TEST_NUMBER = "09151097710"
+TEST_NUMBER = "09150000077"
 
 
 def test_approval_test_approved_proceeds(tmp_path):
