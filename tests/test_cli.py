@@ -960,7 +960,7 @@ def test_send_invalid_test_number_errors(tmp_path, monkeypatch):
 def test_send_no_approval_test_does_not_require_number(tmp_path, monkeypatch):
     """Default behavior — no --approval-test, no env var needed, no error."""
     monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
-    monkeypatch.delenv(cli_module.TEST_NUMBER_ENV, raising=False)
+    monkeypatch.setenv(cli_module.TEST_NUMBER_ENV, "")  # "" keeps the real .env value out
     captured: dict = {}
     monkeypatch.setattr(cli_module, "make_runner", _stub_make_runner(captured))
 

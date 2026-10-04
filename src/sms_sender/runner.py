@@ -648,13 +648,6 @@ class Runner:
                 [(inv.raw, inv.reason) for inv in loaded.invalid]
             )
         new_count = self.state.upsert_pending([(r.phone, r.raw) for r in loaded.valid])
-        if self.opt_out:
-            suppressed = self.state.suppress(self.opt_out)
-            if suppressed:
-                logger.info("opted_out_suppressed", extra={"n": suppressed})
-                self._reporter.note(
-                    f"{suppressed} recipient(s) are on the opt-out list and won't be sent."
-                )
         orphans = self.state.mark_orphans_unknown()
         if orphans:
             logger.warning("orphans_marked_unknown", extra={"n": orphans})
@@ -665,6 +658,15 @@ class Runner:
         # Settle old-enough `unknown` rows first, so the ones Kavenegar never
         # got go out in this run like everyone else.
         self._reconcile_unknown("start")
+        # The opt-out list goes last, right before the queue is read: a row
+        # that reconciliation just made claimable again must not slip past it.
+        if self.opt_out:
+            suppressed = self.state.suppress(self.opt_out)
+            if suppressed:
+                logger.info("opted_out_suppressed", extra={"n": suppressed})
+                self._reporter.note(
+                    f"{suppressed} recipient(s) are on the opt-out list and won't be sent."
+                )
 
         phones = self.state.list_claimable_phones()
         if self._row_tokens is not None:
