@@ -16,6 +16,7 @@ import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -629,6 +630,7 @@ class Runner:
         logger.info("approval_test_target", extra={"phone": target})
         self._reporter.note(f"Approval test: sending to {target} synchronously …")
 
+        kind = _ATTEMPT_KIND.set("test")
         try:
             result = self.sender.send(target, tokens=tokens)
         except HaltError as e:
@@ -644,6 +646,8 @@ class Runner:
                 f"approval test send to {target} failed: [{e.status_code}] {e.message}",
                 "test_failed", code=e.status_code,
             ) from e
+        finally:
+            _ATTEMPT_KIND.reset(kind)
 
         logger.info(
             "approval_test_sent",
@@ -1079,11 +1083,18 @@ def format_report(s: RunSummary) -> str:
     return "\n".join(lines)
 
 
+# What `_attempt_recorder` files a call under: "send" for a recipient, or
+# "test" while the approval test runs. A context variable, because the
+# Sender reports the call from inside `send()`; the fan-out's threads start
+# with the default.
+_ATTEMPT_KIND: ContextVar[str] = ContextVar("attempt_kind", default="send")
+
+
 def _attempt_recorder(state: StateStore) -> Callable[[Attempt], None]:
     """Write each call to Kavenegar into the state DB's `attempts` table."""
     def record(a: Attempt) -> None:
         state.record_attempt(
-            phone=a.phone, kind="send", outcome=a.outcome,
+            phone=a.phone, kind=_ATTEMPT_KIND.get(), outcome=a.outcome,
             started_at=a.started_at, finished_at=a.finished_at,
             status_code=a.status_code, message_id=a.message_id, cost=a.cost,
             detail=a.detail,
@@ -1139,12 +1150,12 @@ def make_runner(
     install_signal_handlers: bool = True,
     test_only: bool = False,
     cost_per_sms: int | None = None,
-    sender: Sender | None = None,
+    make_sender: Callable[..., Sender] = Sender,
 ) -> Runner:
-    """A runner for these settings. `sender` replaces the real Kavenegar
-    client (the dashboard's sandbox passes a simulated one)."""
+    """A runner for these settings. `make_sender(cfg, on_attempt=…)` builds
+    the Kavenegar client; the dashboard's sandbox passes a simulated one."""
     state = StateStore(db_path)
-    sender = sender or Sender(sender_cfg, on_attempt=_attempt_recorder(state))
+    sender = make_sender(sender_cfg, on_attempt=_attempt_recorder(state))
     return Runner(
         input_path=input_path,
         state=state,

@@ -29,6 +29,7 @@ sms-sender dry-run --input … # parse + normalize, no API calls
 sms-sender reset --status failed_permanent   # promote rows back to pending
 sms-sender reconcile --state data/db/x.db    # ask Kavenegar about `unknown` rows (never sends)
 sms-sender delivery --campaign coin-price-7   # delivery reports for the last 48 h (never sends)
+sms-sender check-sends --campaign coin-price-7  # did anyone get it twice? exit 1 if so (never sends)
 sms-sender send --campaign coin-price-7 --input vip-2.csv --template … \
     --link-url https://kifpool.me/offer --link-token token3 \
     --user-id-column user_id                  # a short link per recipient, made before any SMS
@@ -130,7 +131,7 @@ Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_perm
 - **`claim()` is the dedup gate.** It runs `UPDATE … WHERE phone=? AND status IN CLAIMABLE`; if `rowcount == 0` the worker silently skips. Two workers racing on the same phone — one wins the UPDATE, the other gets `None`. `sent` and `failed_permanent` rows can never be claimed.
 - **Connection-per-thread.** SQLite connections aren't shareable; `StateStore` keeps one per thread via `threading.local`. WAL mode + `BEGIN IMMEDIATE` keep concurrent writers from blocking each other badly.
 - **Crash recovery via `mark_orphans_unknown`.** Any `in_flight` row at startup was left by a process that stopped mid-send (the run lock rules out a live one). Its request may or may not have reached Kavenegar, so it becomes `unknown` — never `pending` — and is never claimed again until checked with the provider. So you can `Ctrl-C` mid-run and re-run safely; the rest of the campaign carries on.
-- **Every provider call is an `attempts` row** (kind `send` / `recovery`, outcome `accepted` / `retry` / `rejected` / `halt` / `unknown`, codes, `message_id`, `cost`, redacted detail). `Sender(on_attempt=…)` reports each call; `make_runner` wires it to `StateStore.record_attempt`. A failing audit write is logged and never changes the send's outcome. `recipients.cost` holds the accepted SMS's cost in rials.
+- **Every provider call is an `attempts` row** (kind `send` / `test` (the approval test, via the `runner._ATTEMPT_KIND` context variable) / `recovery`, outcome `accepted` / `retry` / `rejected` / `halt` / `unknown`, codes, `message_id`, `cost`, redacted detail). `Sender(on_attempt=…)` reports each call; `make_runner(make_sender=…)` wires it to `StateStore.record_attempt`. A failing audit write is logged and never changes the send's outcome. `recipients.cost` holds the accepted SMS's cost in rials.
 - **One process per DB (`locking.RunLock`).** `Runner.run` and the commands that change rows (`retry-failed`, `reset`, `purge`) hold `fcntl.flock` on `<db>.lock`. A second process exits with code 2 instead of treating the first one's `in_flight` rows as crash leftovers and sending them again. The OS drops the lock when the holder dies (even `kill -9`), so crash recovery still works. `status` / `export-failed` only read and don't lock.
 - **Invalid inputs are persisted with synthetic key `INVALID:<raw>`.** This keeps the `phone` PK constraint while letting `export-failed` surface them.
 - **Schema versions.** `PRAGMA user_version` + append-only steps in `state._MIGRATIONS`. Opening a DB upgrades it in place, in one transaction; a DB written by a newer sms-sender is refused (`StateSchemaError`). Never edit a step that has shipped — existing DBs already applied it; add a new one.
@@ -144,6 +145,8 @@ Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_perm
 - A fresh message is listed within a minute. Entries have no time field.
 - `sms/select`, which has each message's time and text, answers 407 without an IP allowlist, so it isn't used.
 - When the window around the claim (−120 s … +900 s) crosses midnight in Tehran or UTC, each day is also asked on its own (`reconcile._spans`).
+
+**First, the row's own call records:** an accepted `send` attempt made after the row's claim (`StateStore.accepted_since`) settles it as `sent` with that message, without a lookup. That's the crash between Kavenegar accepting and `mark_sent`. The lookup can't settle it: the message ID is already known, so it would be skipped and the row requeued and sent again.
 
 **Which messages count:** the candidates are the day's messages minus every known message ID. That means this DB's (`known_message_ids`: sent rows plus recorded calls such as the approval test) and every other campaign DB's in the same folder (`StateStore.neighbour_message_ids`, read-only), because another campaign may have texted the same person that day.
 
@@ -161,6 +164,14 @@ Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_perm
 - The settle methods only change rows that are still `unknown`, and each decision is an `attempts` row of kind `reconcile`.
 
 The runner reconciles at the start of every run (so rows Kavenegar never got go out with everyone else) and at the end (long runs). It's best-effort: if the lookup fails — even a `HaltError` — the rows just stay `unknown`. `sms-sender reconcile` does the same standalone under the run lock; exit 1 while rows remain `unknown` / `needs_review`, 2 if Kavenegar refuses the lookup.
+
+### Double-send check ([sendcheck.py](src/sms_sender/sendcheck.py))
+
+`sms-sender check-sends` counts each phone's SMS from the `attempts` rows, never from the recipient row, which only holds its last send:
+- accepted `send`s and `reconciled_sent` decisions count, each message ID once;
+- an `unknown` `send` / `recovery` is undecided until a reconcile decision. A `recovery` right after an accepted or unknown call is that same call.
+
+Two or more IDs → `TWICE`; one plus an undecided call → `MAYBE`; either → exit 1. `test` attempts are counted apart, since the test number may also be a recipient. Older DBs filed the approval test as `send`, so there a test number that was also a recipient shows as twice. Sent rows without any attempt (from before schema 2) are reported as "unrecorded".
 
 ### Delivery reports ([delivery.py](src/sms_sender/delivery.py))
 
@@ -305,7 +316,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - `/status/` asks Kavenegar (`account_info` / `account_config`) and Shlink (`health`) live, on every view.
   - Worker liveness is `jobs.WorkerBeat`: written every idle loop and with each job heartbeat. `worker_alive()` means seen within 60 s.
 - **Sandbox (`jobs/sandbox.py`, `SMS_SENDER_SANDBOX=1`):**
-  - `Engine.sender()`, `Engine.link_client()` and `Engine.runner()` return `SandboxKavenegar` / `SandboxShlink`. `make_runner(sender=…)` takes the simulated sender, so no API key is read and no request is made.
+  - `Engine.sender()`, `Engine.link_client()` and `Engine.runner()` return `SandboxKavenegar` / `SandboxShlink`. `make_runner(make_sender=SandboxKavenegar)` builds the simulated sender, so no API key is read and no request is made. It reports each call to `on_attempt` like the real one (accepted / rejected / unknown), so `check-sends` works on sandbox campaigns.
   - `settings.DATA_DIR` becomes `<data>/sandbox`, the app DB included. A worker not in sandbox mode reads another DB and can't see a sandbox job.
   - The simulation is deterministic, so tests can rely on it:
     - numbers ending in `000` are rejected (411);
@@ -332,7 +343,14 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - **One worker only.** Test DBs are files, not shared-memory SQLite (`settings_test`), because the heartbeat thread writes concurrently.
 - **CSS:** logical properties only (`margin-inline-start`, `padding-block`, …), so the layout mirrors for RTL. HTMX and the Vazirmatn font (OFL) are vendored in `static/`; no CDNs. Ordered lists use `list-style-type: persian`. A form with `data-confirm="…"` asks before submitting (`static/js/app.js`). Don't write inline `onclick` / `onsubmit` handlers.
 - **Packaging:** the image installs the package, not the source tree, so each app's `templates/` must be listed in `[tool.setuptools.package-data]`.
-- **Docker:** `Dockerfile` + `compose.yaml` (service `web`, gunicorn, `/healthz`). The port is published on `${BIND_ADDR:-127.0.0.1}`, so it's shared over NetBird only on purpose.
+- **Docker:** `Dockerfile` + `compose.yaml` (service `web`, gunicorn, `/healthz`; service `worker`, health check `manage.py worker_status`). The port is published on `${BIND_ADDR:-127.0.0.1}:${WEB_PORT:-8000}`, so it's shared over NetBird only on purpose. Images are `sms-sender-dashboard:${IMAGE_TAG:-latest}`. Both services' logs are capped (json-file, 10 MB × 5), since they hold phone numbers. `DJANGO_TRUST_PROXY_SSL=1` sets `SECURE_PROXY_SSL_HEADER`, only for a TLS proxy that overwrites `X-Forwarded-Proto`. The DevOps handover is [docs/deploy.md](docs/deploy.md); keep it in step with these files.
+- **Backups ([backup.py](src/sms_sender_web/backup.py), no Django):** `manage.py backup` / `verify_backup` / `restore_backup` (in `jobs/management/commands/`, with `worker_status`).
+  - A backup copies `app.db`, `db/*.db` and `segments/*` into `BACKUP_DIR/<UTC stamp>/` (`SMS_SENDER_BACKUP_DIR`, default `<data>/backups`). Not the sandbox or exports.
+  - DBs go through SQLite's online backup (a plain copy misses the `-wal`). Each is switched to DELETE mode, its leftover `-shm` removed, and integrity-checked.
+  - `manifest.json` holds sizes, SHA-256 and row counts.
+  - The backup is written to `.partial` and renamed when complete. Pruning (keep N) happens only after a good backup.
+  - Restore verifies first and puts back missing files. It replaces an existing file only with `--replace <path>`, moving it and its `-wal` / `-shm` aside (`.before-restore-<stamp>`). It takes each campaign DB's run lock.
+  - A campaign DB restored from before a send doesn't know about that send. Never make restore overwrite by default.
 
 ## Conventions
 

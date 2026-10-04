@@ -13,6 +13,7 @@ pytest.importorskip("django")
 from django.test import Client  # noqa: E402
 
 from sms_sender.reconcile import reconcile_unknown  # noqa: E402
+from sms_sender.sendcheck import check_sends  # noqa: E402
 from sms_sender.state import FAILED_PERMANENT, SENT, UNKNOWN, StateStore  # noqa: E402
 from sms_sender_web.accounts.models import Profile  # noqa: E402
 from sms_sender_web.jobs.engine import Engine, campaign_db  # noqa: E402
@@ -105,6 +106,12 @@ def test_the_whole_flow_runs_without_sending(operator_client, campaign):
     result = reconcile_unknown(store, SandboxKavenegar(), min_age_sec=0)
     assert result.sent == 1 and store.counts() == {SENT: 3, FAILED_PERMANENT: 1}
     assert len(read_outbox()) == 4
+    # The simulated calls are recorded like real ones, the test SMS apart.
+    check = check_sends(store)
+    assert check.ok and (check.sms, check.test_sms, check.unrecorded) == (3, 1, 0)
+    outcomes = {phone: [a["outcome"] for a in store.attempts_for(phone)] for phone in ROWS}
+    assert outcomes["09120001000"] == ["rejected"]
+    assert outcomes["09120001999"] == ["unknown", "reconciled_sent"]
 
     operator_client.post("/campaigns/try-1/delivery/")
     run(Job.Kind.DELIVERY)

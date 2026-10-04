@@ -211,6 +211,19 @@ folder don't count.
 
 Rows less than 5 minutes old wait (`--min-age`).
 
+If the process stopped right after Kavenegar accepted an SMS, before the
+row was marked, the recorded call settles it as `sent`, with no lookup.
+
+To check that nobody got a campaign twice:
+
+```bash
+sms-sender check-sends --campaign coin-price-7
+```
+
+It counts each phone's SMS from the record of every call to Kavenegar,
+with approval tests counted apart. It never sends anything. Exit 1 if a
+phone got it twice (`TWICE`) or may have (`MAYBE`).
+
 ### Delivery reports
 
 `sent` means Kavenegar accepted the SMS. Whether it reached the phone comes
@@ -464,6 +477,13 @@ Remove the line (or set it to `0`) and restart to go back to real sending.
 
 Uploaded lists are kept in `data/segments/`, which git ignores, like every
 other list of phone numbers. Pages show numbers masked (`۰۹۱۲*****۳۴`).
+
+### Hosting it
+
+[docs/deploy.md](docs/deploy.md) is the handover for whoever runs it:
+configuration, TLS and NetBird access, health checks, backups
+(`python manage.py backup`, `verify_backup`, `restore_backup`), upgrades and
+rollback, and a runbook.
 
 It also has a background **worker** (`python manage.py run_worker`, the
 `worker` service in Compose) that runs the jobs the dashboard queues: sends,
