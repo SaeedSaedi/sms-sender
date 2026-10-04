@@ -219,6 +219,26 @@ class ReconcilingFakeSender(FakeSender):
         return list(self.at_kavenegar.get(phone, []))
 
 
+def test_a_requeued_leftover_on_the_opt_out_list_is_not_sent(tmp_path):
+    """Reconciliation can make an `unknown` row claimable again; the opt-out
+    list must still catch it in the same run."""
+    phones = ["09120000001", "09120000002"]
+    inp = write_input(tmp_path, phones)
+    db = tmp_path / "s.db"
+    crashed = StateStore(db)
+    crashed.upsert_pending([(p, p) for p in phones])
+    crashed.claim("09120000001")  # died mid-send; Kavenegar never got it
+
+    sender = ReconcilingFakeSender()
+    Runner(
+        input_path=inp, state=StateStore(db), sender=sender, workers=1,
+        reconcile_min_age_sec=0, reconcile_requeue_not_found=True,
+        opt_out=frozenset({"09120000001"}),
+    ).run()
+    assert sender.calls == ["09120000002"]
+    assert StateStore(db).counts() == {"suppressed": 1, "sent": 1}
+
+
 def test_crash_leftovers_are_settled_with_kavenegar_on_the_next_run(tmp_path):
     """Two rows were mid-send when the process died. Kavenegar has one: it's
     marked sent and not resent. The other never arrived: it goes out in this

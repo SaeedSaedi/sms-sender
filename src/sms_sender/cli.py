@@ -5,7 +5,6 @@ import csv
 import json
 import logging
 import os
-import re
 import sys
 import time
 from contextlib import contextmanager
@@ -14,10 +13,23 @@ from typing import Any, Callable, Iterator, TypeVar
 
 import click
 from click.core import ParameterSource
+from dotenv import load_dotenv
 
 from . import input_loader, logging_config
 from .config import load_api_key
-from .input_loader import InputError, TokenColumns
+from .input_loader import SLUG_RE, InputError, TokenColumns
+from .links import (
+    DEFAULT_EXPIRY_DAYS,
+    DEFAULT_RATE as DEFAULT_LINK_RATE,
+    ENV_LINK_DOMAINS,
+    STRATEGIES as LINK_STRATEGIES,
+    LinkSettings,
+    allowed_domains,
+    destination_problem,
+    format_problem as link_format_problem,
+    placeholder_token,
+    plan_link,
+)
 from .locking import RunLock, RunLockError
 from .notify import notify
 from .phone import InvalidPhoneError, normalize as normalize_phone
@@ -35,8 +47,25 @@ from .sender import (
     SenderConfig,
     token_problem,
 )
+from .clicks import (
+    ATTRIBUTION_HEADER,
+    CLICKERS_HEADER,
+    attribution_rows,
+    click_report,
+    clicker_rows,
+    sync_clicks,
+)
+from .clicks import describe as describe_clicks
+from .shortlink import (
+    ShlinkClient,
+    ShlinkError,
+    ShlinkHaltError,
+    load_shlink_config,
+    shlink_base_url,
+)
 from .window import DEFAULT_WINDOW, ENV_SEND_WINDOW, parse_window
 from .state import (
+    INVALID,
     NEEDS_REVIEW,
     SUPPRESSED,
     UNKNOWN,
@@ -78,6 +107,12 @@ _value_map_option = click.option(
     help="Translate a --token-column value before sending, e.g. "
          "'trade_side:Buy=خرید'. Repeatable. A row whose value has no entry "
          "is recorded as invalid instead of being sent untranslated.",
+)
+_user_id_column_option = click.option(
+    "--user-id-column", "user_id_column", default=None, metavar="COLUMN",
+    help="CSV column with each recipient's user ID (the input needs a header "
+         "row; its first column is the phone). A blank ID is still sent and "
+         "reported as missing user ID; a phone with two different IDs isn't sent.",
 )
 
 
@@ -129,9 +164,97 @@ def _parse_token_columns(
     return TokenColumns(columns=columns, value_maps=value_maps)
 
 
-def _load_input(input_path: str, token_columns: TokenColumns | None) -> input_loader.LoadResult:
+_LINK_OPTIONS = [
+    click.option(
+        "--link-url", "link_url", default=None, metavar="URL",
+        help="Where the campaign's short links lead (https, on an allowed domain: "
+             f"{ENV_LINK_DOMAINS}, default kifpool.me). Turns on the link stage: "
+             "every link is made at Shlink before any SMS goes out. Needs "
+             "--campaign and --link-token.",
+    ),
+    click.option(
+        "--link-token", "link_token", default=None, type=click.Choice(list(TOKEN_MAX_SPACES)),
+        help="Which template token carries the link.",
+    ),
+    click.option(
+        "--link-format", "link_format", default="url", show_default=True,
+        help="What the token holds. url: the whole https://kifpool.me/u/<code>. "
+             "code: only <code>, for a template whose text already has "
+             "https://kifpool.me/u/. Or a pattern with {code} for a template whose "
+             "text holds part of it, e.g. 'u/{code}' after https://kifpool.me/.",
+    ),
+    click.option(
+        "--link-strategy", "link_strategy", default="recipient", show_default=True,
+        type=click.Choice(LINK_STRATEGIES),
+        help="recipient: one link per person (clicks per recipient). segment: one "
+             "per segment. campaign: one for everyone.",
+    ),
+    click.option(
+        "--link-expiry-days", "link_expiry_days", default=DEFAULT_EXPIRY_DAYS,
+        show_default=True, type=int, help="How long links keep working.",
+    ),
+    click.option("--utm-source", "utm_source", default="sms", show_default=True),
+    click.option("--utm-medium", "utm_medium", default="sms", show_default=True),
+    click.option("--utm-campaign", "utm_campaign", default=None,
+                 help="Default: the campaign name."),
+    click.option("--utm-content", "utm_content", default=None,
+                 help="Default: each recipient's segment (none on a campaign-wide link)."),
+    click.option(
+        "--link-rate", "link_rate", default=DEFAULT_LINK_RATE, show_default=True,
+        help="Cap on link creation at Shlink, e.g. '10/s'. Conservative until "
+             "Shlink's real speed is measured.",
+    ),
+]
+
+
+def _link_options(f: F) -> F:
+    for dec in reversed(_LINK_OPTIONS):
+        f = dec(f)
+    return f
+
+
+def _link_settings(
+    *, link_url: str | None, link_token: str | None, link_format: str,
+    link_strategy: str, link_expiry_days: int, utm_source: str, utm_medium: str,
+    utm_campaign: str | None, utm_content: str | None, campaign: str | None,
+    static_tokens: dict[str, str | None], token_columns: TokenColumns | None,
+) -> LinkSettings | None:
+    """The campaign's link settings from the flags, or None without --link-url."""
+    if link_url is None:
+        if link_token is not None:
+            raise click.UsageError("--link-token only applies together with --link-url")
+        return None
+    if not campaign:
+        raise click.UsageError(
+            "--link-url needs --campaign: links are tagged, tracked and reported per campaign"
+        )
+    if link_token is None:
+        raise click.UsageError("--link-url needs --link-token: which template token carries it")
+    if static_tokens.get(link_token) is not None:
+        raise click.UsageError(f"{link_token} carries the link; don't also set --{link_token}")
+    if token_columns is not None and link_token in token_columns.columns:
+        raise click.UsageError(
+            f"{link_token} carries the link; don't also fill it with --token-column"
+        )
+    links = LinkSettings(
+        destination=link_url, token=link_token, format=link_format, strategy=link_strategy,
+        expiry_days=link_expiry_days, utm_source=utm_source, utm_medium=utm_medium,
+        utm_campaign=utm_campaign, utm_content=utm_content,
+    )
+    problems = links.problems()
+    if problems:
+        raise click.UsageError("; ".join(problems))
+    problem = destination_problem(link_url, allowed_domains(), shlink_base_url())
+    if problem:
+        raise click.BadParameter(problem, param_hint="--link-url")
+    return links
+
+
+def _load_input(
+    input_path: str, token_columns: TokenColumns | None, user_id_column: str | None = None,
+) -> input_loader.LoadResult:
     try:
-        return input_loader.load(input_path, token_columns)
+        return input_loader.load(input_path, token_columns, user_id_column)
     except InputError as e:
         raise click.UsageError(str(e)) from e
 
@@ -147,8 +270,6 @@ def _load_opt_out(paths: tuple[str, ...]) -> frozenset[str] | None:
     return frozenset(phones)
 
 
-_CAMPAIGN_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
-
 _campaign_option = click.option(
     "--campaign", default=None, metavar="SLUG",
     help="Campaign name, e.g. 'coin-price-7'. Gives the campaign its own state "
@@ -161,7 +282,7 @@ def _resolve_db_path(db_path: str, campaign: str | None) -> str:
     `--campaign X` → data/db/X.db, then the built-in default."""
     if campaign is None:
         return db_path
-    if not _CAMPAIGN_RE.match(campaign):
+    if not SLUG_RE.match(campaign):
         raise click.BadParameter(
             f"{campaign!r}: use lowercase letters, digits and dashes, e.g. coin-price-7",
             param_hint="--campaign",
@@ -201,6 +322,10 @@ def _db_lock(db_path: str) -> Iterator[None]:
 @click.pass_context
 def cli(ctx: click.Context, config_path: str | None, profile_name: str | None) -> None:
     """Reliable bulk SMS sender for Kavenegar verify/lookup."""
+    # `.env` first, before any subcommand reads a setting: options with an
+    # env var (e.g. --send-window) and SMS_SENDER_LINK_DOMAINS see it too.
+    # Never overrides a variable that's already set.
+    load_dotenv(".env")
     try:
         values = load_profile(config_path, profile_name)
     except ProfileError as e:
@@ -239,6 +364,13 @@ def _send_options(f: F) -> F:
                      help="Static token20 value (up to 8 spaces)."),
         _token_column_option,
         _value_map_option,
+        _user_id_column_option,
+        click.option(
+            "--segment", default=None, metavar="NAME",
+            help="Which segment this input is (lowercase letters, digits, dashes); "
+                 "defaults to the input file's name. Recorded per recipient for "
+                 "reports and links.",
+        ),
         click.option("--workers", default=5, show_default=True, type=int),
         click.option("--max-attempts", default=5, show_default=True, type=int),
         click.option("--timeout", default=15.0, show_default=True, type=float),
@@ -312,7 +444,7 @@ def _send_options(f: F) -> F:
         click.option("--verbose", is_flag=True, help="DEBUG-level console output."),
         click.option("--quiet", is_flag=True, help="Only WARNING+ on console."),
     ]
-    for dec in reversed(decorators):
+    for dec in reversed(decorators + _LINK_OPTIONS):
         f = dec(f)
     return f
 
@@ -353,9 +485,22 @@ def _do_send(
     opt_out: tuple[str, ...] = (),
     # None: the env var, else 08:00-21:00 (the wizard doesn't pass it).
     send_window: str | None = None,
+    user_id_column: str | None = None,
+    segment: str | None = None,
+    link_url: str | None = None, link_token: str | None = None,
+    link_format: str = "url", link_strategy: str = "recipient",
+    link_expiry_days: int = DEFAULT_EXPIRY_DAYS,
+    utm_source: str = "sms", utm_medium: str = "sms",
+    utm_campaign: str | None = None, utm_content: str | None = None,
+    link_rate: str | None = DEFAULT_LINK_RATE,
 ) -> None:
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    if segment is not None and not SLUG_RE.match(segment):
+        raise click.BadParameter(
+            f"{segment!r}: use lowercase letters, digits and dashes, e.g. vip-2",
+            param_hint="--segment",
+        )
     db_path = _resolve_db_path(db_path, campaign)
     console_level = (
         logging.DEBUG if verbose else (logging.WARNING if quiet else logging.INFO)
@@ -366,11 +511,20 @@ def _do_send(
         rate_per_sec = parse_rate(rate)
     except ValueError as e:
         raise click.UsageError(str(e)) from e
-    token_columns = _parse_token_columns(
-        token_column, value_map,
-        {"token": token, "token2": token2, "token3": token3,
-         "token10": token10, "token20": token20},
+    static_tokens = {"token": token, "token2": token2, "token3": token3,
+                     "token10": token10, "token20": token20}
+    token_columns = _parse_token_columns(token_column, value_map, static_tokens)
+    links = _link_settings(
+        link_url=link_url, link_token=link_token, link_format=link_format,
+        link_strategy=link_strategy, link_expiry_days=link_expiry_days,
+        utm_source=utm_source, utm_medium=utm_medium, utm_campaign=utm_campaign,
+        utm_content=utm_content, campaign=campaign, static_tokens=static_tokens,
+        token_columns=token_columns,
     )
+    try:
+        link_rate_per_sec = parse_rate(link_rate)
+    except ValueError as e:
+        raise click.UsageError(f"--link-rate: {e}") from e
     if send_window is None:
         send_window = os.environ.get(ENV_SEND_WINDOW, DEFAULT_WINDOW)
     try:
@@ -391,6 +545,12 @@ def _do_send(
         max_attempts=max_attempts,
         backoff_max=backoff_max,
     )
+    link_client = None
+    if links is not None:
+        try:
+            link_client = ShlinkClient(load_shlink_config(timeout=timeout))
+        except RuntimeError as e:
+            raise click.UsageError(str(e)) from e
     runner = make_runner(
         input_path=input_path, db_path=db_path, sender_cfg=sender_cfg, workers=workers,
         preflight=not no_preflight, smoke_test=smoke_test,
@@ -401,6 +561,11 @@ def _do_send(
         allow_settings_change=allow_settings_change,
         opt_out=_load_opt_out(opt_out),
         send_window=window,
+        user_id_column=user_id_column,
+        segment=segment,
+        links=links,
+        link_client=link_client,
+        link_rate_per_sec=link_rate_per_sec,
     )
     try:
         summary = runner.run()
@@ -499,6 +664,26 @@ def status(db_path: str, campaign: str | None) -> None:
     delivered = store.delivery_counts()
     if delivered:
         click.echo(f"delivery   {describe_delivery(delivered)}")
+    if store.get_meta("user_id_column") is not None:
+        with_id, missing = store.user_id_counts()
+        click.echo(f"user IDs   {with_id} recipient(s); missing user ID: {missing}")
+    links = store.link_counts()
+    if links:
+        click.echo("links      " + " · ".join(
+            f"{status} {links[status]}" for status in ("ready", "pending", "failed")
+            if links.get(status)
+        ))
+    synced = store.last_click_sync()
+    if synced is not None:
+        segments, campaign_clicks = click_report(store)
+        total = sum(s.clicks for s in segments) + campaign_clicks
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(synced))
+        personal = [s for s in segments if s.clicked is not None]
+        clicked = (
+            f"; clicked {sum(s.clicked or 0 for s in personal)} of "
+            f"{sum(s.sent for s in personal)} recipients" if personal else ""
+        )
+        click.echo(f"clicks     {total} (bots excluded, synced {when}){clicked}")
     counts = store.counts()
     if not counts:
         click.echo("(empty)")
@@ -535,6 +720,7 @@ def export_failed(db_path: str, out: str, campaign: str | None) -> None:
     "--status", "from_status", default="failed_permanent", show_default=True,
     type=click.Choice([
         "failed_permanent", "failed_retriable", "sent", UNKNOWN, NEEDS_REVIEW, SUPPRESSED,
+        INVALID,
     ]),
     help="Which status to promote back to pending so it gets resent.",
 )
@@ -565,6 +751,9 @@ def reset(db_path: str, from_status: str, yes: bool, campaign: str | None) -> No
                       "Are you sure?",
         SUPPRESSED: "These recipients are on the opt-out list. Resetting them sends "
                     "them the campaign. Are you sure?",
+        INVALID: "These phones came with two different user IDs, so their clicks "
+                 "can't be attributed. Reset only after fixing the IDs at the source; "
+                 "a run with --user-id-column checks them again. Are you sure?",
     }
     if from_status in risky and not yes:
         click.confirm(risky[from_status], abort=True)
@@ -696,24 +885,155 @@ def delivery(db_path: str, campaign: str | None, timeout: float, log_file: str) 
     click.echo(f"delivery   {describe_delivery(store.delivery_counts()) or '(nothing sent)'}")
 
 
+def _campaign_store(db_path: str, campaign: str | None) -> tuple[str, StateStore, str]:
+    """(db path, store, campaign name) for commands that read a campaign's
+    DB. Never creates one."""
+    db_path = _resolve_db_path(db_path, campaign)
+    if not Path(db_path).exists():
+        raise click.UsageError(f"No state DB at {db_path}.")
+    store = StateStore(db_path)
+    name = campaign or store.get_meta("campaign") or Path(db_path).stem
+    return db_path, store, name
+
+
+def _write_csv(path: Path, header: list[str], rows: Iterator[list]) -> int:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    n = 0
+    with path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(header)
+        for row in rows:
+            w.writerow(row)
+            n += 1
+    return n
+
+
+@cli.command()
+@click.option("--state", "db_path", default="./sms_state.db", show_default=True,
+              type=click.Path(dir_okay=False))
+@_campaign_option
+@click.option("--timeout", default=15.0, show_default=True, type=float)
+@click.option(
+    "--log-file", default="./logs/sms-sender.log", show_default=True,
+    type=click.Path(dir_okay=False),
+)
+def clicks(db_path: str, campaign: str | None, timeout: float, log_file: str) -> None:
+    """Fetch click counts from Shlink and show them per segment. Never sends anything.
+
+    Counts exclude bots and link-preview fetchers. Recipients without a user
+    ID are shown as missing user ID."""
+    logging_config.setup(log_file=log_file, console_level=logging.WARNING)
+    _, store, name = _campaign_store(db_path, campaign)
+    try:
+        client = ShlinkClient(load_shlink_config(timeout=timeout))
+    except RuntimeError as e:
+        raise click.UsageError(str(e)) from e
+    try:
+        result = sync_clicks(store, client, name)
+    except ShlinkError as e:
+        click.echo(f"Error: Shlink didn't answer: {e}", err=True)
+        sys.exit(2 if isinstance(e, ShlinkHaltError) else 1)
+    click.echo(f"{result.links} link(s) at Shlink, {result.clicks} click(s) (bots excluded)")
+    segments, campaign_clicks = click_report(store)
+    for line in describe_clicks(segments, campaign_clicks):
+        click.echo(line)
+
+
+@cli.command("export-attribution")
+@click.option("--state", "db_path", default="./sms_state.db", show_default=True,
+              type=click.Path(dir_okay=False))
+@_campaign_option
+@click.option("--out", default=None, type=click.Path(dir_okay=False),
+              help="Default: data/exports/<campaign>-attribution.csv")
+def export_attribution(db_path: str, campaign: str | None, out: str | None) -> None:
+    """Which recipient each link's `r` belongs to, for the backend. No phone numbers.
+
+    One row per sent recipient with a link of their own: ref, user ID (or
+    missing user ID), segment, link, accepted time (ISO 8601, UTC),
+    delivery and clicks. Run `clicks` first for fresh counts."""
+    _, store, name = _campaign_store(db_path, campaign)
+    path = Path(out or f"data/exports/{name}-attribution.csv")
+    n = _write_csv(path, ATTRIBUTION_HEADER, attribution_rows(store))
+    click.echo(f"Wrote {n} rows to {path}")
+
+
+@cli.command("export-clickers")
+@click.option("--state", "db_path", default="./sms_state.db", show_default=True,
+              type=click.Path(dir_okay=False))
+@_campaign_option
+@click.option("--out", default=None, type=click.Path(dir_okay=False),
+              help="Default: data/exports/<campaign>-clickers.csv")
+def export_clickers(db_path: str, campaign: str | None, out: str | None) -> None:
+    """Recipients who clicked their own link, most clicks first. Contains phone numbers.
+
+    Run `clicks` first for fresh counts."""
+    _, store, name = _campaign_store(db_path, campaign)
+    path = Path(out or f"data/exports/{name}-clickers.csv")
+    n = _write_csv(path, CLICKERS_HEADER, clicker_rows(store))
+    click.echo(f"Wrote {n} rows to {path}")
+
+
 @cli.command("dry-run")
 @click.option("--input", "input_path", required=True, type=click.Path(exists=True, dir_okay=False))
 @_token_column_option
 @_value_map_option
-def dry_run(input_path: str, token_column: tuple[str, ...], value_map: tuple[str, ...]) -> None:
-    """Parse + normalize + dedup, print what would be sent. No API calls."""
-    result = _load_input(input_path, _parse_token_columns(token_column, value_map, {}))
+@_user_id_column_option
+@_campaign_option
+@click.option("--segment", default=None, metavar="NAME",
+              help="Segment name for the link preview (default: the file's name).")
+@_link_options
+def dry_run(
+    input_path: str, token_column: tuple[str, ...], value_map: tuple[str, ...],
+    user_id_column: str | None, campaign: str | None, segment: str | None,
+    link_rate: str, **link_flags: Any,
+) -> None:
+    """Parse + normalize + dedup, print what would be sent. No API calls.
+
+    With --link-url (and --campaign), also shows the long URL a recipient's
+    link would get — nothing is created at Shlink."""
+    if segment is not None and not SLUG_RE.match(segment):
+        raise click.BadParameter(
+            f"{segment!r}: use lowercase letters, digits and dashes", param_hint="--segment",
+        )
+    token_columns = _parse_token_columns(token_column, value_map, {})
+    links = _link_settings(
+        **link_flags, campaign=campaign, static_tokens={}, token_columns=token_columns,
+    )
+    result = _load_input(input_path, token_columns, user_id_column)
     click.echo(f"valid={len(result.valid)} invalid={len(result.invalid)} "
                f"duplicates_collapsed={result.duplicates_collapsed}")
+    if user_id_column is not None:
+        click.echo(
+            f"user IDs: missing user ID={result.missing_user_id} (still sent), "
+            f"conflicting user IDs={len(result.conflicts)} phone(s) (not sent)"
+        )
     if result.header is not None:
         click.echo(f"  (skipped header row {result.header!r})")
     for r in result.valid[:10]:
         tokens = "".join(f"  {k}={v}" for k, v in r.tokens.items())
-        click.echo(f"  {r.phone}  (raw={r.raw!r}){tokens}")
+        who = (f"  user_id={r.user_id or '(missing user ID)'}"
+               if user_id_column is not None else "")
+        click.echo(f"  {r.phone}  (raw={r.raw!r}){tokens}{who}")
     if len(result.valid) > 10:
         click.echo(f"  ... and {len(result.valid) - 10} more")
     for inv in result.invalid:
         click.echo(f"  INVALID line {inv.line_no}: {inv.raw!r} — {inv.reason}")
+    if links is not None and result.valid:
+        assert campaign is not None
+        row = plan_link(
+            links, campaign=campaign, key=result.valid[0].phone,
+            segment=segment or input_loader.segment_from_path(input_path),
+        )
+        click.echo(
+            f"\nlinks: {links.strategy} strategy, {links.token} carries "
+            f"{placeholder_token(links.format, shlink_base_url())}"
+        )
+        click.echo(f"  long URL   {row.long_url}")
+        click.echo(f"  title      {row.title}")
+        click.echo(f"  tags       {', '.join(row.tags)}")
+        click.echo(f"  expires    {row.valid_until}")
+        if row.ref:
+            click.echo("  (r is random and different for every recipient)")
 
 
 @cli.command()
@@ -745,13 +1065,21 @@ def dry_run(input_path: str, token_column: tuple[str, ...], value_map: tuple[str
     help="Actually send to --phone. Requires --phone (single number) and "
          "does NOT touch the state DB.",
 )
+@click.option(
+    "--link-token", "link_token", default=None, type=click.Choice(list(TOKEN_MAX_SPACES)),
+    help="Show where the campaign's short link will go (a placeholder: links "
+         "are only made by `send`).",
+)
+@click.option("--link-format", "link_format", default="url", show_default=True,
+              help="url, code, or a pattern with {code}, as for `send`.")
 @click.option("--timeout", default=15.0, show_default=True, type=float)
 def preview(
     template: str, token: str | None, token2: str | None, token3: str | None,
     token10: str | None, token20: str | None,
     token_column: tuple[str, ...], value_map: tuple[str, ...],
     phone: str | None, input_path: str | None, limit: int,
-    check_account: bool, do_send: bool, timeout: float,
+    check_account: bool, do_send: bool, link_token: str | None, link_format: str,
+    timeout: float,
 ) -> None:
     """Show the exact request that would be POSTed for one or more phones.
 
@@ -764,11 +1092,14 @@ def preview(
         raise click.UsageError("Pass --phone or --input.")
     if do_send and not phone:
         raise click.UsageError("--send requires --phone (single number).")
-    token_columns = _parse_token_columns(
-        token_column, value_map,
-        {"token": token, "token2": token2, "token3": token3,
-         "token10": token10, "token20": token20},
-    )
+    if do_send and link_token:
+        raise click.UsageError(
+            "--send can't include a link: links are made by `send`. To see a real "
+            "one, use `send --approval-test`, which sends the test SMS its own link."
+        )
+    static_tokens = {"token": token, "token2": token2, "token3": token3,
+                     "token10": token10, "token20": token20}
+    token_columns = _parse_token_columns(token_column, value_map, static_tokens)
     if token_columns is not None and not input_path:
         raise click.UsageError("--token-column needs --input: the tokens come from its columns.")
 
@@ -812,6 +1143,16 @@ def preview(
 
     # Never echo the real key, even when --send / --check-account loaded it.
     base_url = "https://api.kavenegar.com/v1/<API_KEY>/verify/lookup.json"
+    if link_token is not None:
+        problem = link_format_problem(link_format)
+        if problem:
+            raise click.BadParameter(problem, param_hint="--link-format")
+        if static_tokens[link_token] is not None or (
+            token_columns is not None and link_token in token_columns.columns
+        ):
+            raise click.UsageError(f"{link_token} carries the link; don't also set it")
+        placeholder = placeholder_token(link_format, shlink_base_url())
+        row_tokens = {p: {**row_tokens.get(p, {}), link_token: placeholder} for p in phones}
     for p in phones:
         params = sender.build_params(p, row_tokens.get(p))
         click.echo(f"\nPOST {base_url}")
