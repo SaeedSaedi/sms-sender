@@ -131,6 +131,30 @@ def test_another_campaigns_message_that_day_is_not_ours(tmp_path):
     assert state.counts() == {FAILED_RETRIABLE: 1}
 
 
+def test_a_neighbour_db_nobody_has_open_is_still_read(tmp_path):
+    """The usual case: the other campaign finished long ago, so its file sits
+    alone, without WAL side files. (`mode=ro` can't open it then.)"""
+    import shutil
+
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    other = StateStore(elsewhere / "other-campaign.db")
+    other.upsert_pending([(PHONE, PHONE)])
+    other.claim(PHONE)
+    other.mark_sent(PHONE, message_id=888, status_code=200)
+    other._conn().execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    folder = tmp_path / "db"
+    folder.mkdir()
+    shutil.copy(elsewhere / "other-campaign.db", folder / "other-campaign.db")
+    assert not (folder / "other-campaign.db-shm").exists()
+
+    state = unknown_row(folder)
+    before = (folder / "other-campaign.db").read_bytes()
+    result = reconcile_unknown(state, FakeProvider([ProviderMessage(888, 10)]), now=later())
+    assert (result.sent, result.requeued) == (0, 1)
+    assert (folder / "other-campaign.db").read_bytes() == before  # never written
+
+
 def test_an_unreadable_neighbour_db_is_skipped(tmp_path):
     (tmp_path / "broken.db").write_bytes(b"not a database")
     state = unknown_row(tmp_path)
