@@ -17,3 +17,7 @@ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 # WhiteNoise looks for the collected files at startup; tests never collect.
 STATIC_ROOT = DATA_DIR / "static"  # noqa: F405
 STATIC_ROOT.mkdir(parents=True, exist_ok=True)
+# A file, not SQLite's shared in-memory DB: the worker's heartbeat thread
+# writes alongside the test's own connection, and shared-cache table locks
+# fail at once instead of waiting.
+DATABASES["default"]["TEST"] = {"NAME": str(DATA_DIR / "test-app.db")}  # noqa: F405

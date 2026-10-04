@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "sms_sender_web.dashboard",
+    "sms_sender_web.jobs",
 ]
 
 MIDDLEWARE = [
@@ -131,3 +132,16 @@ SECURE_REFERRER_POLICY = "same-origin"
 X_FRAME_OPTIONS = "DENY"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# The engine's and the worker's logs, as key=value lines on the console
+# (docker logs), like the CLI's.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"kv": {"()": "sms_sender.logging_config.KeyValueFormatter"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "kv"}},
+    "loggers": {
+        "sms_sender": {"handlers": ["console"], "level": "INFO"},
+        "sms_sender_web": {"handlers": ["console"], "level": "INFO"},
+    },
+}

@@ -401,6 +401,20 @@ internal, multi-user tool built with Django and HTMX. So far it has the
 sign-in page and a read-only list of campaigns, read from the same campaign
 DBs the CLI writes.
 
+It also has a background **worker** (`python manage.py run_worker`, the
+`worker` service in Compose) that runs the jobs the dashboard queues: sends,
+reconciliation, and delivery and click updates, one at a time.
+- **Pause** stops taking new recipients; requests already in flight finish
+  and are recorded.
+- **Resume** continues from the campaign DB without sending anyone twice.
+- **Cancel** marks everyone still waiting as `cancelled`; SMS already
+  accepted are final.
+- **Restarts:** if the worker stops or dies, its job is picked up again.
+- **Scheduled updates:** while idle, it queues delivery updates during
+  Kavenegar's 48-hour window, and click updates.
+
+The pages that start and control sends come next.
+
 Run it locally with Docker:
 
 ```bash

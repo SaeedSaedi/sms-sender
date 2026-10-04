@@ -1,0 +1,272 @@
+"""The dashboard's background worker: one process, one job at a time (spec
+4.8). Run it with `python manage.py run_worker`.
+
+- A job is claimed with an atomic UPDATE and a lease. While a job runs, a
+  heartbeat thread renews the lease and watches for an operator's pause or
+  cancel; a lease that expires means the worker died, and the job is
+  claimed again (each kind is safe to repeat: the campaign DB decides what
+  still needs doing, and the run lock keeps two runs off one campaign).
+- Pause, cancel and a worker shutdown all stop a send the same way —
+  `Runner.cancel()`: nothing new is claimed, and requests in flight finish
+  and are recorded. Then a paused job waits, a cancelled one cancels its
+  remaining recipients, and an interrupted one is queued again.
+- When idle, it queues delivery updates while Kavenegar still answers
+  (48 h) and click updates for recent campaigns.
+"""
+from __future__ import annotations
+
+import dataclasses
+import logging
+import os
+import socket
+import threading
+import time
+from datetime import timedelta
+
+from django.db import close_old_connections, connection, transaction
+from django.db.models import F, Q, Value
+from django.db.models.functions import Coalesce
+from django.utils import timezone
+
+from sms_sender.clicks import sync_clicks
+from sms_sender.delivery import FINAL, WINDOW_SEC, sync_delivery
+from sms_sender.input_loader import InputError
+from sms_sender.locking import RunLock, RunLockError
+from sms_sender.reconcile import reconcile_unknown
+from sms_sender.state import CampaignMismatchError
+
+from .engine import Engine, campaign_db
+from .models import Campaign, Job
+from .reporter import JobReporter
+from .services import ACTIVE
+
+logger = logging.getLogger(__name__)
+
+LEASE = timedelta(seconds=60)
+HEARTBEAT_SEC = 10.0
+# A job whose worker died this many times is given up on (something about
+# the job itself keeps killing the worker).
+MAX_ATTEMPTS = 5
+SCHEDULE_EVERY = timedelta(minutes=5)
+DELIVERY_EVERY = timedelta(minutes=15)
+CLICKS_EVERY = timedelta(hours=1)
+CLICKS_FOR = timedelta(days=14)
+
+# Why a running send was stopped; a later reason only wins if it's stronger.
+_STOP_PRIORITY = {"lost": 0, "shutdown": 1, "pause": 2, "cancel": 3}
+
+
+class _StopReason:
+    def __init__(self) -> None:
+        self.value: str | None = None
+        self._lock = threading.Lock()
+
+    def set(self, why: str) -> bool:
+        with self._lock:
+            if self.value is None or _STOP_PRIORITY[why] > _STOP_PRIORITY[self.value]:
+                self.value = why
+                return True
+            return False
+
+
+class _Heartbeat(threading.Thread):
+    """Renews the lease and turns pause / cancel / shutdown into `on_stop`."""
+
+    def __init__(self, worker: "Worker", job_id: int, on_stop):
+        super().__init__(name=f"heartbeat-{job_id}", daemon=True)
+        self.worker = worker
+        self.job_id = job_id
+        self.on_stop = on_stop
+        self._done = threading.Event()
+
+    def run(self) -> None:
+        try:
+            while not self._done.wait(self.worker.heartbeat_sec):
+                renewed = Job.objects.filter(pk=self.job_id, lease_owner=self.worker.id).update(
+                    lease_until=timezone.now() + self.worker.lease,
+                )
+                if not renewed:
+                    self.on_stop("lost")  # another worker took it over
+                    continue
+                control = Job.objects.filter(pk=self.job_id).values_list("control", flat=True).first()
+                if control:
+                    self.on_stop(control)
+                elif self.worker.stop.is_set():
+                    self.on_stop("shutdown")
+        finally:
+            connection.close()
+
+    def finish(self) -> None:
+        self._done.set()
+        self.join()
+
+
+class Worker:
+    def __init__(
+        self, engine: Engine | None = None, *, worker_id: str | None = None,
+        lease: timedelta = LEASE, heartbeat_sec: float = HEARTBEAT_SEC,
+        max_attempts: int = MAX_ATTEMPTS, stop: threading.Event | None = None,
+    ):
+        self.engine = engine or Engine()
+        self.id = worker_id or f"{socket.gethostname()}:{os.getpid()}"
+        self.lease = lease
+        self.heartbeat_sec = heartbeat_sec
+        self.max_attempts = max_attempts
+        self.stop = stop or threading.Event()
+        self._next_schedule = None
+
+    # ---------- claiming ----------
+
+    def claim(self) -> Job | None:
+        """Take the oldest waiting job — or a running one whose worker died
+        (lease expired) — atomically: two workers never get the same job."""
+        while True:
+            now = timezone.now()
+            claimable = Q(state=Job.State.QUEUED) | Q(state=Job.State.RUNNING, lease_until__lt=now)
+            with transaction.atomic():
+                job = Job.objects.filter(claimable).order_by("created_at", "id").first()
+                if job is None:
+                    return None
+                if job.attempts >= self.max_attempts:
+                    Job.objects.filter(pk=job.pk).update(
+                        state=Job.State.FAILED, finished_at=now, lease_owner="", lease_until=None,
+                        last_error=f"the worker stopped mid-job {job.attempts} times; given up",
+                    )
+                    continue
+                taken = Job.objects.filter(claimable, pk=job.pk).update(
+                    state=Job.State.RUNNING, lease_owner=self.id, lease_until=now + self.lease,
+                    attempts=F("attempts") + 1, started_at=Coalesce(F("started_at"), Value(now)),
+                )
+            if taken:
+                return Job.objects.select_related("campaign").get(pk=job.pk)
+            # someone else took it between our read and update; look again
+
+    # ---------- running ----------
+
+    def run_once(self) -> Job | None:
+        job = self.claim()
+        if job is not None:
+            self.execute(job)
+            job.refresh_from_db()
+        return job
+
+    def run_forever(self, poll_sec: float = 2.0) -> None:
+        logger.info("worker_started", extra={"worker": self.id})
+        while not self.stop.is_set():
+            close_old_connections()
+            try:
+                self.schedule()
+                if self.run_once() is None:
+                    self.stop.wait(poll_sec)
+            except Exception:  # noqa: BLE001 — keep the worker alive
+                logger.exception("worker_error", extra={"worker": self.id})
+                self.stop.wait(poll_sec)
+        logger.info("worker_stopped", extra={"worker": self.id})
+
+    def execute(self, job: Job) -> None:
+        handler = {
+            Job.Kind.SEND: self._send,
+            Job.Kind.RECONCILE: self._reconcile,
+            Job.Kind.DELIVERY: self._delivery,
+            Job.Kind.CLICKS: self._clicks,
+        }[job.kind]
+        logger.info("job_started", extra={"job": job.pk, "kind": job.kind, "campaign": job.campaign.slug})
+        try:
+            state, result, error = handler(job)
+        except Exception as e:  # noqa: BLE001 — recorded on the job
+            logger.exception("job_crashed", extra={"job": job.pk})
+            state, result, error = Job.State.FAILED, {}, f"{type(e).__name__}: {e}"
+        finished = None if state == Job.State.QUEUED else timezone.now()
+        Job.objects.filter(pk=job.pk, lease_owner=self.id).update(
+            state=state, result=result, last_error=error, control="",
+            lease_owner="", lease_until=None, finished_at=finished,
+        )
+        logger.info("job_finished", extra={"job": job.pk, "state": str(state)})
+
+    def _send(self, job: Job):
+        reporter = JobReporter(job)
+        runner = self.engine.runner(job.campaign, reporter)
+        reason = _StopReason()
+
+        def on_stop(why: str) -> None:
+            if reason.set(why):
+                logger.info("job_stop_requested", extra={"job": job.pk, "why": why})
+            runner.cancel()
+
+        heartbeat = _Heartbeat(self, job.pk, on_stop)
+        heartbeat.start()
+        try:
+            summary = runner.run()
+        except RunLockError as e:
+            return Job.State.FAILED, {}, f"another sms-sender process is sending this campaign: {e}"
+        except (CampaignMismatchError, InputError, FileNotFoundError) as e:
+            return Job.State.FAILED, {}, str(e)
+        finally:
+            heartbeat.finish()
+
+        result = {
+            k: v for k, v in dataclasses.asdict(summary).items() if k != "top_errors"
+        }
+        result["top_errors"] = [[message, count] for message, count in summary.top_errors]
+        if reason.value == "cancel":
+            with RunLock(campaign_db(job.campaign)):
+                result["cancelled"] = self.engine.state(job.campaign).cancel_remaining()
+            return Job.State.CANCELLED, result, ""
+        if reason.value == "pause":
+            return Job.State.PAUSED, result, ""
+        if reason.value in ("shutdown", "lost"):
+            return Job.State.QUEUED, result, ""  # taken up again by the next worker
+        if summary.halted:
+            # A halt mid-send (e.g. credit ran out) leaves its reason in the
+            # top errors; a failed pre-send check, in the last note.
+            why = "; ".join(f"{message} (x{count})" for message, count in summary.top_errors)
+            return Job.State.FAILED, result, why or reporter.last_note or "the run halted"
+        if summary.stopped:
+            return Job.State.PAUSED, result, "the sending window closed; resume inside it"
+        return Job.State.DONE, result, ""
+
+    def _reconcile(self, job: Job):
+        try:
+            with RunLock(campaign_db(job.campaign)):
+                summary = reconcile_unknown(self.engine.state(job.campaign), self.engine.sender())
+        except RunLockError as e:
+            return Job.State.FAILED, {}, f"the campaign is busy: {e}"
+        return Job.State.DONE, dataclasses.asdict(summary), ""
+
+    def _delivery(self, job: Job):
+        # No run lock: it only writes the delivery columns (safe during a send).
+        summary = sync_delivery(self.engine.state(job.campaign), self.engine.sender())
+        return Job.State.DONE, dataclasses.asdict(summary), ""
+
+    def _clicks(self, job: Job):
+        summary = sync_clicks(self.engine.state(job.campaign), self.engine.link_client(), job.campaign.slug)
+        return Job.State.DONE, dataclasses.asdict(summary), ""
+
+    # ---------- periodic updates ----------
+
+    def schedule(self, force: bool = False) -> None:
+        """Queue delivery updates while Kavenegar still answers (48 h after
+        sending) and click updates for campaigns sent in the last 14 days."""
+        now = timezone.now()
+        if not force and self._next_schedule is not None and now < self._next_schedule:
+            return
+        self._next_schedule = now + SCHEDULE_EVERY
+        for campaign in Campaign.objects.all():
+            if not campaign_db(campaign).exists():
+                continue
+            store = self.engine.state(campaign)
+            if store.messages_awaiting_delivery(sent_after=time.time() - WINDOW_SEC, final=FINAL):
+                self._enqueue_if_due(campaign, Job.Kind.DELIVERY, DELIVERY_EVERY)
+            last_send = Job.objects.filter(
+                campaign=campaign, kind=Job.Kind.SEND, started_at__gte=now - CLICKS_FOR,
+            ).exists()
+            if last_send and store.link_counts().get("ready"):
+                self._enqueue_if_due(campaign, Job.Kind.CLICKS, CLICKS_EVERY)
+
+    def _enqueue_if_due(self, campaign: Campaign, kind: str, every: timedelta) -> None:
+        jobs = Job.objects.filter(campaign=campaign, kind=kind)
+        if jobs.filter(state__in=ACTIVE).exists():
+            return
+        if jobs.filter(finished_at__gte=timezone.now() - every).exists():
+            return
+        Job.objects.create(campaign=campaign, kind=kind)

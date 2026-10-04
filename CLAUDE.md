@@ -237,6 +237,14 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - Status names live in `dashboard/terms.py`, worded as in the spec's glossary.
   - Show numbers with the `fa` filters: `fa_number`, `fa_digits`, `jalali` (Solar Hijri, Tehran time) and `ltr` (`<bdi dir="ltr">` for values with separators or Latin letters).
   - Never put Persian digits inside links or codes.
+- **Jobs and the worker** (`jobs/`, spec 4.6 / 4.8). `Campaign` holds a campaign's send settings, in the CLI's terms; its `slug` names `data/db/<slug>.db`. `Job` kinds: send, reconcile, delivery, clicks. `JobEvent` holds the engine's notes.
+  - **Claiming:** `Worker.claim` takes the oldest queued job, or a running one whose lease expired, with an atomic UPDATE. A heartbeat thread renews the lease every 10 s and reads `Job.control`.
+  - **Stopping:** pause, cancel and SIGTERM all end in `Runner.cancel()`. Afterwards, a paused job waits, a cancelled one runs `StateStore.cancel_remaining()` (claimable → `cancelled`), and an interrupted one goes back to queued.
+  - **Giving up:** after `MAX_ATTEMPTS` lost leases a job fails.
+  - **Operator actions** are in `jobs/services.py`: enqueue (one active job per campaign and kind), pause, resume, cancel. Cancelling a job that isn't running takes the campaign's run lock.
+  - **Engine:** `jobs/engine.Engine` builds the CLI's runner from `Campaign.settings` (`make_runner(reporter=JobReporter, install_signal_handlers=False)`); tests swap in fakes. The approval test isn't part of a send job; it becomes its own dashboard step.
+  - **Scheduler:** `Worker.schedule` queues delivery updates while sent rows are under 48 h old, and click updates for 14 days.
+  - **One worker only.** Test DBs are files, not shared-memory SQLite (`settings_test`), because the heartbeat thread writes concurrently.
 - **CSS:** logical properties only (`margin-inline-start`, `padding-block`, …), so the layout mirrors for RTL. HTMX and the Vazirmatn font (OFL) are vendored in `static/`; no CDNs.
 - **Docker:** `Dockerfile` + `compose.yaml` (service `web`, gunicorn, `/healthz`). The port is published on `${BIND_ADDR:-127.0.0.1}`, so it's shared over NetBird only on purpose.
 

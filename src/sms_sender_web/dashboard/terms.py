@@ -14,6 +14,7 @@ SUBMISSION_STATUS = {
     "needs_review": _("Needs review"),
     "suppressed": _("On the suppression list"),
     "invalid": _("Invalid"),
+    "cancelled": _("Cancelled"),
 }
 STATUS_ORDER = tuple(SUBMISSION_STATUS)
 

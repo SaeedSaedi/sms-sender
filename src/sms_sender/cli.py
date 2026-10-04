@@ -65,6 +65,7 @@ from .shortlink import (
 )
 from .window import DEFAULT_WINDOW, ENV_SEND_WINDOW, parse_window
 from .state import (
+    CANCELLED,
     INVALID,
     NEEDS_REVIEW,
     SUPPRESSED,
@@ -720,7 +721,7 @@ def export_failed(db_path: str, out: str, campaign: str | None) -> None:
     "--status", "from_status", default="failed_permanent", show_default=True,
     type=click.Choice([
         "failed_permanent", "failed_retriable", "sent", UNKNOWN, NEEDS_REVIEW, SUPPRESSED,
-        INVALID,
+        INVALID, CANCELLED,
     ]),
     help="Which status to promote back to pending so it gets resent.",
 )

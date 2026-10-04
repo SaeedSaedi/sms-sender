@@ -1045,6 +1045,8 @@ def make_runner(
     links: LinkSettings | None = None,
     link_client: LinkClient | None = None,
     link_rate_per_sec: float = 10.0,
+    reporter: Reporter | None = None,
+    install_signal_handlers: bool = True,
 ) -> Runner:
     state = StateStore(db_path)
     sender = Sender(sender_cfg, on_attempt=_attempt_recorder(state))
@@ -1068,4 +1070,6 @@ def make_runner(
         links=links,
         link_client=link_client,
         link_rate_per_sec=link_rate_per_sec,
+        reporter=reporter,
+        install_signal_handlers=install_signal_handlers,
     )

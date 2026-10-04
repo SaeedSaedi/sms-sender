@@ -1,0 +1,75 @@
+"""The CLI's engine, built for a campaign: the dashboard runs exactly what
+`sms-sender send` runs. Tests swap this class for one with fakes."""
+from __future__ import annotations
+
+from pathlib import Path
+
+from django.conf import settings as django_settings
+
+from sms_sender import input_loader
+from sms_sender.config import load_api_key
+from sms_sender.input_loader import TokenColumns
+from sms_sender.links import DEFAULT_RATE as DEFAULT_LINK_RATE
+from sms_sender.links import LinkSettings
+from sms_sender.rate import parse_rate
+from sms_sender.runner import Reporter, Runner, make_runner
+from sms_sender.sender import TOKEN_MAX_SPACES, Sender, SenderConfig
+from sms_sender.shortlink import ShlinkClient, load_shlink_config
+from sms_sender.state import StateStore
+from sms_sender.window import DEFAULT_WINDOW, parse_window
+
+from .models import Campaign
+
+
+def campaign_db(campaign: Campaign) -> Path:
+    return Path(django_settings.SMS_SENDER_DB_DIR) / f"{campaign.slug}.db"
+
+
+class Engine:
+    def state(self, campaign: Campaign) -> StateStore:
+        return StateStore(campaign_db(campaign))
+
+    def sender(self) -> Sender:
+        """For lookups only (delivery, reconciliation): no template needed."""
+        return Sender(SenderConfig(api_key=load_api_key(), template=""))
+
+    def link_client(self) -> ShlinkClient:
+        return ShlinkClient(load_shlink_config())
+
+    def runner(self, campaign: Campaign, reporter: Reporter) -> Runner:
+        """A send run for the campaign's settings (the CLI's flags). The
+        approval test isn't part of it: in the dashboard that's its own step."""
+        s = campaign.settings
+        tokens = {name: s.get("tokens", {}).get(name) for name in TOKEN_MAX_SPACES}
+        sender_cfg = SenderConfig(
+            api_key=load_api_key(), template=s["template"], **tokens,
+            timeout=float(s.get("timeout", 15.0)),
+            max_attempts=int(s.get("max_attempts", 5)),
+            backoff_max=float(s.get("backoff_max", 30.0)),
+        )
+        token_columns = (
+            TokenColumns(columns=dict(s["token_columns"]), value_maps=dict(s.get("value_maps", {})))
+            if s.get("token_columns") else None
+        )
+        links = LinkSettings(**s["links"]) if s.get("links") else None
+        opt_out: set[str] = set()
+        for path in s.get("opt_out", []):
+            opt_out.update(r.phone for r in input_loader.load(path).valid)
+        return make_runner(
+            input_path=s["input"],
+            db_path=campaign_db(campaign),
+            sender_cfg=sender_cfg,
+            workers=int(s.get("workers", 5)),
+            rate_per_sec=parse_rate(s.get("rate")),
+            token_columns=token_columns,
+            campaign=campaign.slug,
+            opt_out=frozenset(opt_out) or None,
+            send_window=parse_window(s.get("send_window", DEFAULT_WINDOW)),
+            user_id_column=s.get("user_id_column"),
+            segment=s.get("segment"),
+            links=links,
+            link_client=self.link_client() if links else None,
+            link_rate_per_sec=parse_rate(s.get("link_rate", DEFAULT_LINK_RATE)),
+            reporter=reporter,
+            install_signal_handlers=False,  # the worker handles signals
+        )

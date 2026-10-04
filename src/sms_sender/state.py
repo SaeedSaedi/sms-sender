@@ -134,6 +134,9 @@ SUPPRESSED = "suppressed"
 # The input says not to send (a phone with two different user IDs). Not
 # claimable, and no retry resets it — only an explicit `reset --status invalid`.
 INVALID = "invalid"
+# The campaign was cancelled before this recipient was sent (spec 4.6). Not
+# claimable; `reset --status cancelled` brings it back.
+CANCELLED = "cancelled"
 
 CLAIMABLE = (PENDING, FAILED_RETRIABLE)
 
@@ -369,6 +372,19 @@ class StateStore:
             )
 
     # ---------- run lifecycle ----------
+
+    def cancel_remaining(self) -> int:
+        """Cancel a campaign: every recipient still waiting (pending or
+        failed_retriable) becomes `cancelled`. Accepted SMS are final, and
+        `unknown` rows stay as they are, to be reconciled. Returns rows changed."""
+        with self._tx() as conn:
+            cur = conn.execute(
+                f"UPDATE recipients SET status=?, last_error='campaign cancelled' "
+                f"WHERE status IN ({','.join('?' * len(CLAIMABLE))}) "
+                f"AND phone NOT LIKE 'INVALID:%'",
+                (CANCELLED, *CLAIMABLE),
+            )
+            return cur.rowcount
 
     def suppress(self, phones: Iterable[str]) -> int:
         """Move opted-out phones out of the send queue. Only claimable rows
