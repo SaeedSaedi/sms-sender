@@ -204,6 +204,21 @@ Canonical form is `09XXXXXXXXX`. The normalizer accepts `+98…`, `0098…`, `98
 | 1 | run finished with some `failed_permanent`, `failed_retriable`, `unknown` or `needs_review`; or it stopped early (`RunSummary.stopped`: Ctrl-C / SIGTERM / `Runner.cancel()`, or the sending window closed) |
 | 2 | `HaltError`, preflight failure (incl. a link that couldn't be made, or Shlink refusing the key), or declined approval-test aborted the run; another process holds the state DB; or the DB belongs to another campaign / was sent with other settings |
 
+### Dashboard (`sms_sender_web`, Phase 3, in progress)
+
+The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI doesn't depend on it. `pip install -e ".[dev,web]"` installs it and its tests (pytest-django). Without the extra, `tests/web/test_fa.py` and `test_pages.py` skip themselves.
+
+- **Settings come from the environment** (`settings.py`): `DJANGO_SECRET_KEY` is required, plus `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `SMS_SENDER_DATA_DIR` and `DJANGO_SECURE_COOKIES`. `.env` is loaded by `manage.py` and `wsgi.py`, **never by settings**, so the test session can't pick up real values. Tests run with `settings_test.py`: a dummy key and a temporary data dir.
+- **Data:** the app DB is `data/app.db` (SQLite, WAL, IMMEDIATE transactions, because the worker will write to it too). Campaign DBs are read through `StateStore` from `data/db/`, the same files as the CLI. Opening one upgrades its schema in place, as the CLI does.
+- **Login on every page:** `LoginRequiredMiddleware`. Only views marked `@login_not_required` are open; for now that's `/healthz` and the login page.
+- **Persian (spec 4.11):**
+  - Templates use `{% translate "English id" %}`, with the Persian in `locale/fa/LC_MESSAGES/django.po`. After any change to the `.po`, recompile with `msgfmt -o django.mo django.po`. `tests/web/test_catalog.py` fails on missing, empty, fuzzy or stale entries, on Arabic «ي»/«ك», and on a space where the glossary has a half-space.
+  - Status names live in `dashboard/terms.py`, worded as in the spec's glossary.
+  - Show numbers with the `fa` filters: `fa_number`, `fa_digits`, `jalali` (Solar Hijri, Tehran time) and `ltr` (`<bdi dir="ltr">` for values with separators or Latin letters).
+  - Never put Persian digits inside links or codes.
+- **CSS:** logical properties only (`margin-inline-start`, `padding-block`, …), so the layout mirrors for RTL. HTMX and the Vazirmatn font (OFL) are vendored in `static/`; no CDNs.
+- **Docker:** `Dockerfile` + `compose.yaml` (service `web`, gunicorn, `/healthz`). The port is published on `${BIND_ADDR:-127.0.0.1}`, so it's shared over NetBird only on purpose.
+
 ## Conventions
 
 - **Recipient phone lists and state DBs are PII.** Keep state DBs in `data/db/` and segment / user-id lists in `data/segments/`; `data/` is gitignored as a whole, and so are root-level `*.csv` / `*.txt` / `*.xls*` (which catches `export-failed`'s default `./failed.csv`) and `*-numbers.*` / `*_numbers.*` anywhere. Never commit one — stage files by name, not with `git add -A` / `git add .`. When moving a DB, update every `state = …` in `sms-sender.toml` too: a path that no longer exists silently opens a fresh, empty DB, and that run re-sends to everyone already sent.

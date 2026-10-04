@@ -1,0 +1,115 @@
+# Persian text of the campaign dashboard. Every term follows the glossary in
+# the spec (4.11). A qualified Persian-speaking specialist reviews and
+# approves this file before Phase 3 ships.
+msgid ""
+msgstr ""
+"Project-Id-Version: sms-sender dashboard\n"
+"PO-Revision-Date: 2026-10-04 14:30+0330\n"
+"Last-Translator: pending the Persian specialist review\n"
+"Language-Team: Persian\n"
+"Language: fa\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+# --- Layout and sign-in ---
+
+msgid "SMS campaigns"
+msgstr "کمپین‌های پیامکی"
+
+msgid "Log in"
+msgstr "ورود"
+
+msgid "Log out"
+msgstr "خروج"
+
+msgid "Username"
+msgstr "نام کاربری"
+
+msgid "Password"
+msgstr "گذرواژه"
+
+msgid "The username or password is not correct. Letter case matters."
+msgstr "نام کاربری یا گذرواژه نادرست است. به بزرگی و کوچکی حروف توجه کنید."
+
+# --- Campaign list ---
+
+msgid "Campaigns"
+msgstr "کمپین‌ها"
+
+msgid "Campaign"
+msgstr "کمپین"
+
+msgid "Template"
+msgstr "قالب پیامک"
+
+msgid "Recipients"
+msgstr "گیرندگان"
+
+msgid "Statuses"
+msgstr "وضعیت‌ها"
+
+msgid "Short links"
+msgstr "لینک‌های کوتاه"
+
+msgid "Last run"
+msgstr "آخرین اجرا"
+
+msgid "No campaigns yet. A campaign appears here after its first run."
+msgstr "هنوز کمپینی نیست. هر کمپین پس از نخستین اجرا در اینجا نمایش داده می‌شود."
+
+# --- Submission status (glossary: «وضعیت ارسال») ---
+
+msgid "Queued"
+msgstr "در صف ارسال"
+
+msgid "Sending"
+msgstr "در حال ارسال"
+
+msgid "Accepted"
+msgstr "پذیرفته‌شده"
+
+msgid "Not sent"
+msgstr "ارسال‌نشده"
+
+msgid "Rejected"
+msgstr "ردشده"
+
+msgid "Unknown"
+msgstr "نامعلوم"
+
+msgid "Needs review"
+msgstr "نیازمند بررسی"
+
+msgid "On the suppression list"
+msgstr "در فهرست عدم ارسال"
+
+msgid "Invalid"
+msgstr "نامعتبر"
+
+# --- Delivery status (glossary: «وضعیت تحویل») ---
+
+msgid "Not checked"
+msgstr "استعلام‌نشده"
+
+msgid "Queued at Kavenegar"
+msgstr "در صف کاوه‌نگار"
+
+msgid "Sent to the network"
+msgstr "ارسال‌شده به مخابرات"
+
+msgid "Failed"
+msgstr "ناموفق"
+
+msgid "Delivered"
+msgstr "تحویل‌شده"
+
+msgid "Undelivered"
+msgstr "تحویل‌نشده"
+
+msgid "Blocked"
+msgstr "مسدودشده"
+
+msgid "Beyond the status window"
+msgstr "خارج از بازه استعلام"

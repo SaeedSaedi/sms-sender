@@ -1,0 +1,17 @@
+# Never in the image: secrets, recipient data, local state.
+.env
+data
+logs
+audit
+build
+.venv
+.git
+**/__pycache__
+**/*.pyc
+tests
+*.db
+*.db-*
+*.lock
+/*.csv
+/*.txt
+/*.xls*

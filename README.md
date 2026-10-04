@@ -390,6 +390,40 @@ sms-sender export-failed --state ./sms_state.db   # dump permanent failures to C
 sms-sender dry-run --input ./numbers.csv          # parse + normalize only, no API
 ```
 
+## Dashboard (Phase 3, in progress)
+
+A Persian, right-to-left web dashboard for running campaigns. It's an
+internal, multi-user tool built with Django and HTMX. So far it has the
+sign-in page and a read-only list of campaigns, read from the same campaign
+DBs the CLI writes.
+
+Run it locally with Docker:
+
+```bash
+cp .env.example .env              # set DJANGO_SECRET_KEY (and the other keys)
+docker compose up --build
+docker compose exec web python manage.py createsuperuser
+```
+
+Then open http://127.0.0.1:8000.
+
+To let colleagues on NetBird reach it:
+1. Set `BIND_ADDR` to this machine's NetBird IP.
+2. Add that IP to `DJANGO_ALLOWED_HOSTS` and `DJANGO_CSRF_TRUSTED_ORIGINS`.
+
+NetBird's access policies decide who can reach the port, and every page
+still needs a login.
+
+Without Docker, run `pip install -e ".[web]"`, then `python manage.py
+migrate`, `python manage.py createsuperuser` and `python manage.py
+runserver`.
+
+All of the dashboard's Persian text lives in
+`src/sms_sender_web/locale/fa/LC_MESSAGES/django.po`. After editing it, run
+`msgfmt -o django.mo django.po` in that folder; a test checks that the two
+match. A Persian-speaking specialist reviews this file before the dashboard
+ships.
+
 ## Exit codes
 
 | Code | Meaning |

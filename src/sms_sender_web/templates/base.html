@@ -1,0 +1,25 @@
+{% load static i18n %}<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% translate "SMS campaigns" %}{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <script src="{% static 'vendor/htmx.min.js' %}" defer></script>
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <header class="topbar">
+    <a class="brand" href="{% url 'home' %}">{% translate "SMS campaigns" %}</a>
+    {% if user.is_authenticated %}
+      <form class="session" method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <span class="who"><bdi dir="ltr">{{ user.get_username }}</bdi></span>
+        <button type="submit" class="link">{% translate "Log out" %}</button>
+      </form>
+    {% endif %}
+  </header>
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
