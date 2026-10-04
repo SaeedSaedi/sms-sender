@@ -18,6 +18,7 @@ from sms_sender.shortlink import ShlinkClient, load_shlink_config
 from sms_sender.state import StateStore
 from sms_sender.window import DEFAULT_WINDOW, parse_window
 
+from ..suppression.service import phones_for
 from .models import Campaign
 
 
@@ -52,7 +53,9 @@ class Engine:
             if s.get("token_columns") else None
         )
         links = LinkSettings(**s["links"]) if s.get("links") else None
-        opt_out: set[str] = set()
+        # The dashboard's suppression list (global, and this campaign's own),
+        # plus any opt-out files in the settings.
+        opt_out: set[str] = set(phones_for(campaign))
         for path in s.get("opt_out", []):
             opt_out.update(r.phone for r in input_loader.load(path).valid)
         return make_runner(

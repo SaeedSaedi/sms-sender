@@ -457,3 +457,286 @@ msgstr "این گذرواژه بیش از حد رایج است."
 
 msgid "This password is entirely numeric."
 msgstr "گذرواژه نباید فقط از رقم تشکیل شده باشد."
+
+# --- Segments, Excel uploads and the suppression list ---
+
+msgid "Segments"
+msgstr "گروه‌های مخاطبان"
+
+msgid "Segment"
+msgstr "گروه مخاطبان"
+
+msgid "Suppression list"
+msgstr "فهرست عدم ارسال"
+
+msgid "Upload a segment"
+msgstr "بارگذاری گروه مخاطبان"
+
+msgid "All segments"
+msgstr "همه گروه‌های مخاطبان"
+
+msgid "No segments yet."
+msgstr "هنوز گروه مخاطبانی بارگذاری نشده است."
+
+msgid "Short name"
+msgstr "نام کوتاه"
+
+msgid "Name"
+msgstr "نام"
+
+msgid "File"
+msgstr "فایل"
+
+msgid "Upload"
+msgstr "بارگذاری"
+
+msgid "Uploaded"
+msgstr "زمان بارگذاری"
+
+msgid "Valid numbers"
+msgstr "شماره‌های معتبر"
+
+msgid "Invalid rows"
+msgstr "سطرهای نامعتبر"
+
+msgid "Missing user ID"
+msgstr "بدون شناسه کاربر"
+
+msgid "Conflicting user IDs"
+msgstr "شناسه کاربر متناقض"
+
+msgid "Repeated numbers"
+msgstr "شماره‌های تکراری"
+
+msgid "Rows"
+msgstr "سطرها"
+
+msgid "rows"
+msgstr "سطر"
+
+msgid "Columns not chosen yet"
+msgstr "ستون‌ها هنوز انتخاب نشده‌اند"
+
+msgid "Ready"
+msgstr "آماده"
+
+msgid "A CSV or TXT file with one recipient per row. In the next step you choose which column holds the mobile numbers."
+msgstr "یک فایل CSV یا TXT که در هر سطر آن یک گیرنده است. در مرحله بعد، ستون شماره‌های موبایل را انتخاب می‌کنید."
+
+msgid "Any name that helps you recognise it, in Persian or English."
+msgstr "هر نامی که شناختن آن را آسان کند، به فارسی یا انگلیسی."
+
+msgid "Lowercase English letters, digits and dashes. It's recorded with each recipient and appears in the links' UTM values. Empty: taken from the file's name."
+msgstr "حروف کوچک انگلیسی، رقم و خط تیره. همراه هر گیرنده ثبت می‌شود و در مقادیر UTM لینک‌ها می‌آید. اگر خالی بماند، از نام فایل گرفته می‌شود."
+
+msgid "Use lowercase English letters, digits and dashes, e.g. vip-users."
+msgstr "فقط حروف کوچک انگلیسی، رقم و خط تیره؛ برای نمونه vip-users."
+
+msgid "A segment with this short name already exists. Choose another."
+msgstr "گروه مخاطبانی با این نام کوتاه وجود دارد. نام دیگری انتخاب کنید."
+
+msgid "Upload a CSV or TXT file. In Excel, use “Save as” → “CSV UTF-8”."
+msgstr "یک فایل CSV یا TXT بارگذاری کنید. در اکسل، از «Save as» گزینه «CSV UTF-8» را انتخاب کنید."
+
+msgid "This is an Excel file. In Excel, save it as “CSV UTF-8” and upload that."
+msgstr "این یک فایل اکسل است. در اکسل آن را با قالب «CSV UTF-8» ذخیره کنید و همان را بارگذاری کنید."
+
+msgid "This doesn't look like a text file. Upload a CSV or TXT file."
+msgstr "این فایل متنی به نظر نمی‌رسد. یک فایل CSV یا TXT بارگذاری کنید."
+
+msgid "The file is larger than 50 MB."
+msgstr "حجم فایل بیش از ۵۰ مگابایت است."
+
+msgid "The file has no rows."
+msgstr "فایل هیچ سطری ندارد."
+
+msgid "Choose the columns"
+msgstr "انتخاب ستون‌ها"
+
+msgid "Choose the column with the mobile numbers. A user ID column, and columns whose values go into the message's tokens, are optional."
+msgstr "ستون شماره‌های موبایل را انتخاب کنید. انتخاب ستون شناسه کاربر، و ستون‌هایی که مقدارشان در متغیرهای قالب پیامک قرار می‌گیرد، اختیاری است."
+
+msgid "Choose the column with the mobile numbers."
+msgstr "ستون شماره‌های موبایل را انتخاب کنید."
+
+msgid "The first row holds the column names"
+msgstr "سطر اول نام ستون‌ها است"
+
+msgid "Column"
+msgstr "ستون"
+
+msgid "Columns"
+msgstr "ستون‌ها"
+
+msgid "First rows"
+msgstr "سطرهای نخست"
+
+msgid "Mobile number"
+msgstr "شماره موبایل"
+
+msgid "User ID"
+msgstr "شناسه کاربر"
+
+msgid "For a token"
+msgstr "برای متغیر قالب"
+
+msgid "For tokens"
+msgstr "برای متغیرهای قالب"
+
+msgid "No user ID column"
+msgstr "بدون ستون شناسه کاربر"
+
+msgid "Without a user ID, recipients are still sent, and appear as “missing user ID” in reports. A number that comes with two different user IDs is not sent."
+msgstr "گیرندگان بدون شناسه کاربر هم پیامک دریافت می‌کنند و در گزارش‌ها «بدون شناسه کاربر» نمایش داده می‌شوند. به شماره‌ای که با دو شناسه کاربر متفاوت آمده باشد پیامکی ارسال نمی‌شود."
+
+msgid "Save and check the list"
+msgstr "ذخیره و بررسی فهرست"
+
+msgid "Choose the columns again; the page was out of date."
+msgstr "ستون‌ها را دوباره انتخاب کنید؛ صفحه به‌روز نبود."
+
+msgid "A column can have only one use."
+msgstr "هر ستون فقط برای یک کاربرد انتخاب می‌شود."
+
+msgid "A chosen column has no name in the first row. Name it in the file, or untick “the first row holds the column names”."
+msgstr "یکی از ستون‌های انتخاب‌شده در سطر اول نامی ندارد. در فایل برای آن نام بگذارید، یا تیک «سطر اول نام ستون‌ها است» را بردارید."
+
+msgid "Two chosen columns have the same name, or one is named “phone”. Rename it in the file."
+msgstr "دو ستون انتخاب‌شده هم‌نام هستند، یا نام یکی از آن‌ها «phone» است. نام آن را در فایل تغییر دهید."
+
+msgid "The file has column names but no rows."
+msgstr "فایل نام ستون‌ها را دارد ولی هیچ سطری ندارد."
+
+msgid "The columns of this file haven't been chosen yet, so it can't be used."
+msgstr "ستون‌های این فایل هنوز انتخاب نشده است و نمی‌توان از آن استفاده کرد."
+
+msgid "Repeated numbers are sent once. The suppression count is from the upload; each send checks the list again."
+msgstr "به شماره‌های تکراری فقط یک بار ارسال می‌شود. تعداد شماره‌های فهرست عدم ارسال مربوط به زمان بارگذاری است؛ هر ارسال فهرست را دوباره بررسی می‌کند."
+
+msgid "Value"
+msgstr "مقدار"
+
+msgid "Reason"
+msgstr "دلیل"
+
+msgid "Not a valid mobile number"
+msgstr "شماره موبایل معتبر نیست"
+
+msgid "Only the first rows are shown."
+msgstr "فقط سطرهای نخست نمایش داده شده است."
+
+msgid "Used by"
+msgstr "استفاده‌شده در"
+
+msgid "Delete the segment"
+msgstr "حذف گروه مخاطبان"
+
+msgid "Delete this segment and its file? Campaigns that already sent keep their own records."
+msgstr "این گروه مخاطبان و فایل آن حذف شود؟ سوابق کمپین‌هایی که پیش‌تر ارسال کرده‌اند باقی می‌ماند."
+
+msgid "A campaign uses this segment, so it can't be deleted."
+msgstr "یک کمپین از این گروه مخاطبان استفاده می‌کند، بنابراین نمی‌توان آن را حذف کرد."
+
+msgid "The segment and its file were deleted."
+msgstr "گروه مخاطبان و فایل آن حذف شد."
+
+msgid "These numbers never get an SMS from any campaign. A number already sent stays sent."
+msgstr "هیچ کمپینی به این شماره‌ها پیامک نمی‌فرستد. افزودن یک شماره، پیامکی را که پیش‌تر ارسال شده است برنمی‌گرداند."
+
+msgid "numbers"
+msgstr "شماره"
+
+msgid "Find a number"
+msgstr "جست‌وجوی شماره"
+
+msgid "Find"
+msgstr "جست‌وجو"
+
+msgid "Show all"
+msgstr "نمایش همه"
+
+msgid "That isn't a valid mobile number."
+msgstr "این شماره موبایل معتبر نیست."
+
+msgid "Number"
+msgstr "شماره"
+
+msgid "Applies to"
+msgstr "مربوط به"
+
+msgid "All campaigns"
+msgstr "همه کمپین‌ها"
+
+msgid "Note"
+msgstr "یادداشت"
+
+msgid "Added"
+msgstr "زمان افزودن"
+
+msgid "Remove"
+msgstr "حذف"
+
+msgid "Remove this number from the suppression list? Campaigns can send to it again."
+msgstr "این شماره از فهرست عدم ارسال حذف شود؟ کمپین‌ها دوباره می‌توانند به آن پیامک بفرستند."
+
+msgid "This number isn't on the suppression list."
+msgstr "این شماره در فهرست عدم ارسال نیست."
+
+msgid "The suppression list is empty."
+msgstr "فهرست عدم ارسال خالی است."
+
+msgid "Add numbers"
+msgstr "افزودن شماره‌ها"
+
+msgid "Numbers, one per line"
+msgstr "شماره‌ها، هر سطر یک شماره"
+
+msgid "Or a file"
+msgstr "یا یک فایل"
+
+msgid "For example, why these numbers are added."
+msgstr "برای نمونه، دلیل افزودن این شماره‌ها."
+
+msgid "Add to the list"
+msgstr "افزودن به فهرست"
+
+msgid "Enter at least one number, or choose a file."
+msgstr "دست‌کم یک شماره وارد کنید یا یک فایل انتخاب کنید."
+
+msgid "The number was removed from the suppression list."
+msgstr "شماره از فهرست عدم ارسال حذف شد."
+
+#, python-format
+msgid "%(added)s numbers were added to the suppression list; %(listed)s were on it already."
+msgstr "%(added)s شماره به فهرست عدم ارسال افزوده شد؛ %(listed)s شماره از پیش در فهرست بود."
+
+#, python-format
+msgid "%(added)s numbers were added to the suppression list."
+msgstr "%(added)s شماره به فهرست عدم ارسال افزوده شد."
+
+#, python-format
+msgid "%(invalid)s lines weren't mobile numbers and were skipped."
+msgstr "%(invalid)s سطر شماره موبایل معتبر نبود و نادیده گرفته شد."
+
+msgid "Segment uploaded"
+msgstr "بارگذاری گروه مخاطبان"
+
+msgid "Segment columns chosen"
+msgstr "انتخاب ستون‌های گروه مخاطبان"
+
+msgid "Segment deleted"
+msgstr "حذف گروه مخاطبان"
+
+msgid "Added to the suppression list"
+msgstr "افزودن به فهرست عدم ارسال"
+
+msgid "Removed from the suppression list"
+msgstr "حذف از فهرست عدم ارسال"
+
+#, python-brace-format
+msgid "{count} numbers"
+msgstr "{count} شماره"
+
+#, python-brace-format
+msgid "{segment}: {valid} valid numbers, {invalid} invalid rows"
+msgstr "{segment}: {valid} شماره معتبر، {invalid} سطر نامعتبر"

@@ -1,0 +1,82 @@
+{% extends "base.html" %}{% load i18n fa roles %}
+{% block title %}{% translate "Suppression list" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<h1>{% translate "Suppression list" %}</h1>
+<p>{% translate "These numbers never get an SMS from any campaign. A number already sent stays sent." %}
+   <span class="muted">({{ total|fa_number }} {% translate "numbers" %})</span></p>
+
+<form method="get" class="inline search">
+  <label for="id_q" class="visually-hidden">{% translate "Find a number" %}</label>
+  <input id="id_q" name="q" type="text" dir="ltr" inputmode="tel" value="{{ query }}"
+         placeholder="{% translate "Find a number" %}">
+  <button type="submit" class="small secondary">{% translate "Find" %}</button>
+  {% if query %}<a href="{% url 'suppression' %}">{% translate "Show all" %}</a>{% endif %}
+</form>
+{% if query_invalid %}<p class="error" role="alert">{% translate "That isn't a valid mobile number." %}</p>{% endif %}
+
+{% if page.object_list %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">{% translate "Number" %}</th>
+        <th scope="col">{% translate "Applies to" %}</th>
+        <th scope="col">{% translate "Note" %}</th>
+        <th scope="col">{% translate "Added" %}</th>
+        {% if user|can:"remove_suppression" %}<th scope="col"><span class="visually-hidden">{% translate "Actions" %}</span></th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+    {% for entry in page %}
+      <tr>
+        <td>{{ entry.phone|mask_phone|fa_digits|ltr }}</td>
+        <td>{% if entry.campaign %}{{ entry.campaign.slug|ltr }}{% else %}{% translate "All campaigns" %}{% endif %}</td>
+        <td>{% if entry.note %}<bdi>{{ entry.note }}</bdi>{% else %}—{% endif %}</td>
+        <td>{{ entry.added_at|jalali }}{% if entry.added_by %} · {{ entry.added_by.username|ltr }}{% endif %}</td>
+        {% if user|can:"remove_suppression" %}
+        <td>
+          <form method="post" class="inline"
+                data-confirm="{% translate "Remove this number from the suppression list? Campaigns can send to it again." %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="remove">
+            <input type="hidden" name="entry" value="{{ entry.pk }}">
+            <button type="submit" class="small danger">{% translate "Remove" %}</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if page.has_other_pages %}
+<nav class="pager" aria-label="{% translate "Pages" %}">
+  {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">{% translate "Newer" %}</a>{% endif %}
+  <span class="num">{{ page.number|fa_number }} / {{ page.paginator.num_pages|fa_number }}</span>
+  {% if page.has_next %}<a href="?page={{ page.next_page_number }}">{% translate "Older" %}</a>{% endif %}
+</nav>
+{% endif %}
+{% elif query and not query_invalid %}
+<p class="empty">{% translate "This number isn't on the suppression list." %}</p>
+{% elif not query %}
+<p class="empty">{% translate "The suppression list is empty." %}</p>
+{% endif %}
+
+<section class="card form-card">
+  <h2>{% translate "Add numbers" %}</h2>
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="add">
+    {% for error in form.non_field_errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+    <label for="id_numbers">{% translate "Numbers, one per line" %}</label>
+    <textarea id="id_numbers" name="numbers" rows="5" dir="ltr">{{ form.numbers.value|default:'' }}</textarea>
+    <label for="id_file">{% translate "Or a file" %}</label>
+    <input id="id_file" name="file" type="file" accept=".csv,.txt,text/csv,text/plain">
+    {% for error in form.file.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+    <label for="id_note">{% translate "Note" %}</label>
+    <input id="id_note" name="note" type="text" maxlength="200" value="{{ form.note.value|default:'' }}">
+    <p class="hint">{% translate "For example, why these numbers are added." %}</p>
+    <button type="submit">{% translate "Add to the list" %}</button>
+  </form>
+</section>
+{% endblock %}

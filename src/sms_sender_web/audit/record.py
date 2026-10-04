@@ -9,6 +9,8 @@ ACTIONS = (
     "2fa_enrolled", "2fa_verified", "2fa_failed", "2fa_reset",
     "user_created", "role_changed", "user_deactivated", "user_activated",
     "password_changed",
+    "segment_uploaded", "segment_mapped", "segment_deleted",
+    "suppression_added", "suppression_removed",
 )
 
 

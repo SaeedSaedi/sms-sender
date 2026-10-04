@@ -1,0 +1,64 @@
+{% extends "base.html" %}{% load i18n fa roles %}
+{% block title %}{{ segment.name }} · {% translate "Segments" %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1><bdi>{{ segment.name }}</bdi></h1>
+  <a href="{% url 'segment_list' %}">{% translate "All segments" %}</a>
+</div>
+<p class="muted">{{ segment.slug|ltr }} · {{ segment.original_name|ltr }} · {{ segment.uploaded_at|jalali }}{% if segment.uploaded_by %} · {{ segment.uploaded_by.username|ltr }}{% endif %}</p>
+
+{% if draft %}
+  <p class="warn">{% translate "The columns of this file haven't been chosen yet, so it can't be used." %}</p>
+  {% if user|can:"edit_campaigns" %}<p><a class="button" href="{% url 'segment_map' segment.slug %}">{% translate "Choose the columns" %}</a></p>{% endif %}
+{% else %}
+  <dl class="figures">
+    <div><dt>{% translate "Rows" %}</dt><dd class="num">{{ summary.rows|fa_number }}</dd></div>
+    <div><dt>{% translate "Valid numbers" %}</dt><dd class="num">{{ summary.valid|fa_number }}</dd></div>
+    <div><dt>{% translate "Invalid rows" %}</dt><dd class="num">{{ summary.invalid|fa_number }}</dd></div>
+    <div><dt>{% translate "Repeated numbers" %}</dt><dd class="num">{{ summary.duplicates|fa_number }}</dd></div>
+    {% if segment.user_id_column %}
+      <div><dt>{% translate "Missing user ID" %}</dt><dd class="num">{{ summary.missing_user_id|fa_number }}</dd></div>
+      <div><dt>{% translate "Conflicting user IDs" %}</dt><dd class="num">{{ summary.conflicts|fa_number }}</dd></div>
+    {% endif %}
+    <div><dt>{% translate "On the suppression list" %}</dt><dd class="num">{{ summary.suppressed|fa_number }}</dd></div>
+  </dl>
+  <p class="hint">{% translate "Repeated numbers are sent once. The suppression count is from the upload; each send checks the list again." %}</p>
+
+  <h2>{% translate "Columns" %}</h2>
+  <ul class="plain">
+    <li>{% translate "Mobile number" %}</li>
+    <li>{% translate "User ID" %}: {% if segment.user_id_column %}<bdi>{{ segment.user_id_column }}</bdi>{% else %}—{% endif %}</li>
+    <li>{% translate "For tokens" %}: {% for name in segment.token_columns %}<bdi class="sample">{{ name }}</bdi>{% empty %}—{% endfor %}</li>
+  </ul>
+
+  {% if summary.invalid_sample %}
+    <h2>{% translate "Invalid rows" %}</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">{% translate "Value" %}</th><th scope="col">{% translate "Reason" %}</th></tr></thead>
+        <tbody>
+        {% for row in summary.invalid_sample %}
+          <tr>
+            <td>{{ row.value|fa_digits|ltr }}</td>
+            <td>{% if row.reason == "conflicting_user_ids" %}{% translate "Conflicting user IDs" %}{% else %}{% translate "Not a valid mobile number" %}{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if summary.invalid > summary.invalid_sample|length %}<p class="hint">{% translate "Only the first rows are shown." %}</p>{% endif %}
+  {% endif %}
+
+  {% if used_by %}
+    <p>{% translate "Used by" %}: {% for campaign in used_by %}{{ campaign.slug|ltr }}{% if not forloop.last %}، {% endif %}{% endfor %}</p>
+  {% endif %}
+{% endif %}
+
+{% if user|can:"edit_campaigns" and not used_by %}
+  <form method="post" action="{% url 'segment_delete' segment.slug %}" class="danger-zone"
+        data-confirm="{% translate "Delete this segment and its file? Campaigns that already sent keep their own records." %}">
+    {% csrf_token %}
+    <button type="submit" class="danger">{% translate "Delete the segment" %}</button>
+  </form>
+{% endif %}
+{% endblock %}

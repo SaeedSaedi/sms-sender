@@ -14,6 +14,8 @@
     {% if user|fully_signed_in %}
       <nav class="nav" aria-label="{% translate "Main menu" %}">
         {% if user|can:"view_campaigns" %}<a href="{% url 'home' %}">{% translate "Campaigns" %}</a>{% endif %}
+        {% if user|can:"view_campaigns" %}<a href="{% url 'segment_list' %}">{% translate "Segments" %}</a>{% endif %}
+        {% if user|can:"add_suppression" %}<a href="{% url 'suppression' %}">{% translate "Suppression list" %}</a>{% endif %}
         {% if user|can:"manage_users" %}<a href="{% url 'users' %}">{% translate "Users" %}</a>{% endif %}
         {% if user|can:"view_audit_log" %}<a href="{% url 'audit_log' %}">{% translate "Activity log" %}</a>{% endif %}
       </nav>
