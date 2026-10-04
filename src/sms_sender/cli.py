@@ -22,11 +22,11 @@ from .links import (
     DEFAULT_EXPIRY_DAYS,
     DEFAULT_RATE as DEFAULT_LINK_RATE,
     ENV_LINK_DOMAINS,
-    FORMATS as LINK_FORMATS,
     STRATEGIES as LINK_STRATEGIES,
     LinkSettings,
     allowed_domains,
     destination_problem,
+    format_problem as link_format_problem,
     placeholder_token,
     plan_link,
 )
@@ -178,9 +178,10 @@ _LINK_OPTIONS = [
     ),
     click.option(
         "--link-format", "link_format", default="url", show_default=True,
-        type=click.Choice(LINK_FORMATS),
-        help="url: the token is the whole https://kifpool.me/u/<code>. code: only "
-             "<code>, for a template whose text already has https://kifpool.me/u/.",
+        help="What the token holds. url: the whole https://kifpool.me/u/<code>. "
+             "code: only <code>, for a template whose text already has "
+             "https://kifpool.me/u/. Or a pattern with {code} for a template whose "
+             "text holds part of it, e.g. 'u/{code}' after https://kifpool.me/.",
     ),
     click.option(
         "--link-strategy", "link_strategy", default="recipient", show_default=True,
@@ -1070,7 +1071,7 @@ def dry_run(
          "are only made by `send`).",
 )
 @click.option("--link-format", "link_format", default="url", show_default=True,
-              type=click.Choice(LINK_FORMATS))
+              help="url, code, or a pattern with {code}, as for `send`.")
 @click.option("--timeout", default=15.0, show_default=True, type=float)
 def preview(
     template: str, token: str | None, token2: str | None, token3: str | None,
@@ -1143,6 +1144,9 @@ def preview(
     # Never echo the real key, even when --send / --check-account loaded it.
     base_url = "https://api.kavenegar.com/v1/<API_KEY>/verify/lookup.json"
     if link_token is not None:
+        problem = link_format_problem(link_format)
+        if problem:
+            raise click.BadParameter(problem, param_hint="--link-format")
         if static_tokens[link_token] is not None or (
             token_columns is not None and link_token in token_columns.columns
         ):

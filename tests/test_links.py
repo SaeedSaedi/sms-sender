@@ -261,3 +261,23 @@ def test_settings_are_checked():
         stage(StateStore(":memory:"), FakeShlink(), settings=LinkSettings(
             destination="https://kifpool.me", token="token", utm_source=" ",
         ))
+
+
+def test_a_pattern_format_fits_a_template_that_holds_part_of_the_url(tmp_path):
+    """introducecoin-c's text has https://kifpool.me/ before token20, so the
+    token must be u/<code> for the recipient to see .../u/<code>."""
+    state, shlink = StateStore(tmp_path / "s.db"), FakeShlink()
+    result = stage(state, shlink, settings=settings(format="u/{code}")).run({A: "s"})
+    assert result.tokens == {A: "u/c0001"}
+
+
+@pytest.mark.parametrize("fmt, ok", [
+    ("url", True), ("code", True), ("u/{code}", True), ("go?c={code}", True),
+    ("u/", False), ("{code}/{code}", False), ("u /{code}", False), ("html", False),
+])
+def test_link_formats(fmt, ok):
+    from sms_sender.links import format_problem, placeholder_token
+
+    assert (format_problem(fmt) is None) is ok
+    if ok:
+        assert "<short-code>" in placeholder_token(fmt, BASE)

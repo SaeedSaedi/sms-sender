@@ -256,6 +256,9 @@ sent keep the link they got. Two more checks run before sending:
   - `--link-format url` (the default) puts the whole link in the token.
   - `--link-format code` puts only `<code>`, for templates whose text already
     contains `https://kifpool.me/u/`.
+  - A pattern with `{code}` fits a template whose text holds part of the
+    URL. E.g. `--link-format 'u/{code}'` for a template like
+    `introducecoin-c`, whose text has `https://kifpool.me/` before the token.
 - **Strategies:**
   - `--link-strategy recipient`: the default, one link per person.
   - `segment`: one link per segment.

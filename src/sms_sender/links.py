@@ -33,7 +33,8 @@ from .state import LINK_READY, LinkRow, StateStore
 logger = logging.getLogger(__name__)
 
 STRATEGIES = ("recipient", "segment", "campaign")
-FORMATS = ("url", "code")
+FORMATS = ("url", "code")  # or a pattern with {code}, e.g. "u/{code}"
+CODE = "{code}"
 DEFAULT_EXPIRY_DAYS = 7
 DEFAULT_RATE = "10/s"  # conservative until Shlink's real speed is measured
 DEFAULT_WORKERS = 4
@@ -65,7 +66,11 @@ class LinkSettings:
     """How a campaign's SMS carry their link (spec 4.4 and 4.5)."""
     destination: str
     token: str                        # which Kavenegar token carries the link
-    format: str = "url"               # url: the whole short URL; code: only the short code
+    # url: the whole short URL; code: only the short code; or a pattern with
+    # {code} for a template whose text already holds part of the URL, e.g.
+    # "u/{code}" after "https://kifpool.me/" (decided: support the existing
+    # template configuration).
+    format: str = "url"
     strategy: str = "recipient"       # recipient | segment | campaign
     expiry_days: int = DEFAULT_EXPIRY_DAYS
     utm_source: str = "sms"
@@ -77,8 +82,9 @@ class LinkSettings:
         out = []
         if self.token not in TOKEN_MAX_SPACES:
             out.append(f"link token must be one of {', '.join(TOKEN_MAX_SPACES)}")
-        if self.format not in FORMATS:
-            out.append(f"link format must be one of {', '.join(FORMATS)}")
+        problem = format_problem(self.format)
+        if problem:
+            out.append(problem)
         if self.strategy not in STRATEGIES:
             out.append(f"link strategy must be one of {', '.join(STRATEGIES)}")
         if self.expiry_days < 1:
@@ -291,7 +297,7 @@ class LinkStage:
             self.state.mark_link_not_ready(row.key, str(e), refused=False)
             logger.warning("link_unavailable", extra={"key": row.key, "detail": str(e)})
             return False
-        value = link.short_url if self.settings.format == "url" else link.short_code
+        value = token_value(self.settings.format, link.short_url, link.short_code)
         problem = token_problem(self.settings.token, value)
         if problem:
             # e.g. a custom slug with '_' — Kavenegar would reject the SMS.
@@ -373,9 +379,8 @@ class LinkStage:
         extended = self._extend_expiring(list(rows.values()))
 
         def token(row: LinkRow) -> str:
-            value = row.short_url if self.settings.format == "url" else row.short_code
-            assert value is not None
-            return value
+            assert row.short_url is not None and row.short_code is not None
+            return token_value(self.settings.format, row.short_url, row.short_code)
 
         return LinkStageResult(
             needed=len(rows), created=created, extended=extended,
@@ -385,9 +390,27 @@ class LinkStage:
         )
 
 
+def format_problem(fmt: str) -> str | None:
+    """Why `fmt` can't be a link format, or None."""
+    if fmt in FORMATS or (fmt.count(CODE) == 1 and not any(ch.isspace() for ch in fmt)):
+        return None
+    return (f"link format must be {' or '.join(FORMATS)}, or a pattern with {CODE} "
+            f"once and no spaces, e.g. 'u/{CODE}'")
+
+
+def token_value(fmt: str, short_url: str, short_code: str) -> str:
+    """What goes in the template token: the whole short URL, the code, or
+    the pattern with the code filled in."""
+    if fmt == "url":
+        return short_url
+    if fmt == "code":
+        return short_code
+    return fmt.replace(CODE, short_code)
+
+
 def placeholder_token(fmt: str, base_url: str) -> str:
-    """What `preview` shows where the real link will go."""
-    return "<short-code>" if fmt == "code" else f"{base_url.rstrip('/')}/<short-code>"
+    """What `preview` and `dry-run` show where the real link will go."""
+    return token_value(fmt, f"{base_url.rstrip('/')}/<short-code>", "<short-code>")
 
 
 def _duration(seconds: float) -> str:

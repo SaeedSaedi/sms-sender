@@ -162,7 +162,7 @@ The runner reconciles at the start of every run (so rows Kavenegar never got go 
 - **The approval test SMS gets its own link** (`test:<phone>`, tag `campaign-<slug>-test`, `utm_content=test`), so the operator's click never counts for a recipient or in the campaign's tag.
 - **Campaign settings include the link settings** (`LinkSettings.as_settings`, but not expiry). Changing the destination, token, format, strategy or UTM values after a send is refused like any other settings change.
 
-Destinations must be https on `SMS_SENDER_LINK_DOMAINS` (subdomains included), must not be a short link themselves, and must not already carry `utm_*` or `r` (`links.destination_problem`). Strategies: `recipient` (default; per-person clicks), `segment`, `campaign`. `--link-format code` puts only the short code in the token, for templates whose text already has `https://kifpool.me/u/`. `--link-rate` (default 10/s) and 4 worker threads cap creation until Shlink's real speed is measured.
+Destinations must be https on `SMS_SENDER_LINK_DOMAINS` (subdomains included), must not be a short link themselves, and must not already carry `utm_*` or `r` (`links.destination_problem`). Strategies: `recipient` (default; per-person clicks), `segment`, `campaign`. `--link-format code` puts only the short code in the token, for templates whose text already has `https://kifpool.me/u/`. A pattern with `{code}` (`links.token_value`, checked by `format_problem`) fits templates holding part of the URL, e.g. `u/{code}` after `https://kifpool.me/` (`introducecoin-c`). `--link-rate` (default 10/s) and 4 worker threads cap creation until Shlink's real speed is measured.
 
 ### User IDs and segments ([input_loader.py](src/sms_sender/input_loader.py), schema v5)
 

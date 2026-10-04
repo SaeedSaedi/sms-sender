@@ -404,3 +404,23 @@ def test_dotenv_settings_are_read_before_the_link_checks(tmp_path, monkeypatch):
     ])
     assert result.exit_code == 0, result.output
     assert "long URL   https://example.org/offer?" in result.output
+
+
+def test_send_and_preview_take_a_link_pattern(tmp_path, monkeypatch):
+    captured: dict = {}
+    result = _cli(tmp_path, monkeypatch, "--campaign", "coin-7", "--link-url",
+                  "https://kifpool.me/offer", "--link-token", "token20",
+                  "--link-format", "u/{code}", captured=captured)
+    assert result.exit_code == 0, result.output
+    assert captured["links"].format == "u/{code}"
+
+    bad = _cli(tmp_path, monkeypatch, "--campaign", "coin-7", "--link-url",
+               "https://kifpool.me/offer", "--link-token", "token20", "--link-format", "u/")
+    assert bad.exit_code == 2 and "pattern with {code}" in bad.output
+
+    shown = CliRunner().invoke(cli, [
+        "preview", "--phone", A, "--template", "introducecoin-c",
+        "--link-token", "token20", "--link-format", "u/{code}",
+    ])
+    assert shown.exit_code == 0, shown.output
+    assert "token20=u/<short-code>" in shown.output
