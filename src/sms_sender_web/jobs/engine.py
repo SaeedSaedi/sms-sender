@@ -20,6 +20,7 @@ from sms_sender.window import DEFAULT_WINDOW, parse_window
 
 from ..suppression.service import phones_for
 from .models import Campaign
+from .sandbox import SandboxKavenegar, SandboxShlink
 
 
 def campaign_db(campaign: Campaign) -> Path:
@@ -32,9 +33,13 @@ class Engine:
 
     def sender(self) -> Sender:
         """For lookups only (delivery, reconciliation): no template needed."""
+        if django_settings.SANDBOX:
+            return SandboxKavenegar()
         return Sender(SenderConfig(api_key=load_api_key(), template=""))
 
     def link_client(self) -> ShlinkClient:
+        if django_settings.SANDBOX:
+            return SandboxShlink()
         return ShlinkClient(load_shlink_config())
 
     def runner(
@@ -47,7 +52,8 @@ class Engine:
         s = campaign.settings
         tokens = {name: s.get("tokens", {}).get(name) for name in TOKEN_MAX_SPACES}
         sender_cfg = SenderConfig(
-            api_key=load_api_key(), template=s["template"], **tokens,
+            api_key="sandbox" if django_settings.SANDBOX else load_api_key(),
+            template=s["template"], **tokens,
             timeout=float(s.get("timeout", 15.0)),
             max_attempts=int(s.get("max_attempts", 5)),
             backoff_max=float(s.get("backoff_max", 30.0)),
@@ -82,4 +88,5 @@ class Engine:
             approval_test_number=test_number,
             test_only=test_number is not None,
             cost_per_sms=cost_per_sms,
+            sender=SandboxKavenegar(sender_cfg) if django_settings.SANDBOX else None,
         )

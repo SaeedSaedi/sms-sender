@@ -441,6 +441,23 @@ internal, multi-user tool built with Django and HTMX. So far it has:
 The campaign pages hand their work to the worker (`docker compose up`
 starts it next to the web app), and the pages follow it as it runs.
 
+### Sandbox: try everything without sending
+
+Set `SMS_SENDER_SANDBOX=1` in `.env`, then run `docker compose up -d`. Both
+services read `.env`. In sandbox mode:
+- Kavenegar and the short-link service are simulated, and no request leaves
+  the machine.
+- Every page shows a banner: «محیط شبیه‌سازی».
+- Everything lives in `data/sandbox/`, the users included, so create a
+  superuser there too:
+  `docker compose exec web python manage.py createsuperuser`.
+  Simulated sends never mix with real campaigns.
+- To see every state: numbers ending in `000` are rejected, and numbers
+  ending in `999` get no answer (their status stays unknown). Every SMS
+  costs 3,020 rials, and links get a few clicks.
+
+Remove the line (or set it to `0`) and restart to go back to real sending.
+
 Uploaded lists are kept in `data/segments/`, which git ignores, like every
 other list of phone numbers. Pages show numbers masked (`۰۹۱۲*****۳۴`).
 

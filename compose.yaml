@@ -4,6 +4,10 @@
 # NetBird IP — then colleagues on NetBird can open http://<that IP>:8000.
 # NetBird's access policies decide who reaches it; the app still requires a
 # login. The campaign DBs in ./data are shared with the CLI.
+#
+# Sandbox (nothing is sent; Kavenegar and Shlink are simulated): put
+# SMS_SENDER_SANDBOX=1 in .env. Both services read it, and everything then
+# lives in ./data/sandbox.
 services:
   web:
     build: .

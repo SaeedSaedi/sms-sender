@@ -226,3 +226,14 @@ h3 { font-size: 1rem; margin-block: 1rem .25rem; }
 input[type="number"] { font: inherit; padding-block: .4rem; padding-inline: .6rem; border: 1px solid var(--line); border-radius: .5rem; }
 .settings table select, .settings table input[type="text"] { inline-size: 100%; min-inline-size: 8rem; }
 .follow-up { margin-block-start: .75rem; }
+
+/* Sandbox mode: on every page, impossible to miss. */
+.sandbox-banner {
+  padding-block: .5rem;
+  padding-inline: 1.25rem;
+  background: #fff4e5;
+  border-block-end: 1px solid var(--warn);
+  color: var(--warn);
+  font-weight: 600;
+  text-align: center;
+}

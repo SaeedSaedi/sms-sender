@@ -1426,3 +1426,8 @@ msgstr "اجراکننده کارها"
 
 msgid "Working"
 msgstr "فعال"
+
+# --- Sandbox mode ---
+
+msgid "Sandbox: Kavenegar and the short-link service are simulated, and nothing is sent."
+msgstr "محیط شبیه‌سازی: پاسخ کاوه‌نگار و سرویس لینک کوتاه ساختگی است و هیچ پیامکی ارسال نمی‌شود."

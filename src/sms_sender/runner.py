@@ -1137,9 +1137,12 @@ def make_runner(
     install_signal_handlers: bool = True,
     test_only: bool = False,
     cost_per_sms: int | None = None,
+    sender: Sender | None = None,
 ) -> Runner:
+    """A runner for these settings. `sender` replaces the real Kavenegar
+    client (the dashboard's sandbox passes a simulated one)."""
     state = StateStore(db_path)
-    sender = Sender(sender_cfg, on_attempt=_attempt_recorder(state))
+    sender = sender or Sender(sender_cfg, on_attempt=_attempt_recorder(state))
     return Runner(
         input_path=input_path,
         state=state,
