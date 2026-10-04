@@ -113,3 +113,38 @@ msgstr "مسدودشده"
 
 msgid "Beyond the status window"
 msgstr "خارج از بازه استعلام"
+
+msgid "Cancelled"
+msgstr "لغوشده"
+
+# --- Jobs (glossary: operations) ---
+
+msgid "Send"
+msgstr "ارسال"
+
+msgid "Reconcile"
+msgstr "تطبیق با کاوه‌نگار"
+
+msgid "Delivery update"
+msgstr "به‌روزرسانی وضعیت تحویل"
+
+msgid "Clicks update"
+msgstr "به‌روزرسانی کلیک‌ها"
+
+msgid "Waiting"
+msgstr "در صف اجرا"
+
+msgid "Running"
+msgstr "در حال اجرا"
+
+msgid "Paused"
+msgstr "در توقف موقت"
+
+msgid "Done"
+msgstr "انجام‌شده"
+
+msgid "Pause"
+msgstr "توقف موقت"
+
+msgid "Cancel"
+msgstr "لغو"

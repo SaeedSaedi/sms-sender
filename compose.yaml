@@ -7,6 +7,7 @@
 services:
   web:
     build: .
+    image: sms-sender-dashboard
     env_file: .env
     environment:
       SMS_SENDER_DATA_DIR: /app/data
@@ -23,4 +24,26 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    restart: unless-stopped
+
+  # Runs the jobs the dashboard queues (sends, reconciliation, delivery and
+  # click updates), one at a time. Exactly one worker.
+  worker:
+    image: sms-sender-dashboard
+    command: ["python", "manage.py", "run_worker"]
+    env_file: .env
+    environment:
+      SMS_SENDER_DATA_DIR: /app/data
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      web:
+        condition: service_healthy  # web has run the migrations
+    # On stop, a running send takes no new recipient and lets requests in
+    # flight finish; the job is queued again for the next start. Anything
+    # still in flight when the time runs out is reconciled, never resent.
+    stop_grace_period: 90s
     restart: unless-stopped
