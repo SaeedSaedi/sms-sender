@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% load i18n %}
+{% block title %}{% translate "Log in" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>{% translate "Log in" %}</h1>
+  {% if form.errors %}
+    <p class="error" role="alert">{% translate "The username or password is not correct. Letter case matters." %}</p>
+  {% endif %}
+  <form method="post" action="{% url 'login' %}">
+    {% csrf_token %}
+    <label for="id_username">{% translate "Username" %}</label>
+    <input id="id_username" name="username" type="text" dir="ltr" autocomplete="username"
+           autofocus required value="{{ form.username.value|default:'' }}">
+    <label for="id_password">{% translate "Password" %}</label>
+    <input id="id_password" name="password" type="password" dir="ltr"
+           autocomplete="current-password" required>
+    <input type="hidden" name="next" value="{{ next }}">
+    <button type="submit">{% translate "Log in" %}</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,26 @@
+# Local run of the dashboard (Phase 3):  docker compose up --build
+#
+# Reachable only from this machine, unless BIND_ADDR (in .env) is set to its
+# NetBird IP — then colleagues on NetBird can open http://<that IP>:8000.
+# NetBird's access policies decide who reaches it; the app still requires a
+# login. The campaign DBs in ./data are shared with the CLI.
+services:
+  web:
+    build: .
+    env_file: .env
+    environment:
+      SMS_SENDER_DATA_DIR: /app/data
+      # The host's proxy settings, if any, pass through to Kavenegar / Shlink.
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped

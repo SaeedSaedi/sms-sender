@@ -823,6 +823,17 @@ class StateStore:
         ).fetchall()
         return {r["status"]: r["n"] for r in rows}
 
+    def display_counts(self) -> dict[str, int]:
+        """Like `counts`, but input rows that weren't valid (`INVALID:<raw>`,
+        stored as failed_permanent) count as `invalid`, with conflicting user
+        IDs — not as rejections by Kavenegar."""
+        rows = self._conn().execute(
+            "SELECT CASE WHEN phone LIKE 'INVALID:%' THEN ? ELSE status END AS s, "
+            "COUNT(*) AS n FROM recipients GROUP BY s",
+            (INVALID,),
+        ).fetchall()
+        return {r["s"]: r["n"] for r in rows}
+
     def status_for_phones(self, phones: Iterable[str]) -> dict[str, str]:
         """Return {phone: status} for phones already in the DB. Read-only.
 

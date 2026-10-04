@@ -1,0 +1,114 @@
+/* Persian, right to left (spec 4.11). Logical properties only — inline /
+   block, start / end — so the layout mirrors without per-element fixes. */
+
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("../fonts/Vazirmatn-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  --bg: #f6f7f9;
+  --fg: #1c1d21;
+  --muted: #62646b;
+  --card: #ffffff;
+  --line: #e2e4e9;
+  --accent: #0b5cad;
+  --error: #b42318;
+  --ok: #067647;
+  --warn: #b54708;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  font-family: "Vazirmatn", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+body { margin: 0; background: var(--bg); color: var(--fg); }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-block: .75rem;
+  padding-inline: 1.25rem;
+  background: var(--card);
+  border-block-end: 1px solid var(--line);
+}
+.brand { font-weight: 700; color: var(--fg); text-decoration: none; }
+.session { display: flex; gap: .75rem; align-items: center; margin: 0; }
+.who { color: var(--muted); }
+
+.page { max-inline-size: 76rem; margin-inline: auto; padding: 1.25rem; }
+h1 { font-size: 1.4rem; margin-block: 0 1rem; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: .75rem;
+  padding: 1.5rem;
+}
+.narrow { max-inline-size: 24rem; margin-inline: auto; margin-block-start: 3rem; }
+
+label { display: block; margin-block: .75rem .25rem; }
+input[type="text"], input[type="password"] {
+  inline-size: 100%;
+  padding-block: .5rem;
+  padding-inline: .7rem;
+  border: 1px solid var(--line);
+  border-radius: .5rem;
+  font: inherit;
+}
+button {
+  font: inherit;
+  margin-block-start: 1rem;
+  padding-block: .45rem;
+  padding-inline: 1.1rem;
+  border: 1px solid var(--accent);
+  border-radius: .5rem;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+button.link {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+}
+.error { color: var(--error); }
+.empty { color: var(--muted); }
+
+.table-wrap {
+  overflow-x: auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: .75rem;
+}
+table { border-collapse: collapse; inline-size: 100%; }
+th, td {
+  padding-block: .6rem;
+  padding-inline: .9rem;
+  border-block-end: 1px solid var(--line);
+  text-align: start;
+  vertical-align: top;
+}
+thead th { font-weight: 600; color: var(--muted); white-space: nowrap; }
+.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.badges { display: flex; flex-wrap: wrap; gap: .35rem; margin: 0; padding: 0; list-style: none; }
+.badge {
+  padding-block: .05rem;
+  padding-inline: .55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.status-sent { border-color: var(--ok); color: var(--ok); }
+.status-unknown, .status-needs_review { border-color: var(--warn); color: var(--warn); }
+.status-failed_permanent, .status-invalid { border-color: var(--error); color: var(--error); }

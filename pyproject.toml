@@ -25,6 +25,15 @@ dev = [
     "pytest>=8.0",
     "pytest-mock>=3.12",
 ]
+# The Persian dashboard (Phase 3). Its tests need it too:
+# pip install -e ".[dev,web]"
+web = [
+    "django>=5.2,<5.3",
+    "jdatetime>=5.0",
+    "whitenoise>=6.7",
+    "gunicorn>=23",
+    "pytest-django>=4.9",
+]
 
 [project.scripts]
 sms-sender = "sms_sender.cli:cli"
@@ -32,6 +41,19 @@ sms-sender = "sms_sender.cli:cli"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+sms_sender_web = [
+    "templates/**/*",
+    "dashboard/templates/**/*",
+    "static/**/*",
+    "locale/**/*",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# Used by pytest-django (the `web` extra); without it the dashboard tests skip.
+DJANGO_SETTINGS_MODULE = "sms_sender_web.settings_test"
+filterwarnings = [
+    "ignore:Unknown config option. DJANGO_SETTINGS_MODULE:pytest.PytestConfigWarning",
+]
