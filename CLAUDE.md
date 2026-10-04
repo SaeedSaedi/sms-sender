@@ -117,6 +117,8 @@ Before fan-out, three best-effort checks run in order. Any `PreflightError` abor
 
 - **Sending window** ([window.py](src/sms_sender/window.py)) — checked first. Default 08:00–21:00 Tehran (`--send-window`, env `SMS_SENDER_SEND_WINDOW`, `off`). Outside it `_preflight_checks` raises `PreflightError` (exit 2) before anything is sent; mid-run, `_send_one` stops claiming once it closes, and the run ends `stopped` (resumable). Independent of `Runner.preflight`. `Runner(clock=…)` makes it testable, and `tests/conftest.py` switches the window off so the suite doesn't depend on the time of day.
 
+- **Test-only runs** (the dashboard's test step): `Runner(test_only=True)` needs `approval_test_number`. It runs everything up to the approval test and the credit check, then stops. It never prompts, runs no smoke test, sends to no recipient, and doesn't write `last_run`. A later send is given `cost_per_sms=` (the test's cost) for the credit estimate. `RunSummary` carries `credit`, `cost_per_sms`, `estimate` and `test_message_id`.
+
 The approval test runs *before* the smoke test on purpose: the operator gets a chance to manually decline before any auto-validated send happens. Tests inject a custom `approval_prompt` callable; the default uses `click.confirm` and treats `click.Abort` (closed stdin, Ctrl-C) as decline so CI is safe.
 
 ### State machine (owned by `state.py`)
@@ -282,6 +284,19 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - Operators (`add_suppression`) see the page and add numbers. Only admins (`remove_suppression`) remove them. Both changes are audited.
 - **Phone numbers on pages** are masked with `privacy.mask_phone` (filter `mask_phone`): the first four and last two digits are shown, the rest become `*`. Values with fewer than ten digits are hidden entirely. Use `*`, never `•`, because next to Persian digits a dot reads as «۰».
 - **`accounts.decorators.forbidden(request)`** renders the Persian 403. Use it for checks inside a view, such as an action only admins may take.
+- **Campaign pages (`campaigns/`, spec 3):**
+  - Settings are stored in `Campaign.settings` in the CLI's terms: `segment`, `input`, `user_id_column`, `template`, `tokens`, `token_columns`, `value_maps`, `links` (LinkSettings fields), `send_window`, `rate`, `workers`. The engine (`jobs/engine.Engine.runner`) turns them into the CLI's runner.
+  - The flow: check (`checks.check_campaign`: read only, no API, never creates the campaign DB) → test SMS (`Job.Kind.TEST`) → approval (`services.decide_test`) → send (`services.start_send`).
+  - A test job runs the runner with `test_only=True`: prepare, window, account checks, links, then the approval test to the requester's `Profile.test_phone`. It stops there, without recording a "last run".
+  - A send needs `services.approval(campaign)`: the latest test, approved, with the same `settings_hash`. The hash covers `APPROVED_SETTINGS` (segment, template, tokens, token columns, value maps, links without expiry). It doesn't cover the window, rate or workers. The send gets the test's `cost_per_sms` for the credit estimate.
+  - After a send has started, settings are read-only.
+  - `services.JobConflict.code` picks the Persian message in `campaigns/terms.CONFLICTS`.
+  - The live part (`_live.html`) polls `/campaigns/<slug>/live/` every 3 s with HTMX, only while a job is active.
+- **Engine messages in Persian (spec 4.11):**
+  - The engine writes English for the CLI and the logs. The dashboard renders keys, so engine English never appears on a page.
+  - `PreflightError(message, key, **fields)` → `RunSummary.stop_reason` / `stop_fields`. That includes `provider_halt` with Kavenegar's code, and `window_closed`. The worker adds `busy`, `settings_mismatch`, `input_unreadable`, `crashed` and `given_up` in `Job.result`.
+  - `sender.token_issue`, `links.destination_issue` and `InvalidRow.key` are the keyed forms of the CLI's messages. `token_problem` / `destination_problem` word them in English.
+  - `campaigns/terms.py` holds the Persian for every key. Add a key there, and in the catalog, whenever the engine gains one.
 - **Jobs and the worker** (`jobs/`, spec 4.6 / 4.8). `Campaign` holds a campaign's send settings, in the CLI's terms; its `slug` names `data/db/<slug>.db`. `Job` kinds: send, reconcile, delivery, clicks. `JobEvent` holds the engine's notes.
   - **Claiming:** `Worker.claim` takes the oldest queued job, or a running one whose lease expired, with an atomic UPDATE. A heartbeat thread renews the lease every 10 s and reads `Job.control`.
   - **Stopping:** pause, cancel and SIGTERM all end in `Runner.cancel()`. Afterwards, a paused job waits, a cancelled one runs `StateStore.cancel_remaining()` (claimable → `cancelled`), and an interrupted one goes back to queued.

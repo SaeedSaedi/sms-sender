@@ -604,3 +604,17 @@ def test_kavenegar_http_account_info_redacts_on_network_error(monkeypatch):
     with pytest.raises(SendError) as exc:
         s.account_info()
     assert SECRET not in exc.value.message
+
+
+@pytest.mark.parametrize("name, value, issue", [
+    ("token", "x" * 101, ("too_long", {"length": 101, "max": 100})),
+    ("token", "a\nb", ("line_break", {})),
+    ("token", "a_b", ("underscore", {})),
+    ("token", "a b", ("too_many_spaces", {"max": 0, "spaces": 1})),
+    ("token10", "a b c d e f g", ("too_many_spaces", {"max": 5, "spaces": 6})),
+    ("token10", "a b", None),
+])
+def test_token_issue_is_a_key_for_the_dashboard(name, value, issue):
+    from sms_sender.sender import token_issue
+
+    assert token_issue(name, value) == issue

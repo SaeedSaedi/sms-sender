@@ -1,0 +1,60 @@
+{% extends "base.html" %}{% load i18n fa roles %}
+{% block title %}{{ campaign.name }} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1><bdi>{{ campaign.name }}</bdi></h1>
+  <div class="head-actions">
+    {% if user|can:"edit_campaigns" and not send_started %}<a class="button secondary" href="{% url 'campaign_settings' campaign.slug %}">{% translate "Settings" %}</a>{% endif %}
+    <a href="{% url 'home' %}">{% translate "All campaigns" %}</a>
+  </div>
+</div>
+<p class="muted">{{ campaign.slug|ltr }} · {% translate "Segment" %}: {% if segment %}<a href="{% url 'segment_detail' segment.slug %}"><bdi>{{ segment.name }}</bdi></a>{% else %}—{% endif %} · {% translate "Template" %}: {{ campaign.settings.template|default:"—"|ltr }}</p>
+
+<details class="card summary-card">
+  <summary>{% translate "What this campaign sends" %}</summary>
+  <ul class="plain">
+    {% for name, value, column in tokens %}
+      {% if value or column or campaign.settings.links.token == name %}
+      <li><code dir="ltr">{{ name }}</code>:
+        {% if value %}{% translate "fixed value" %} <bdi class="sample">{{ value }}</bdi>
+        {% elif column %}{% translate "column" %} <bdi class="sample">{{ column }}</bdi>
+        {% else %}{% translate "the short link" %}{% endif %}
+      </li>
+      {% endif %}
+    {% endfor %}
+    {% if campaign.settings.links %}
+      <li>{% translate "The short link opens" %}: {{ campaign.settings.links.destination|ltr }}</li>
+    {% endif %}
+    <li>{% translate "Sending window (Tehran time)" %}: {{ campaign.settings.send_window|fa_digits|ltr }}</li>
+  </ul>
+</details>
+
+{% if user|can:"edit_campaigns" %}
+<section class="card step">
+  <h2>{% translate "Check" %}</h2>
+  <p class="hint">{% translate "Reads the segment with these settings, without sending anything: who would get the SMS, and what's in the way." %}</p>
+  <form method="post" action="{% url 'campaign_check' campaign.slug %}">
+    {% csrf_token %}
+    <button type="submit" class="secondary">{% translate "Check now" %}</button>
+  </form>
+  {% if check %}
+    {% for problem in check_problems %}<p class="error" role="alert">{{ problem }}</p>{% endfor %}
+    {% if check.ok %}<p class="ok">{% translate "Ready for a test SMS." %}</p>{% endif %}
+    <dl class="figures">
+      <div><dt>{% translate "To send" %}</dt><dd class="num">{{ check.to_send|fa_number }}</dd></div>
+      <div><dt>{% translate "Valid numbers" %}</dt><dd class="num">{{ check.valid|fa_number }}</dd></div>
+      <div><dt>{% translate "Invalid rows" %}</dt><dd class="num">{{ check.invalid_total|fa_number }}</dd></div>
+      <div><dt>{% translate "On the suppression list" %}</dt><dd class="num">{{ check.suppressed|fa_number }}</dd></div>
+      <div><dt>{% translate "Already sent" %}</dt><dd class="num">{{ check.already_sent|fa_number }}</dd></div>
+      {% if segment.user_id_column %}<div><dt>{% translate "Missing user ID" %}</dt><dd class="num">{{ check.missing_user_id|fa_number }}</dd></div>{% endif %}
+    </dl>
+    {% if check_invalid %}
+      <ul class="plain">{% for label, n in check_invalid %}<li>{{ label }}: {{ n|fa_number }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if not check.window_open %}<p class="warn">{% translate "It's outside the sending window now; a test SMS or a send waits for it." %}</p>{% endif %}
+  {% endif %}
+</section>
+{% endif %}
+
+{% include "campaigns/_live.html" %}
+{% endblock %}

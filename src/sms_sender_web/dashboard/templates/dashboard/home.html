@@ -1,6 +1,9 @@
-{% extends "base.html" %}{% load i18n fa %}
+{% extends "base.html" %}{% load i18n fa roles %}
 {% block content %}
-<h1>{% translate "Campaigns" %}</h1>
+<div class="page-head">
+  <h1>{% translate "Campaigns" %}</h1>
+  {% if user|can:"edit_campaigns" %}<a class="button" href="{% url 'campaign_new' %}">{% translate "New campaign" %}</a>{% endif %}
+</div>
 {% if campaigns %}
 <div class="table-wrap">
   <table>
@@ -15,10 +18,10 @@
       </tr>
     </thead>
     <tbody>
-    {% for c in campaigns %}
+    {% for row in campaigns %}{% with c=row.summary %}
       <tr>
-        <th scope="row">{{ c.name|ltr }}</th>
-        <td>{% if c.template %}{{ c.template|ltr }}{% else %}—{% endif %}</td>
+        <th scope="row">{% if row.campaign %}<a href="{% url 'campaign_detail' c.slug %}"><bdi>{{ row.campaign.name }}</bdi></a>{% else %}{{ c.name|ltr }}{% endif %}</th>
+        <td>{% if c.template %}{{ c.template|ltr }}{% elif row.campaign.settings.template %}{{ row.campaign.settings.template|ltr }}{% else %}—{% endif %}</td>
         <td class="num">{{ c.recipients|fa_number }}</td>
         <td>
           <ul class="badges">
@@ -30,7 +33,7 @@
         <td class="num">{% if c.links %}{{ c.links|get:"ready"|fa_number }}{% else %}—{% endif %}</td>
         <td>{% if c.last_run_at %}{{ c.last_run_at|jalali }}{% else %}—{% endif %}</td>
       </tr>
-    {% endfor %}
+    {% endwith %}{% endfor %}
     </tbody>
   </table>
 </div>

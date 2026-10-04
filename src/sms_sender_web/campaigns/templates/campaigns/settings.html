@@ -1,0 +1,110 @@
+{% extends "base.html" %}{% load i18n fa %}
+{% block title %}{% translate "Campaign settings" %} · {{ campaign.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{% translate "Campaign settings" %}: <bdi>{{ campaign.name }}</bdi></h1>
+  <a href="{% url 'campaign_detail' campaign.slug %}">{% translate "Back to the campaign" %}</a>
+</div>
+<form method="post" class="settings">
+  {% csrf_token %}
+  {% for error in form.non_field_errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+
+  <fieldset class="card">
+    <legend>{% translate "Message" %}</legend>
+    <label for="id_segment">{% translate "Segment" %}</label>
+    <select id="id_segment" name="segment" required>
+      {% for segment in segments %}
+        <option value="{{ segment.slug }}"{% if form.segment.value == segment.slug %} selected{% endif %}>{{ segment.name }} ({{ segment.slug }})</option>
+      {% endfor %}
+    </select>
+    {% for error in form.segment.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+    <label for="id_template">{% translate "Template" %}</label>
+    <input id="id_template" name="template" type="text" dir="ltr" maxlength="100" required value="{{ form.template.value|default:'' }}">
+    {% for error in form.template.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+
+    <h3>{% translate "Tokens" %}</h3>
+    <p class="hint">{% translate "What fills each token of the template: the same value for everyone, a column of the segment, or the short link. Kavenegar needs the first token." %}</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">{% translate "Token" %}</th>
+            <th scope="col">{% translate "Filled with" %}</th>
+            <th scope="col">{% translate "Fixed value" %}</th>
+            <th scope="col">{% translate "Column" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for t in tokens %}
+          <tr>
+            <th scope="row"><code dir="ltr">{{ t.name }}</code></th>
+            <td>
+              <select name="{{ t.name }}_source" aria-label="{% translate "Filled with" %}: {{ t.name }}">
+                {% for value, label in t.source.field.choices %}
+                  <option value="{{ value }}"{% if t.source.value|default:'' == value %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+              {% for error in t.source.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+            </td>
+            <td>
+              <input name="{{ t.name }}_value" type="text" value="{{ t.value.value|default:'' }}" aria-label="{% translate "Fixed value" %}: {{ t.name }}">
+              {% for error in t.value.errors %}<p class="error" role="alert">{{ error|fa_digits }}</p>{% endfor %}
+            </td>
+            <td>
+              <select name="{{ t.name }}_column" aria-label="{% translate "Column" %}: {{ t.name }}">
+                <option value="">—</option>
+                {% for column in columns %}
+                  <option value="{{ column }}"{% if t.column.value == column %} selected{% endif %}>{{ column }}</option>
+                {% endfor %}
+              </select>
+              {% for error in t.column.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <label for="id_value_maps">{% translate "Value translations (optional)" %}</label>
+    <textarea id="id_value_maps" name="value_maps" rows="3" dir="ltr">{{ form.value_maps.value|default:'' }}</textarea>
+    <p class="hint">{% translate "One per line, column:value=translation, e.g. side:Buy=خرید. A row whose value has no translation isn't sent." %}</p>
+    {% for error in form.value_maps.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+  </fieldset>
+
+  <fieldset class="card">
+    <legend>{% translate "Short link" %}</legend>
+    <p class="hint">{% translate "Used only if a token is filled with the short link." %}</p>
+    <label for="id_link_destination">{% translate "The address it opens" %}</label>
+    <input id="id_link_destination" name="link_destination" type="text" dir="ltr" value="{{ form.link_destination.value|default:'' }}" placeholder="https://kifpool.me/…">
+    {% for error in form.link_destination.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+    <label for="id_link_format">{% translate "What the token holds" %}</label>
+    <input id="id_link_format" name="link_format" type="text" dir="ltr" value="{{ form.link_format.value|default:'url' }}">
+    <p class="hint">{% translate "url: the whole short link. code: only its code, when the template's text has the rest. Or a pattern such as u/{code}." %}</p>
+    {% for error in form.link_format.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+    <label for="id_link_strategy">{% translate "One link per" %}</label>
+    <select id="id_link_strategy" name="link_strategy">
+      <option value="recipient"{% if form.link_strategy.value == "recipient" %} selected{% endif %}>{% translate "Recipient (clicks per person)" %}</option>
+      <option value="segment"{% if form.link_strategy.value == "segment" %} selected{% endif %}>{% translate "Segment" %}</option>
+      <option value="campaign"{% if form.link_strategy.value == "campaign" %} selected{% endif %}>{% translate "Campaign" %}</option>
+    </select>
+    <label for="id_link_expiry_days">{% translate "Valid for (days)" %}</label>
+    <input id="id_link_expiry_days" name="link_expiry_days" type="number" min="1" max="365" value="{{ form.link_expiry_days.value|default:7 }}">
+    {% for error in form.link_expiry_days.errors %}<p class="error" role="alert">{{ error|fa_digits }}</p>{% endfor %}
+  </fieldset>
+
+  <fieldset class="card">
+    <legend>{% translate "Send" %}</legend>
+    <label for="id_send_window">{% translate "Sending window (Tehran time)" %}</label>
+    <input id="id_send_window" name="send_window" type="text" dir="ltr" value="{{ form.send_window.value|default:'08:00-21:00' }}">
+    {% for error in form.send_window.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+    <label for="id_rate">{% translate "Rate limit (optional)" %}</label>
+    <input id="id_rate" name="rate" type="text" dir="ltr" value="{{ form.rate.value|default:'' }}" placeholder="10/s">
+    {% for error in form.rate.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+    <label for="id_workers">{% translate "Parallel sends" %}</label>
+    <input id="id_workers" name="workers" type="number" min="1" max="20" value="{{ form.workers.value|default:5 }}">
+    {% for error in form.workers.errors %}<p class="error" role="alert">{{ error|fa_digits }}</p>{% endfor %}
+  </fieldset>
+
+  <p class="hint">{% translate "Changing the message, its tokens, the link or the segment needs a new test SMS before sending." %}</p>
+  <button type="submit">{% translate "Save" %}</button>
+</form>
+{% endblock %}

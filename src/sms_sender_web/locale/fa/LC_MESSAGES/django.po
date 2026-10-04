@@ -740,3 +740,519 @@ msgstr "{count} شماره"
 #, python-brace-format
 msgid "{segment}: {valid} valid numbers, {invalid} invalid rows"
 msgstr "{segment}: {valid} شماره معتبر، {invalid} سطر نامعتبر"
+
+# --- Campaign pages: settings, check, test SMS, sending (glossary: stages, operations) ---
+
+msgid "A campaign with this short name already exists. Choose another."
+msgstr "کمپینی با این نام کوتاه وجود دارد. نام دیگری انتخاب کنید."
+
+msgid "A check before sending failed."
+msgstr "یکی از بررسی‌های پیش از ارسال ناموفق بود."
+
+msgid "A column of the segment"
+msgstr "یک ستون از گروه مخاطبان"
+
+msgid "A column the tokens use isn't in the segment's file."
+msgstr "ستونی که متغیرها از آن استفاده می‌کنند در فایل گروه مخاطبان نیست."
+
+msgid "A fixed value"
+msgstr "یک مقدار ثابت"
+
+msgid "A line break or tab isn't allowed."
+msgstr "شکستن سطر یا تب مجاز نیست."
+
+msgid "A test SMS is still running. Wait until it finishes."
+msgstr "پیامک آزمایشی هنوز در حال اجرا است. تا پایان آن صبر کنید."
+
+msgid "A token's column is empty"
+msgstr "ستون یکی از متغیرها خالی است"
+
+msgid "A translation's column isn't used by any token."
+msgstr "ستون یکی از ترجمه‌ها در هیچ متغیری به کار نرفته است."
+
+msgid "A value breaks Kavenegar's token rules"
+msgstr "یک مقدار با قواعد متغیرهای کاوه‌نگار سازگار نیست"
+
+msgid "A value has no translation"
+msgstr "یک مقدار ترجمه ندارد"
+
+msgid "Account credit"
+msgstr "اعتبار حساب"
+
+msgid "Already sent"
+msgstr "پیش‌تر پذیرفته‌شده"
+
+msgid "Another process is sending this campaign right now."
+msgstr "فرایند دیگری هم‌اکنون در حال ارسال همین کمپین است."
+
+msgid "Another process is using this campaign right now. Try again in a moment."
+msgstr "فرایند دیگری هم‌اکنون از این کمپین استفاده می‌کند. کمی بعد دوباره تلاش کنید."
+
+msgid "Approved"
+msgstr "تأییدشده"
+
+#, python-brace-format
+msgid "At most {max} characters; this is {length}."
+msgstr "حداکثر {max} کاراکتر مجاز است؛ این مقدار {length} کاراکتر است."
+
+msgid "Back to the campaign"
+msgstr "بازگشت به کمپین"
+
+msgid "Before a campaign sends, its test SMS goes to this number, and only to it, so you can see the final text."
+msgstr "پیش از ارسال هر کمپین، پیامک آزمایشی آن فقط به این شماره ارسال می‌شود تا متن نهایی را ببینید."
+
+msgid "Before sending, one SMS goes to your own number, so you can see the final text. The short links are made first."
+msgstr "پیش از ارسال اصلی، یک پیامک به شماره خود شما ارسال می‌شود تا متن نهایی را ببینید. لینک‌های کوتاه پیش از آن ساخته می‌شوند."
+
+msgid "Campaign created"
+msgstr "ساخت کمپین"
+
+msgid "Campaign settings"
+msgstr "تنظیمات کمپین"
+
+msgid "Campaign settings changed"
+msgstr "تغییر تنظیمات کمپین"
+
+msgid "Cancel the campaign"
+msgstr "لغو کمپین"
+
+msgid "Cancel the campaign? Everyone not sent yet is cancelled. SMS that Kavenegar already accepted can't be recalled."
+msgstr "کمپین لغو شود؟ ارسال به همه گیرندگانی که هنوز پیامک نگرفته‌اند لغو می‌شود. پیامک‌هایی که کاوه‌نگار پذیرفته است قابل بازگشت نیستند."
+
+msgid "Cancelled. SMS that Kavenegar already accepted can't be recalled."
+msgstr "لغو شد. پیامک‌هایی که کاوه‌نگار پذیرفته است قابل بازگشت نیستند."
+
+msgid "cancelling…"
+msgstr "در حال لغو…"
+
+msgid "Changing the message, its tokens, the link or the segment needs a new test SMS before sending."
+msgstr "با تغییر قالب، متغیرها، لینک یا گروه مخاطبان، پیش از ارسال یک پیامک آزمایشی تازه لازم است."
+
+msgid "Check"
+msgstr "اعتبارسنجی"
+
+msgid "Check now"
+msgstr "اجرای اعتبارسنجی"
+
+msgid "checks, short links and the test SMS…"
+msgstr "بررسی‌ها، ساخت لینک‌های کوتاه و پیامک آزمایشی…"
+
+msgid "Choose a segment whose columns are set."
+msgstr "گروه مخاطبانی را انتخاب کنید که ستون‌هایش تعیین شده است."
+
+msgid "Choose one of the segment's columns."
+msgstr "یکی از ستون‌های گروه مخاطبان را انتخاب کنید."
+
+#, python-brace-format
+msgid "Choose url or code, or write a pattern with {code} once and no spaces, e.g. u/{code}."
+msgstr "url یا code را انتخاب کنید، یا الگویی بنویسید که {code} را یک بار و بدون فاصله داشته باشد؛ برای نمونه u/{code}."
+
+msgid "column"
+msgstr "ستون"
+
+msgid "Cost"
+msgstr "هزینه"
+
+msgid "Cost of one SMS"
+msgstr "هزینه هر پیامک"
+
+msgid "Did the SMS arrive, and are its text and link right?"
+msgstr "پیامک رسید و متن و لینک آن درست است؟"
+
+msgid "Estimated cost"
+msgstr "برآورد هزینه"
+
+msgid "Filled with"
+msgstr "مقدار از"
+
+msgid "Finished"
+msgstr "زمان پایان"
+
+msgid "First set your own mobile number on “My account”: test SMS go only there."
+msgstr "ابتدا شماره موبایل خود را در «حساب من» ثبت کنید؛ پیامک آزمایشی فقط به همان شماره ارسال می‌شود."
+
+msgid "Fixed value"
+msgstr "مقدار ثابت"
+
+msgid "fixed value"
+msgstr "مقدار ثابت"
+
+#, python-brace-format
+msgid "It's outside the sending window ({start} to {end}, Tehran time); it's {now} now. Try again inside it."
+msgstr "اکنون خارج از بازه مجاز ارسال ({start} تا {end} به وقت تهران) است و ساعت {now} است. در بازه مجاز دوباره تلاش کنید."
+
+msgid "It's outside the sending window now; a test SMS or a send waits for it."
+msgstr "اکنون خارج از بازه مجاز ارسال است؛ پیامک آزمایشی یا ارسال باید تا آغاز بازه صبر کند."
+
+msgid "Job"
+msgstr "کار"
+
+msgid "Jobs"
+msgstr "کارها"
+
+msgid "Kavenegar needs the first token (token) in every SMS."
+msgstr "کاوه‌نگار در هر پیامک به متغیر اول (token) نیاز دارد."
+
+#, python-brace-format
+msgid "Kavenegar refused the account check (code {code})."
+msgstr "کاوه‌نگار بررسی حساب را نپذیرفت (کد {code})."
+
+#, python-brace-format
+msgid "Kavenegar refused the test SMS because of an account problem (code {code})."
+msgstr "کاوه‌نگار پیامک آزمایشی را به‌دلیل خطای حساب نپذیرفت (کد {code})."
+
+#, python-brace-format
+msgid "Kavenegar stopped the sending because of an account problem (code {code})."
+msgstr "توقف به‌دلیل خطای حساب: کاوه‌نگار ارسال را متوقف کرد (کد {code})."
+
+msgid "Lowercase English letters, digits and dashes, e.g. coin-price-7. It names the campaign's records and tags its links, and can't change later."
+msgstr "حروف کوچک انگلیسی، رقم و خط تیره؛ برای نمونه coin-price-7. سوابق کمپین و برچسب لینک‌های آن با این نام ثبت می‌شود و بعداً تغییر نمی‌کند."
+
+msgid "Message"
+msgstr "پیام"
+
+msgid "My account"
+msgstr "حساب من"
+
+msgid "New campaign"
+msgstr "کمپین تازه"
+
+msgid "Next: the message's tokens"
+msgstr "مرحله بعد: متغیرهای پیام"
+
+msgid "No, something's wrong"
+msgstr "نه، ایرادی دارد"
+
+msgid "Nobody is left to send to."
+msgstr "گیرنده‌ای برای ارسال باقی نمانده است."
+
+msgid "None of these sends an SMS."
+msgstr "هیچ‌یک از این‌ها پیامکی ارسال نمی‌کند."
+
+#, python-brace-format
+msgid "Not enough credit: about {estimate} rials are needed for {recipients} SMS, and {credit} rials are left."
+msgstr "اعتبار حساب کافی نیست: برای {recipients} پیامک حدود {estimate} ریال لازم است و {credit} ریال باقی مانده است."
+
+msgid "Not every short link could be made. Try again."
+msgstr "ساخت همه لینک‌های کوتاه ممکن نشد. دوباره تلاش کنید."
+
+msgid "Not used"
+msgstr "استفاده نمی‌شود"
+
+msgid "One link per"
+msgstr "یک لینک برای هر"
+
+msgid "One per line, column:value=translation, e.g. side:Buy=خرید. A row whose value has no translation isn't sent."
+msgstr "هر سطر یک ترجمه به شکل ستون:مقدار=ترجمه؛ برای نمونه side:Buy=خرید. به ردیفی که مقدارش ترجمه ندارد پیامک ارسال نمی‌شود."
+
+msgid "Only one token can carry the short link."
+msgstr "فقط یک متغیر می‌تواند لینک کوتاه را در خود داشته باشد."
+
+msgid "Parallel sends"
+msgstr "ارسال هم‌زمان"
+
+msgid "parallel sends"
+msgstr "ارسال هم‌زمان"
+
+msgid "pausing…"
+msgstr "در حال توقف…"
+
+msgid "Queued. The result appears in the list of jobs."
+msgstr "در صف قرار گرفت. نتیجه در فهرست کارها نمایش داده می‌شود."
+
+msgid "Rate limit (optional)"
+msgstr "سقف سرعت ارسال (اختیاری)"
+
+msgid "Reads the segment with these settings, without sending anything: who would get the SMS, and what's in the way."
+msgstr "گروه مخاطبان را با همین تنظیمات می‌خواند، بی‌آنکه چیزی ارسال شود: چه کسانی پیامک می‌گیرند و چه چیزی مانع است."
+
+msgid "Ready for a test SMS."
+msgstr "آماده پیامک آزمایشی است."
+
+msgid "Recipient (clicks per person)"
+msgstr "گیرنده (کلیک هر نفر جدا شمرده می‌شود)"
+
+msgid "Reconcile with Kavenegar"
+msgstr "تطبیق با کاوه‌نگار"
+
+msgid "Rejected. Change the settings, then send a new test SMS."
+msgstr "رد شد. تنظیمات را اصلاح کنید و سپس یک پیامک آزمایشی تازه بفرستید."
+
+msgid "Requested"
+msgstr "زمان درخواست"
+
+msgid "Result"
+msgstr "نتیجه"
+
+msgid "Resume sending"
+msgstr "ادامه ارسال"
+
+msgid "Resumed"
+msgstr "ادامه ارسال"
+
+msgid "rials"
+msgstr "ریال"
+
+msgid "Save"
+msgstr "ذخیره"
+
+msgid "Saved."
+msgstr "ذخیره شد."
+
+msgid "segment"
+msgstr "گروه مخاطبان"
+
+msgid "Send a new test SMS"
+msgstr "ارسال پیامک آزمایشی تازه"
+
+msgid "Send a test SMS"
+msgstr "ارسال پیامک آزمایشی"
+
+msgid "Send a test SMS and approve it first."
+msgstr "ابتدا یک پیامک آزمایشی بفرستید و آن را تأیید کنید."
+
+msgid "Sending is queued again; unknown statuses are checked first."
+msgstr "ارسال دوباره در صف قرار گرفت؛ ابتدا وضعیت‌های نامعلوم استعلام می‌شوند."
+
+msgid "Sending is queued. Progress appears here."
+msgstr "ارسال در صف قرار گرفت. پیشرفت آن در همین صفحه نمایش داده می‌شود."
+
+msgid "Sending needs an approved test SMS for the current settings."
+msgstr "ارسال به یک پیامک آزمایشی تأییدشده برای تنظیمات کنونی نیاز دارد."
+
+msgid "Sending pauses after the requests already on their way."
+msgstr "ارسال پس از تکمیل درخواست‌های در جریان، موقتاً متوقف می‌شود."
+
+msgid "sending rate"
+msgstr "سرعت ارسال"
+
+msgid "Sending started"
+msgstr "آغاز ارسال"
+
+msgid "sending window"
+msgstr "بازه مجاز ارسال"
+
+msgid "Sending window (Tehran time)"
+msgstr "بازه مجاز ارسال (به وقت تهران)"
+
+msgid "Sent to"
+msgstr "ارسال‌شده به"
+
+msgid "Settings"
+msgstr "تنظیمات"
+
+msgid "Short link"
+msgstr "لینک کوتاه"
+
+msgid "short link"
+msgstr "لینک کوتاه"
+
+msgid "Start sending"
+msgstr "آغاز ارسال"
+
+msgid "Start sending this campaign now?"
+msgstr "ارسال این کمپین همین حالا آغاز شود؟"
+
+msgid "State"
+msgstr "وضعیت"
+
+msgid "template"
+msgstr "قالب پیامک"
+
+msgid "Test SMS"
+msgstr "پیامک آزمایشی"
+
+msgid "Test SMS approved"
+msgstr "تأیید پیامک آزمایشی"
+
+msgid "Test SMS number changed"
+msgstr "تغییر شماره پیامک آزمایشی"
+
+msgid "Test SMS rejected"
+msgstr "رد پیامک آزمایشی"
+
+msgid "Test SMS requested"
+msgstr "درخواست پیامک آزمایشی"
+
+#, python-brace-format
+msgid "The address already has {params}; the link stage adds those itself."
+msgstr "این نشانی از پیش {params} دارد؛ مرحله ساخت لینک این‌ها را خودش می‌افزاید."
+
+msgid "The address has no domain."
+msgstr "نشانی دامنه ندارد."
+
+msgid "The address is a short link itself."
+msgstr "این نشانی خودش یک لینک کوتاه است."
+
+msgid "The address it opens"
+msgstr "نشانی مقصد"
+
+msgid "The address must not contain a user name or password."
+msgstr "نشانی نباید نام کاربری یا گذرواژه داشته باشد."
+
+msgid "The address must start with https://"
+msgstr "نشانی باید با https:// آغاز شود."
+
+msgid "The campaign has no template."
+msgstr "این کمپین قالب پیامک ندارد."
+
+msgid "The campaign's segment isn't ready or its file is missing."
+msgstr "گروه مخاطبان این کمپین آماده نیست یا فایل آن پیدا نشد."
+
+#, python-brace-format
+msgid "The Kavenegar account has no credit left ({credit} rials). Top it up before sending."
+msgstr "اعتبار حساب کاوه‌نگار تمام شده است ({credit} ریال). پیش از ارسال، حساب را شارژ کنید."
+
+msgid "The Kavenegar account is in debug mode, so no SMS would be delivered. Turn it off in the Kavenegar panel."
+msgstr "حساب کاوه‌نگار در حالت آزمایشی (debug) است و هیچ پیامکی تحویل نمی‌شود. این حالت را در پنل کاوه‌نگار خاموش کنید."
+
+msgid "The run stopped on an unexpected error. The details are in the system log."
+msgstr "اجرا با خطایی پیش‌بینی‌نشده متوقف شد. جزئیات در گزارش سامانه ثبت شده است."
+
+msgid "The segment's file couldn't be read."
+msgstr "فایل گروه مخاطبان خوانده نشد."
+
+#, python-brace-format
+msgid "The sending window ({start} to {end}) ended. Resume inside the next one: it carries on from where it stopped."
+msgstr "بازه مجاز ارسال ({start} تا {end}) به پایان رسید. در بازه بعدی «ادامه ارسال» را بزنید؛ ارسال از همان‌جا ادامه می‌یابد."
+
+msgid "The settings changed after the test SMS. Send a new test SMS and approve it."
+msgstr "تنظیمات پس از پیامک آزمایشی تغییر کرده است. یک پیامک آزمایشی تازه بفرستید و آن را تأیید کنید."
+
+msgid "The settings changed after this test. Send a new test SMS."
+msgstr "تنظیمات پس از این آزمایش تغییر کرده است. یک پیامک آزمایشی تازه بفرستید."
+
+msgid "The short link"
+msgstr "لینک کوتاه"
+
+msgid "the short link"
+msgstr "لینک کوتاه"
+
+msgid "The short link opens"
+msgstr "لینک کوتاه باز می‌کند"
+
+msgid "The short link's address isn't allowed."
+msgstr "نشانی مقصد لینک کوتاه مجاز نیست."
+
+#, python-brace-format
+msgid "The short-link service refused to make the links (code {status})."
+msgstr "سرویس لینک کوتاه ساخت لینک‌ها را نپذیرفت (کد {status})."
+
+msgid "The template's name exactly as in the Kavenegar panel."
+msgstr "نام قالب، دقیقاً همان‌طور که در پنل کاوه‌نگار ثبت شده است."
+
+msgid "The test SMS is approved. Sending can start."
+msgstr "پیامک آزمایشی تأیید شد. ارسال را می‌توان آغاز کرد."
+
+msgid "The test SMS is queued. Its result appears here."
+msgstr "پیامک آزمایشی در صف قرار گرفت. نتیجه آن در همین صفحه نمایش داده می‌شود."
+
+msgid "The test SMS is rejected. Change the settings and send a new test."
+msgstr "پیامک آزمایشی رد شد. تنظیمات را اصلاح کنید و یک آزمایش تازه بفرستید."
+
+msgid "The test SMS takes its token values from a recipient, and there's none to send to."
+msgstr "پیامک آزمایشی مقدار متغیرها را از یکی از گیرندگان می‌گیرد، و گیرنده‌ای برای ارسال نیست."
+
+#, python-brace-format
+msgid "The test SMS wasn't sent (code {code}). Check the template and its tokens."
+msgstr "پیامک آزمایشی ارسال نشد (کد {code}). قالب و متغیرهای آن را بررسی کنید."
+
+#, python-brace-format
+msgid "The worker stopped during this job {attempts} times, so it was given up."
+msgstr "اجراکننده {attempts} بار در میانه این کار متوقف شد، بنابراین کار رها شد."
+
+msgid "The “_” character isn't allowed."
+msgstr "نویسه «_» مجاز نیست."
+
+msgid "This campaign has started sending, so its settings can't change. For a different message, make a new campaign."
+msgstr "ارسال این کمپین آغاز شده است و تنظیماتش دیگر تغییر نمی‌کند. برای پیام دیگری، کمپین تازه‌ای بسازید."
+
+msgid "This campaign is sending; a test SMS can't run at the same time."
+msgstr "این کمپین در حال ارسال است؛ پیامک آزمایشی هم‌زمان با آن اجرا نمی‌شود."
+
+msgid "This campaign's settings don't match what it sent before."
+msgstr "تنظیمات این کمپین با ارسال‌های قبلی آن یکسان نیست."
+
+msgid "This test SMS can't be approved or rejected now."
+msgstr "این پیامک آزمایشی اکنون قابل تأیید یا رد نیست."
+
+#, python-brace-format
+msgid "This token allows at most {max} spaces; this has {spaces}."
+msgstr "این متغیر حداکثر {max} فاصله می‌پذیرد؛ این مقدار {spaces} فاصله دارد."
+
+msgid "to"
+msgstr "به"
+
+msgid "To send"
+msgstr "در انتظار ارسال"
+
+msgid "Token"
+msgstr "متغیر"
+
+msgid "Tokens"
+msgstr "متغیرهای قالب"
+
+msgid "tokens"
+msgstr "متغیرهای قالب"
+
+msgid "Update clicks"
+msgstr "به‌روزرسانی کلیک‌ها"
+
+msgid "Update delivery statuses"
+msgstr "به‌روزرسانی وضعیت تحویل"
+
+msgid "Update requested"
+msgstr "درخواست به‌روزرسانی"
+
+#, python-brace-format
+msgid "url: the whole short link. code: only its code, when the template's text has the rest. Or a pattern such as u/{code}."
+msgstr "url: کل لینک کوتاه. code: فقط کد آن، وقتی بقیه نشانی در متن قالب است. یا الگویی مانند u/{code}."
+
+msgid "Used only if a token is filled with the short link."
+msgstr "فقط وقتی به کار می‌رود که مقدار یکی از متغیرها لینک کوتاه باشد."
+
+msgid "Valid for (days)"
+msgstr "مدت اعتبار (روز)"
+
+msgid "value translations"
+msgstr "ترجمه مقدارها"
+
+msgid "Value translations (optional)"
+msgstr "ترجمه مقدارها (اختیاری)"
+
+msgid "What fills each token of the template: the same value for everyone, a column of the segment, or the short link. Kavenegar needs the first token."
+msgstr "مقدار هر متغیر قالب از کجا بیاید: یک مقدار ثابت برای همه، یک ستون از گروه مخاطبان، یا لینک کوتاه. کاوه‌نگار متغیر اول را همیشه لازم دارد."
+
+msgid "What the token holds"
+msgstr "آنچه در متغیر قرار می‌گیرد"
+
+msgid "What this campaign sends"
+msgstr "آنچه این کمپین ارسال می‌کند"
+
+msgid "Write each translation as column:value=translation, e.g. side:Buy=خرید."
+msgstr "هر ترجمه را به شکل ستون:مقدار=ترجمه بنویسید؛ برای نمونه side:Buy=خرید."
+
+msgid "Write the address the short link opens."
+msgstr "نشانی مقصد لینک کوتاه را بنویسید."
+
+msgid "Write the daily window as 08:00-21:00 (Tehran time)."
+msgstr "بازه روزانه را به شکل ۰۸:۰۰-۲۱:۰۰ (به وقت تهران) بنویسید."
+
+msgid "Write the rate like 10/s, 600/m or 3600/h."
+msgstr "سرعت را مانند ۱۰/s، ۶۰۰/m یا ۳۶۰۰/h بنویسید."
+
+msgid "Write the template's name exactly as in the Kavenegar panel: English letters, digits, “-”, “_” or “.”, no spaces."
+msgstr "نام قالب را دقیقاً مانند پنل کاوه‌نگار بنویسید: حروف انگلیسی، رقم، «-»، «_» یا «.» و بدون فاصله."
+
+msgid "Write the value, or choose “Not used”."
+msgstr "مقدار را بنویسید، یا «استفاده نمی‌شود» را انتخاب کنید."
+
+msgid "Yes, approve"
+msgstr "بله، تأیید می‌کنم"
+
+msgid "Your number for test SMS"
+msgstr "شماره شما برای پیامک آزمایشی"
+
+#, python-brace-format
+msgid "{host} isn't an allowed destination. Allowed: {domains}."
+msgstr "{host} جزو مقصدهای مجاز نیست. مقصدهای مجاز: {domains}."

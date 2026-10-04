@@ -38,20 +38,34 @@ TOKEN_MAX_SPACES: dict[str, int] = {
 TOKEN_MAX_LEN = 100
 
 
-def token_problem(name: str, value: str) -> str | None:
-    """Why Kavenegar would reject `value` as token `name` (error 431), or
-    None if it's fine: at most 100 characters, no line break or underscore,
-    and no more spaces than the token allows."""
+def token_issue(name: str, value: str) -> tuple[str, dict] | None:
+    """Why Kavenegar would reject `value` as token `name` (error 431), as a
+    key and its numbers, or None if it's fine: at most 100 characters, no
+    line break or underscore, and no more spaces than the token allows."""
     if len(value) > TOKEN_MAX_LEN:
-        return f"{name} is {len(value)} characters; Kavenegar allows at most {TOKEN_MAX_LEN}"
+        return "too_long", {"length": len(value), "max": TOKEN_MAX_LEN}
     if any(ch in value for ch in "\r\n\t"):
-        return f"{name} contains a line break or tab, which Kavenegar rejects"
+        return "line_break", {}
     if "_" in value:
-        return f"{name} contains '_', which Kavenegar rejects"
+        return "underscore", {}
     spaces = value.count(" ")
     if spaces > TOKEN_MAX_SPACES[name]:
-        return f"{name} allows at most {TOKEN_MAX_SPACES[name]} space(s); got {spaces}"
+        return "too_many_spaces", {"max": TOKEN_MAX_SPACES[name], "spaces": spaces}
     return None
+
+
+def token_problem(name: str, value: str) -> str | None:
+    """`token_issue` in words, for the CLI and the logs."""
+    issue = token_issue(name, value)
+    if issue is None:
+        return None
+    key, f = issue
+    return {
+        "too_long": f"{name} is {f.get('length')} characters; Kavenegar allows at most {f.get('max')}",
+        "line_break": f"{name} contains a line break or tab, which Kavenegar rejects",
+        "underscore": f"{name} contains '_', which Kavenegar rejects",
+        "too_many_spaces": f"{name} allows at most {f.get('max')} space(s); got {f.get('spaces')}",
+    }[key]
 
 
 # Lookup methods (e.g. sms/statusbyreceptor) answer an empty result with this

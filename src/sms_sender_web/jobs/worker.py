@@ -131,6 +131,7 @@ class Worker:
                     Job.objects.filter(pk=job.pk).update(
                         state=Job.State.FAILED, finished_at=now, lease_owner="", lease_until=None,
                         last_error=f"the worker stopped mid-job {job.attempts} times; given up",
+                        result={"stop_reason": "given_up", "stop_fields": {"attempts": job.attempts}},
                     )
                     continue
                 taken = Job.objects.filter(claimable, pk=job.pk).update(
@@ -165,6 +166,7 @@ class Worker:
 
     def execute(self, job: Job) -> None:
         handler = {
+            Job.Kind.TEST: self._test,
             Job.Kind.SEND: self._send,
             Job.Kind.RECONCILE: self._reconcile,
             Job.Kind.DELIVERY: self._delivery,
@@ -175,7 +177,7 @@ class Worker:
             state, result, error = handler(job)
         except Exception as e:  # noqa: BLE001 — recorded on the job
             logger.exception("job_crashed", extra={"job": job.pk})
-            state, result, error = Job.State.FAILED, {}, f"{type(e).__name__}: {e}"
+            state, result, error = Job.State.FAILED, {"stop_reason": "crashed"}, f"{type(e).__name__}: {e}"
         finished = None if state == Job.State.QUEUED else timezone.now()
         Job.objects.filter(pk=job.pk, lease_owner=self.id).update(
             state=state, result=result, last_error=error, control="",
@@ -184,8 +186,21 @@ class Worker:
         logger.info("job_finished", extra={"job": job.pk, "state": str(state)})
 
     def _send(self, job: Job):
+        return self._run(job, test=False)
+
+    def _test(self, job: Job):
+        return self._run(job, test=True)
+
+    def _run(self, job: Job, *, test: bool):
+        """A send, or a test run (stages 1–3 and one SMS to the operator).
+        Stopping a test never touches the campaign's recipients."""
         reporter = JobReporter(job)
-        runner = self.engine.runner(job.campaign, reporter)
+        if test:
+            runner = self.engine.runner(job.campaign, reporter, test_number=job.params["test_number"])
+        else:
+            runner = self.engine.runner(
+                job.campaign, reporter, cost_per_sms=job.params.get("cost_per_sms"),
+            )
         reason = _StopReason()
 
         def on_stop(why: str) -> None:
@@ -198,9 +213,12 @@ class Worker:
         try:
             summary = runner.run()
         except RunLockError as e:
-            return Job.State.FAILED, {}, f"another sms-sender process is sending this campaign: {e}"
-        except (CampaignMismatchError, InputError, FileNotFoundError) as e:
-            return Job.State.FAILED, {}, str(e)
+            return (Job.State.FAILED, {"stop_reason": "busy"},
+                    f"another sms-sender process is sending this campaign: {e}")
+        except CampaignMismatchError as e:
+            return Job.State.FAILED, {"stop_reason": "settings_mismatch"}, str(e)
+        except (InputError, FileNotFoundError) as e:
+            return Job.State.FAILED, {"stop_reason": "input_unreadable"}, str(e)
         finally:
             heartbeat.finish()
 
@@ -208,9 +226,10 @@ class Worker:
             k: v for k, v in dataclasses.asdict(summary).items() if k != "top_errors"
         }
         result["top_errors"] = [[message, count] for message, count in summary.top_errors]
-        if reason.value == "cancel":
-            with RunLock(campaign_db(job.campaign)):
-                result["cancelled"] = self.engine.state(job.campaign).cancel_remaining()
+        if reason.value == "cancel" or (test and reason.value == "pause"):
+            if not test:
+                with RunLock(campaign_db(job.campaign)):
+                    result["cancelled"] = self.engine.state(job.campaign).cancel_remaining()
             return Job.State.CANCELLED, result, ""
         if reason.value == "pause":
             return Job.State.PAUSED, result, ""
@@ -221,7 +240,7 @@ class Worker:
             # top errors; a failed pre-send check, in the last note.
             why = "; ".join(f"{message} (x{count})" for message, count in summary.top_errors)
             return Job.State.FAILED, result, why or reporter.last_note or "the run halted"
-        if summary.stopped:
+        if summary.stopped and not test:
             return Job.State.PAUSED, result, "the sending window closed; resume inside it"
         return Job.State.DONE, result, ""
 

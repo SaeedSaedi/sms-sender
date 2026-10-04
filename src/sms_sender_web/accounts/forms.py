@@ -22,6 +22,21 @@ class CodeForm(forms.Form):
         return code
 
 
+class TestPhoneForm(forms.Form):
+    test_phone = forms.CharField(max_length=32, required=False)
+
+    def clean_test_phone(self) -> str:
+        from sms_sender.phone import InvalidPhoneError, normalize
+
+        raw = self.cleaned_data["test_phone"].strip()
+        if not raw:
+            return ""
+        try:
+            return normalize(raw)
+        except InvalidPhoneError as e:
+            raise forms.ValidationError(_("That isn't a valid mobile number.")) from e
+
+
 class NewUserForm(forms.Form):
     username = forms.CharField(max_length=150)
     password = forms.CharField(widget=forms.PasswordInput)

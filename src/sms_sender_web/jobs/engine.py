@@ -37,9 +37,13 @@ class Engine:
     def link_client(self) -> ShlinkClient:
         return ShlinkClient(load_shlink_config())
 
-    def runner(self, campaign: Campaign, reporter: Reporter) -> Runner:
-        """A send run for the campaign's settings (the CLI's flags). The
-        approval test isn't part of it: in the dashboard that's its own step."""
+    def runner(
+        self, campaign: Campaign, reporter: Reporter, *,
+        test_number: str | None = None, cost_per_sms: int | None = None,
+    ) -> Runner:
+        """A run for the campaign's settings (the CLI's flags). With
+        `test_number`, a test run: everything up to one SMS to that number,
+        then stop. Otherwise a send, given the approved test's cost per SMS."""
         s = campaign.settings
         tokens = {name: s.get("tokens", {}).get(name) for name in TOKEN_MAX_SPACES}
         sender_cfg = SenderConfig(
@@ -75,4 +79,7 @@ class Engine:
             link_rate_per_sec=parse_rate(s.get("link_rate", DEFAULT_LINK_RATE)),
             reporter=reporter,
             install_signal_handlers=False,  # the worker handles signals
+            approval_test_number=test_number,
+            test_only=test_number is not None,
+            cost_per_sms=cost_per_sms,
         )

@@ -44,11 +44,12 @@ class FakeEngine(Engine):
     def link_client(self):
         raise AssertionError("no links in these tests")
 
-    def runner(self, campaign, reporter):
+    def runner(self, campaign, reporter, *, test_number=None, cost_per_sms=None):
         runner = Runner(
             input_path=campaign.settings["input"], state=self.state(campaign), sender=self.fake,
             workers=1, campaign=campaign.slug, reporter=reporter, preflight=False,
-            install_signal_handlers=False,
+            install_signal_handlers=False, approval_test_number=test_number,
+            test_only=test_number is not None, cost_per_sms=cost_per_sms,
         )
         self.runners.append(runner)
         return runner

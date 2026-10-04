@@ -281,3 +281,19 @@ def test_link_formats(fmt, ok):
     assert (format_problem(fmt) is None) is ok
     if ok:
         assert "<short-code>" in placeholder_token(fmt, BASE)
+
+
+@pytest.mark.parametrize("url, key", [
+    ("http://kifpool.me/x", "not_https"),
+    ("https:///x", "no_domain"),
+    ("https://user:pw@kifpool.me/x", "credentials"),
+    ("https://evil.example/x", "domain_not_allowed"),
+    (BASE + "/abc", "short_link"),
+    ("https://kifpool.me/x?utm_source=a", "has_added_params"),
+    ("https://app.kifpool.me/wallet", None),
+])
+def test_destination_issue_is_a_key_for_the_dashboard(url, key):
+    from sms_sender.links import destination_issue
+
+    issue = destination_issue(url, ("kifpool.me",), BASE)
+    assert (issue[0] if issue else None) == key

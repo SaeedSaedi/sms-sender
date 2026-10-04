@@ -5,6 +5,8 @@ from django.utils.translation import gettext as gettext_now
 from django.utils.translation import gettext_lazy as _
 
 from ..accounts.terms import ROLE_LABELS
+from ..campaigns.terms import SETTING_NAMES
+from ..jobs.models import Job
 from ..dashboard.templatetags.fa import fa_digits, fa_number
 from ..privacy import mask_phone
 
@@ -26,6 +28,17 @@ ACTION_LABELS = {
     "segment_deleted": _("Segment deleted"),
     "suppression_added": _("Added to the suppression list"),
     "suppression_removed": _("Removed from the suppression list"),
+    "test_number_changed": _("Test SMS number changed"),
+    "campaign_created": _("Campaign created"),
+    "campaign_changed": _("Campaign settings changed"),
+    "test_requested": _("Test SMS requested"),
+    "test_approved": _("Test SMS approved"),
+    "test_rejected": _("Test SMS rejected"),
+    "send_started": _("Sending started"),
+    "job_requested": _("Update requested"),
+    "job_paused": _("Paused"),
+    "job_resumed": _("Resumed"),
+    "job_cancelled": _("Cancelled"),
 }
 
 
@@ -60,8 +73,13 @@ def describe(event) -> str:
         )
     if event.action == "suppression_added":
         return format_html(gettext_now("{count} numbers"), count=fa_number(d.get("count", 0)))
-    if event.action == "suppression_removed":
-        return _who(fa_digits(mask_phone(d.get("phone", ""))))
+    if event.action in ("suppression_removed", "test_number_changed"):
+        return _who(fa_digits(mask_phone(d.get("phone", "")))) if d.get("phone") else ""
+    if event.action in ("job_requested", "job_paused", "job_resumed", "job_cancelled"):
+        return str(Job.Kind(d["kind"]).label) if d.get("kind") in Job.Kind.values else ""
+    if event.action == "campaign_changed":
+        names = dict.fromkeys(str(SETTING_NAMES[k]) for k in d.get("changed", []) if k in SETTING_NAMES)
+        return "، ".join(names)
     if event.action == "2fa_failed":
         when = gettext_now("while setting up") if d.get("during") == "setup" else gettext_now("while signing in")
         if d.get("throttled"):

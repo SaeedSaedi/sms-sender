@@ -7,4 +7,5 @@ urlpatterns = [
     path("2fa/setup/", views.two_factor_setup, name="two_factor_setup"),
     path("users/", views.users, name="users"),
     path("password/", views.PasswordChange.as_view(), name="password_change"),
+    path("account/", views.my_account, name="my_account"),
 ]

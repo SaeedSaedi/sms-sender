@@ -72,8 +72,11 @@ class LoadedRow:
 @dataclass(frozen=True)
 class InvalidRow:
     raw: str
-    reason: str
+    reason: str      # in words, for the CLI and the state DB
     line_no: int
+    # The reason as a key, for the dashboard: invalid_phone,
+    # conflicting_user_ids, empty_value, unmapped_value or token_rule.
+    key: str = "invalid_phone"
 
 
 @dataclass(frozen=True)
@@ -163,6 +166,7 @@ class _CsvRow:
     problem: str | None           # why the row can't be sent as-is
     tokens: dict[str, str]
     user_id: str                  # "" when blank or unmapped
+    problem_key: str = "invalid_phone"
 
 
 def _load_header_csv(
@@ -199,8 +203,8 @@ def _load_header_csv(
             except InvalidPhoneError as e:
                 rows.append(_CsvRow(reader.line_num, raw, None, str(e), {}, user_id))
                 continue
-            tokens, reason = _row_tokens(row, spec) if spec else ({}, None)
-            rows.append(_CsvRow(reader.line_num, raw, canonical, reason, tokens, user_id))
+            tokens, reason, key = _row_tokens(row, spec) if spec else ({}, None, "")
+            rows.append(_CsvRow(reader.line_num, raw, canonical, reason, tokens, user_id, key))
 
     # A phone's user ID is whichever non-blank one its rows carry; two
     # different ones are a conflict.
@@ -222,13 +226,14 @@ def _load_header_csv(
             ids = ", ".join(sorted(user_ids[r.phone]))
             invalid.append(InvalidRow(
                 raw=r.raw, reason=f"conflicting user IDs ({ids}); not sent", line_no=r.line_no,
+                key="conflicting_user_ids",
             ))
             continue
         if r.phone in seen:
             duplicates += 1
             continue
         if r.problem is not None:
-            invalid.append(InvalidRow(raw=r.raw, reason=r.problem, line_no=r.line_no))
+            invalid.append(InvalidRow(raw=r.raw, reason=r.problem, line_no=r.line_no, key=r.problem_key))
             continue
         seen.add(r.phone)
         (user_id,) = user_ids.get(r.phone) or {None}
@@ -241,20 +246,23 @@ def _load_header_csv(
     )
 
 
-def _row_tokens(row: dict[str, str | None], spec: TokenColumns) -> tuple[dict[str, str], str | None]:
-    """Return (tokens, None) for a sendable row, or ({}, reason) if it isn't."""
+def _row_tokens(
+    row: dict[str, str | None], spec: TokenColumns,
+) -> tuple[dict[str, str], str | None, str]:
+    """Return (tokens, None, "") for a sendable row, or ({}, reason, key) if
+    it isn't."""
     tokens: dict[str, str] = {}
     for name, column in spec.columns.items():
         value = (row.get(column) or "").strip()
         if not value:
-            return {}, f"{column} is empty (needed for {name})"
+            return {}, f"{column} is empty (needed for {name})", "empty_value"
         mapping = spec.value_maps.get(column)
         if mapping is not None:
             if value not in mapping:
-                return {}, f"{column}={value!r} has no entry in its value map"
+                return {}, f"{column}={value!r} has no entry in its value map", "unmapped_value"
             value = mapping[value]
         problem = token_problem(name, value)
         if problem:
-            return {}, f"{column}: {problem}"
+            return {}, f"{column}: {problem}", "token_rule"
         tokens[name] = value
-    return tokens, None
+    return tokens, None, ""

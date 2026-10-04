@@ -194,3 +194,26 @@ def test_token_columns_missing_column_is_an_input_error(tmp_path):
     p = write(tmp_path, "in.csv", "phone,name\n09120000001,Ali\n")
     with pytest.raises(InputError, match="first_name"):
         load(p, TokenColumns(columns={"token10": "first_name"}))
+
+
+def test_invalid_rows_carry_a_key_for_the_dashboard(tmp_path):
+    p = tmp_path / "in.csv"
+    p.write_text(
+        "phone,user_id,side\n"
+        "09120000001,u1,Buy\n"
+        "nope,u2,Buy\n"
+        "09120000003,u3,\n"
+        "09120000004,u4,Hold\n"
+        "09120000005,u5,Buy\n"
+        "09120000005,u6,Buy\n",
+        encoding="utf-8",
+    )
+    spec = TokenColumns(columns={"token": "side"}, value_maps={"side": {"Buy": "خرید"}})
+    result = load(p, spec, "user_id")
+    assert [(r.raw, r.key) for r in result.invalid] == [
+        ("nope", "invalid_phone"),
+        ("09120000003", "empty_value"),
+        ("09120000004", "unmapped_value"),
+        ("09120000005", "conflicting_user_ids"),
+        ("09120000005", "conflicting_user_ids"),
+    ]
