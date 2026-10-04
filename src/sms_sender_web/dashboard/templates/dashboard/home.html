@@ -15,6 +15,7 @@
         <th scope="col">{% translate "Statuses" %}</th>
         <th scope="col">{% translate "Short links" %}</th>
         <th scope="col">{% translate "Last run" %}</th>
+        <th scope="col"><span class="visually-hidden">{% translate "Report" %}</span></th>
       </tr>
     </thead>
     <tbody>
@@ -32,6 +33,7 @@
         </td>
         <td class="num">{% if c.links %}{{ c.links|get:"ready"|fa_number }}{% else %}—{% endif %}</td>
         <td>{% if c.last_run_at %}{{ c.last_run_at|jalali }}{% else %}—{% endif %}</td>
+        <td>{% if c.counts %}<a href="{% url 'report' c.slug %}">{% translate "Report" %}</a>{% endif %}</td>
       </tr>
     {% endwith %}{% endfor %}
     </tbody>

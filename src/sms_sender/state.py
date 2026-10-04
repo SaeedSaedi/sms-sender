@@ -860,6 +860,39 @@ class StateStore:
         ).fetchall()
         return {r["delivery_status"]: r["n"] for r in rows}
 
+    def total_cost(self) -> int:
+        """What this campaign paid for its accepted SMS, in rials."""
+        row = self._conn().execute("SELECT COALESCE(SUM(cost), 0) FROM recipients").fetchone()
+        return int(row[0])
+
+    def recipients_page(
+        self, *, limit: int, offset: int = 0, phone: str | None = None,
+    ) -> list[sqlite3.Row]:
+        """Recipients in the order they were added, for the dashboard's list:
+        each row's status, delivery, segment, user ID and its own link's
+        clicks (None for a shared link). `id` is the rowid, so a page can
+        point at a row without putting the number in a URL."""
+        where, args = ("WHERE r.phone = ? ", [phone]) if phone else ("", [])
+        return self._conn().execute(
+            "SELECT r.rowid AS id, r.phone, r.raw, r.status, r.delivery_status, r.segment, "
+            "r.user_id, r.sent_at, r.cost, "
+            "CASE WHEN r.link_key = r.phone THEN COALESCE(l.clicks, 0) END AS clicks "
+            "FROM recipients r LEFT JOIN links l ON l.key = r.link_key "
+            f"{where}ORDER BY r.rowid LIMIT ? OFFSET ?",
+            (*args, limit, offset),
+        ).fetchall()
+
+    def recipient_total(self, phone: str | None = None) -> int:
+        if phone:
+            row = self._conn().execute("SELECT COUNT(*) FROM recipients WHERE phone=?", (phone,)).fetchone()
+        else:
+            row = self._conn().execute("SELECT COUNT(*) FROM recipients").fetchone()
+        return int(row[0])
+
+    def phone_of_row(self, row_id: int) -> str | None:
+        row = self._conn().execute("SELECT phone FROM recipients WHERE rowid=?", (row_id,)).fetchone()
+        return row[0] if row else None
+
     def average_cost(self) -> int | None:
         """What this campaign paid per SMS so far (rials, rounded up), if any."""
         row = self._conn().execute(

@@ -289,3 +289,21 @@ def test_upsert_pending_returns_only_newly_inserted(tmp_path):
     assert s.upsert_pending([("09120000001", "x"), ("09120000002", "y")]) == 2
     assert s.upsert_pending([("09120000002", "y"), ("09120000003", "z")]) == 1
     assert s.counts().get(PENDING) == 3
+
+
+def test_the_dashboards_recipient_list(tmp_path):
+    store = StateStore(tmp_path / "s.db")
+    store.upsert_pending([("09120000001", "0912 000 0001"), ("09120000002", "09120000002")], segment="vip")
+    store.record_invalid_many([("nope", "not a phone number")])
+    store.claim("09120000001")
+    store.mark_sent("09120000001", message_id=7, status_code=200, cost=3020)
+    assert store.total_cost() == 3020
+    assert store.recipient_total() == 3 and store.recipient_total("09120000002") == 1
+    rows = store.recipients_page(limit=2)
+    assert [(r["phone"], r["status"], r["segment"], r["clicks"]) for r in rows] == [
+        ("09120000001", "sent", "vip", None), ("09120000002", "pending", "vip", None),
+    ]
+    assert [r["phone"] for r in store.recipients_page(limit=2, offset=2)] == ["INVALID:nope"]
+    assert [r["phone"] for r in store.recipients_page(limit=5, phone="09120000002")] == ["09120000002"]
+    assert store.phone_of_row(rows[1]["id"]) == "09120000002"
+    assert store.phone_of_row(999) is None

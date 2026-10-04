@@ -21,7 +21,7 @@ import os
 import socket
 import threading
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.db import close_old_connections, connection, transaction
 from django.db.models import F, Q, Value
@@ -36,7 +36,7 @@ from sms_sender.reconcile import reconcile_unknown
 from sms_sender.state import CampaignMismatchError
 
 from .engine import Engine, campaign_db
-from .models import Campaign, Job
+from .models import Campaign, Job, WorkerBeat
 from .reporter import JobReporter
 from .services import ACTIVE
 
@@ -48,6 +48,8 @@ HEARTBEAT_SEC = 10.0
 # the job itself keeps killing the worker).
 MAX_ATTEMPTS = 5
 SCHEDULE_EVERY = timedelta(minutes=5)
+# The status page calls a worker alive if it was seen this recently.
+ALIVE_WITHIN = timedelta(seconds=60)
 DELIVERY_EVERY = timedelta(minutes=15)
 CLICKS_EVERY = timedelta(hours=1)
 CLICKS_FOR = timedelta(days=14)
@@ -88,6 +90,7 @@ class _Heartbeat(threading.Thread):
                 if not renewed:
                     self.on_stop("lost")  # another worker took it over
                     continue
+                self.worker.beat()
                 control = Job.objects.filter(pk=self.job_id).values_list("control", flat=True).first()
                 if control:
                     self.on_stop(control)
@@ -114,6 +117,9 @@ class Worker:
         self.max_attempts = max_attempts
         self.stop = stop or threading.Event()
         self._next_schedule = None
+
+    def beat(self) -> None:
+        WorkerBeat.objects.update_or_create(worker_id=self.id, defaults={"seen_at": timezone.now()})
 
     # ---------- claiming ----------
 
@@ -156,6 +162,7 @@ class Worker:
         while not self.stop.is_set():
             close_old_connections()
             try:
+                self.beat()
                 self.schedule()
                 if self.run_once() is None:
                     self.stop.wait(poll_sec)
@@ -289,3 +296,14 @@ class Worker:
         if jobs.filter(finished_at__gte=timezone.now() - every).exists():
             return
         Job.objects.create(campaign=campaign, kind=kind)
+
+
+def last_seen() -> "datetime | None":
+    """When any worker was last alive (None: never)."""
+    beat = WorkerBeat.objects.order_by("-seen_at").first()
+    return beat.seen_at if beat else None
+
+
+def worker_alive() -> bool:
+    seen = last_seen()
+    return seen is not None and seen >= timezone.now() - ALIVE_WITHIN

@@ -39,6 +39,14 @@ ACTION_LABELS = {
     "job_paused": _("Paused"),
     "job_resumed": _("Resumed"),
     "job_cancelled": _("Cancelled"),
+    "phone_revealed": _("Phone number shown"),
+    "report_downloaded": _("Report downloaded"),
+}
+# Which download, for "report_downloaded".
+DOWNLOADS = {
+    "summary": _("summary"),
+    "attribution": _("attribution, no phone numbers"),
+    "clickers": _("people who clicked, with phone numbers"),
 }
 
 
@@ -73,7 +81,9 @@ def describe(event) -> str:
         )
     if event.action == "suppression_added":
         return format_html(gettext_now("{count} numbers"), count=fa_number(d.get("count", 0)))
-    if event.action in ("suppression_removed", "test_number_changed"):
+    if event.action == "report_downloaded":
+        return str(DOWNLOADS.get(d.get("kind"), d.get("kind", "")))
+    if event.action in ("suppression_removed", "test_number_changed", "phone_revealed"):
         return _who(fa_digits(mask_phone(d.get("phone", "")))) if d.get("phone") else ""
     if event.action in ("job_requested", "job_paused", "job_resumed", "job_cancelled"):
         return str(Job.Kind(d["kind"]).label) if d.get("kind") in Job.Kind.values else ""

@@ -292,6 +292,13 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - After a send has started, settings are read-only.
   - `services.JobConflict.code` picks the Persian message in `campaigns/terms.CONFLICTS`.
   - The live part (`_live.html`) polls `/campaigns/<slug>/live/` every 3 s with HTMX, only while a job is active.
+- **Reports (`reports/`, read only):**
+  - `/reports/<slug>/` reads any campaign DB in `data/db/`, the CLI's too, and never creates one.
+  - It uses the CLI's own queries: `click_report`, `display_counts`, `delivery_counts`, `total_cost`, and `recipients_page` (by rowid, so no number appears in a URL or form).
+  - Numbers are masked. `reveal_phone` (operators) POSTs a rowid to `/reveal/` (HTMX swaps the cell) and records `phone_revealed`. Invalid input rows (`INVALID:…`) are never revealed.
+  - Downloads use English column names, Latin digits and a UTF-8 BOM. They're the same rows as the CLI's `export-attribution` / `export-clickers`. Each one records `report_downloaded`.
+  - `/status/` asks Kavenegar (`account_info` / `account_config`) and Shlink (`health`) live, on every view.
+  - Worker liveness is `jobs.WorkerBeat`: written every idle loop and with each job heartbeat. `worker_alive()` means seen within 60 s.
 - **Engine messages in Persian (spec 4.11):**
   - The engine writes English for the CLI and the logs. The dashboard renders keys, so engine English never appears on a page.
   - `PreflightError(message, key, **fields)` → `RunSummary.stop_reason` / `stop_fields`. That includes `provider_halt` with Kavenegar's code, and `window_closed`. The worker adds `busy`, `settings_mismatch`, `input_unreadable`, `crashed` and `given_up` in `Job.result`.

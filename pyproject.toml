@@ -49,6 +49,7 @@ sms_sender_web = [
     "accounts/templates/**/*",
     "audit/templates/**/*",
     "campaigns/templates/**/*",
+    "reports/templates/**/*",
     "dashboard/templates/**/*",
     "segments/templates/**/*",
     "suppression/templates/**/*",
