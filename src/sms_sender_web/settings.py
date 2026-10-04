@@ -31,6 +31,10 @@ DATA_DIR = Path(os.environ.get("SMS_SENDER_DATA_DIR", "data")).resolve()
 if SANDBOX:
     DATA_DIR = DATA_DIR / "sandbox"
 SMS_SENDER_DB_DIR = DATA_DIR / "db"
+# SQLite can't create a DB in a folder that doesn't exist yet (the first
+# start in sandbox mode, or a fresh install): the app DB, and every
+# campaign's. Only these two; the CLI's own --state paths are never created.
+SMS_SENDER_DB_DIR.mkdir(parents=True, exist_ok=True)
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
 if not SECRET_KEY:

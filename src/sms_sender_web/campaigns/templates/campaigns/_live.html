@@ -7,6 +7,10 @@
     <p>{% translate "Before sending, one SMS goes to your own number, so you can see the final text. The short links are made first." %}</p>
   {% elif active_test %}
     <p class="busy">{{ active_test.get_state_display }}: {% translate "checks, short links and the test SMS…" %}</p>
+    {% if test_links %}
+      <progress max="{{ test_links.total }}" value="{{ test_links.done }}"></progress>
+      <p class="num">{{ test_links.label }}{% if test_links.left %} · {{ test_links.left }}{% endif %}</p>
+    {% endif %}
     {% if user|can:"run_campaigns" %}
       <form method="post" action="{% url 'campaign_action' campaign.slug 'cancel' %}" class="inline">
         {% csrf_token %}<input type="hidden" name="job" value="{{ active_test.pk }}">
@@ -65,7 +69,10 @@
   {% if active_send %}
     <p class="busy">{{ active_send.get_state_display }}{% if active_send.control == "pause" %} · {% translate "pausing…" %}{% elif active_send.control == "cancel" %} · {% translate "cancelling…" %}{% endif %}</p>
     {% with p=active_send.progress %}
-      {% if p.total %}
+      {% if send_links %}
+        <progress max="{{ send_links.total }}" value="{{ send_links.done }}"></progress>
+        <p class="num">{{ send_links.label }}{% if send_links.left %} · {{ send_links.left }}{% endif %}</p>
+      {% elif p.total %}
         <progress max="{{ p.total }}" value="{{ p.processed|default:0 }}"></progress>
         <p class="num">{{ p.processed|default:0|fa_number }} / {{ p.total|fa_number }} ·
           {% translate "Accepted" %} {{ p.sent|default:0|fa_number }} ·

@@ -236,6 +236,7 @@ class LinkStage:
         settings: LinkSettings, workers: int = DEFAULT_WORKERS, rate_per_sec: float = 10.0,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         stop: threading.Event | None = None, note: Callable[[str], None] = lambda _t: None,
+        progress: Callable[[int, int], None] | None = None,
     ):
         problems = settings.problems()
         if problems:
@@ -249,6 +250,8 @@ class LinkStage:
         self._now = now
         self._stop = stop or threading.Event()
         self._note = note
+        # (links made so far, links to make): the dashboard's progress bar.
+        self._progress = progress or (lambda _done, _total: None)
         self.plan = link_plan(settings, campaign)
 
     # ---------- plan ----------
@@ -337,11 +340,13 @@ class LinkStage:
         )
         created = 0
         step = max(1, len(rows) // 10)
+        self._progress(0, len(rows))
         with ThreadPoolExecutor(max_workers=self.workers) as pool:
             futures = [pool.submit(self._create, row) for row in rows]
             try:
                 for done, fut in enumerate(as_completed(futures), start=1):
                     created += fut.result()
+                    self._progress(done, len(rows))
                     if done % step == 0 and done < len(rows):
                         self._note(f"  links: {done}/{len(rows)}")
             except ShlinkHaltError:

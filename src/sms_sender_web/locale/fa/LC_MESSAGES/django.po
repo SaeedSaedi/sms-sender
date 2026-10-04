@@ -1482,3 +1482,22 @@ msgstr "این حساب فقط می‌تواند به شماره صاحب حسا
 
 msgid "This needs Kavenegar's advanced service."
 msgstr "این کار به سرویس پیشرفته کاوه‌نگار نیاز دارد."
+
+# --- Rehearsal: link progress, the sandbox outbox ---
+
+#, python-format
+msgid "About %(minutes)s minutes left"
+msgstr "حدود %(minutes)s دقیقه مانده"
+
+msgid "Less than a minute left"
+msgstr "کمتر از یک دقیقه مانده"
+
+#, python-format
+msgid "Short links made: %(done)s of %(total)s"
+msgstr "ساخت لینک‌های کوتاه: %(done)s از %(total)s"
+
+msgid "Simulated SMS"
+msgstr "پیامک‌های شبیه‌سازی‌شده"
+
+msgid "What would have been sent, newest first. The sandbox sends nothing."
+msgstr "آنچه ارسال می‌شد، از جدیدترین. در محیط شبیه‌سازی هیچ پیامکی ارسال نمی‌شود."

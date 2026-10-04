@@ -18,11 +18,25 @@ class JobReporter:
         self.every = every
         self._last = 0.0
         self._progress: dict = {}
+        self._links_started: float | None = None
         self.last_note: str | None = None  # e.g. why a run halted
 
     def note(self, text: str) -> None:
         self.last_note = text
         JobEvent.objects.create(job_id=self.job_id, key="note", text=text)
+
+    def links(self, done: int, total: int) -> None:
+        """The link stage's progress, with a time left from the pace so far
+        (Shlink is rate-limited, so a big list takes minutes)."""
+        now = time.monotonic()
+        if done == 0 or self._links_started is None:
+            self._links_started = now
+        eta = None
+        if done:
+            eta = round((now - self._links_started) / done * (total - done))
+        self._progress = {"stage": "links", "total": total, "processed": done, "eta_sec": eta}
+        if done in (0, total) or now - self._last >= self.every:
+            self._save()
 
     def start(self, total: int) -> None:
         self._progress = {"total": total, "processed": 0}

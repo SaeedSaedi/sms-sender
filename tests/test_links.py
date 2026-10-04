@@ -297,3 +297,14 @@ def test_destination_issue_is_a_key_for_the_dashboard(url, key):
 
     issue = destination_issue(url, ("kifpool.me",), BASE)
     assert (issue[0] if issue else None) == key
+
+
+def test_the_link_stage_reports_its_progress(tmp_path):
+    """The dashboard shows how far a long link stage is (Shlink is rate-limited)."""
+    state = StateStore(tmp_path / "s.db")
+    calls = []
+    stage = LinkStage(state, FakeShlink(), campaign="coin-7", settings=settings(), rate_per_sec=0,
+                      progress=lambda done, total: calls.append((done, total)))
+    stage.run({A: "vip", B: "vip"})
+    assert calls[0] == (0, 2) and calls[-1] == (2, 2)
+    assert [done for done, _ in calls] == sorted(done for done, _ in calls)

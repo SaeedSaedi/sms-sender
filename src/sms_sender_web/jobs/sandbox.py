@@ -7,21 +7,29 @@ worker that isn't in sandbox mode can't even see a sandbox job.
 
 The simulation, so every state can be seen:
 - every SMS is accepted and costs COST rials, except numbers ending in 000
-  (rejected, code 411) and 999 (no answer: the outcome is unknown);
+  (rejected, code 411) and 999: accepted, but the reply is lost, so the row
+  becomes `unknown` and reconciliation has to find it;
+- every accepted SMS goes into the outbox, data/sandbox/sandbox-outbox.jsonl,
+  with its final tokens: what would have been sent, and how often. Lookups
+  (reconciliation) read it, like Kavenegar's own records;
 - delivery: delivered, except message IDs ending in 7 (undelivered);
-- a lookup of an unknown message finds nothing;
 - clicks: 0 to 3 per link, the same on every update.
 """
 from __future__ import annotations
 
 import hashlib
 import itertools
+import json
 import secrets
 import string
 import threading
 import time
+from pathlib import Path
+
+from django.conf import settings as django_settings
 
 from sms_sender.sender import (
+    TOKEN_MAX_SPACES,
     AccountConfig,
     AccountInfo,
     PermanentSendError,
@@ -42,6 +50,26 @@ _lock = threading.Lock()
 _codes_by_tag: dict[str, set[str]] = {}
 
 
+def outbox_path() -> Path:
+    return Path(django_settings.DATA_DIR) / "sandbox-outbox.jsonl"
+
+
+def _record(entry: dict) -> None:
+    """One line per accepted SMS. Appends are atomic, so the worker's threads
+    and a restarted worker share the file safely."""
+    line = json.dumps(entry, ensure_ascii=False) + "\n"
+    with _lock, outbox_path().open("a", encoding="utf-8") as f:
+        f.write(line)
+
+
+def read_outbox() -> list[dict]:
+    try:
+        text = outbox_path().read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return []
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
 class SandboxKavenegar:
     """Stands in for `sms_sender.sender.Sender`. Never makes a request."""
 
@@ -53,10 +81,16 @@ class SandboxKavenegar:
         time.sleep(self.delay)
         if phone.endswith("000"):
             raise PermanentSendError(411, "sandbox: this number is rejected")
-        if phone.endswith("999"):
-            raise UncertainSendError(None, "sandbox: no answer")
         with _lock:
             message_id = next(_message_ids)
+        # The tokens Kavenegar would fill in: the static ones, then the row's.
+        final = {name: getattr(self.cfg, name) for name in TOKEN_MAX_SPACES
+                 if self.cfg is not None and getattr(self.cfg, name)}
+        final.update(tokens or {})
+        _record({"at": time.time(), "phone": phone, "message_id": message_id,
+                 "template": self.cfg.template if self.cfg else "", "tokens": final})
+        if phone.endswith("999"):
+            raise UncertainSendError(None, "sandbox: accepted, but the reply was lost")
         return SendResult(message_id=message_id, status_code=200, cost=COST)
 
     def account_info(self) -> AccountInfo:
@@ -69,7 +103,13 @@ class SandboxKavenegar:
         return {mid: 11 if mid % 10 == 7 else 10 for mid in message_ids}
 
     def find_messages(self, phone: str, start: float, end: float) -> list[ProviderMessage]:
-        return []
+        """What the outbox holds for this number in the window, as Kavenegar's
+        sms/statusbyreceptor would answer."""
+        return [
+            ProviderMessage(entry["message_id"], 11 if entry["message_id"] % 10 == 7 else 10)
+            for entry in read_outbox()
+            if entry["phone"] == phone and start <= entry["at"] <= end
+        ]
 
 
 class SandboxShlink:
