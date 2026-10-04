@@ -37,6 +37,7 @@ from .profile import ProfileError, load_profile, to_default_map
 from .rate import parse_rate
 from .reconcile import DEFAULT_MIN_AGE_SEC, REQUEUE_NOT_FOUND, reconcile_unknown
 from .runner import format_report, make_runner
+from .sendcheck import check_sends
 from .delivery import describe as describe_delivery
 from .delivery import sync_delivery
 from .sender import (
@@ -885,6 +886,40 @@ def delivery(db_path: str, campaign: str | None, timeout: float, log_file: str) 
         sys.exit(2 if isinstance(e, HaltError) else 1)
     click.echo(f"checked {result.checked} SMS, {result.updated} with a status")
     click.echo(f"delivery   {describe_delivery(store.delivery_counts()) or '(nothing sent)'}")
+
+
+@cli.command("check-sends")
+@click.option("--state", "db_path", default="./sms_state.db", show_default=True,
+              type=click.Path(dir_okay=False))
+@_campaign_option
+def check_sends_command(db_path: str, campaign: str | None) -> None:
+    """Check that nobody got the campaign twice. Never sends anything.
+
+    Counts each phone's SMS from the record of every call to Kavenegar,
+    approval tests apart. Exits 1 if a phone got two or more, or may have
+    (an undecided call next to an accepted one); 0 otherwise. Safe to run
+    while a send is in progress."""
+    _, store, name = _campaign_store(db_path, campaign)
+    result = check_sends(store)
+    click.echo(f"campaign    {name}")
+    click.echo(f"SMS         {result.sms} accepted for {result.recipients} recipient(s)")
+    if result.test_sms:
+        click.echo(f"test SMS    {result.test_sms} (approval tests, not counted above)")
+    if result.unsettled:
+        click.echo(f"unsettled   {result.unsettled} row(s) unknown or needs_review: "
+                   "`sms-sender reconcile` settles them")
+    if result.unrecorded:
+        click.echo(f"unrecorded  {result.unrecorded} sent row(s) without a call record "
+                   "(sent before sms-sender kept them): not checked")
+    for p in result.twice:
+        click.echo(f"TWICE       {p.phone}: messages {', '.join(map(str, p.message_ids))}")
+    for p in result.maybe_twice:
+        sent = ", ".join(map(str, p.message_ids)) or "none confirmed"
+        click.echo(f"MAYBE       {p.phone}: messages {sent}, plus {p.undecided} undecided call(s)")
+    if not result.ok:
+        click.echo(f"{len(result.twice)} phone(s) got it twice, {len(result.maybe_twice)} may have.")
+        sys.exit(1)
+    click.echo("OK: nobody got this campaign twice.")
 
 
 def _campaign_store(db_path: str, campaign: str | None) -> tuple[str, StateStore, str]:

@@ -12,6 +12,8 @@ The simulation, so every state can be seen:
 - every accepted SMS goes into the outbox, data/sandbox/sandbox-outbox.jsonl,
   with its final tokens: what would have been sent, and how often. Lookups
   (reconciliation) read it, like Kavenegar's own records;
+- each call is reported to `on_attempt`, as the real Sender does, so the
+  campaign DB's call records (and `sms-sender check-sends`) can be tried;
 - delivery: delivered, except message IDs ending in 7 (undelivered);
 - clicks: 0 to 3 per link, the same on every update.
 """
@@ -20,11 +22,13 @@ from __future__ import annotations
 import hashlib
 import itertools
 import json
+import logging
 import secrets
 import string
 import threading
 import time
 from pathlib import Path
+from typing import Callable
 
 from django.conf import settings as django_settings
 
@@ -32,6 +36,7 @@ from sms_sender.sender import (
     TOKEN_MAX_SPACES,
     AccountConfig,
     AccountInfo,
+    Attempt,
     PermanentSendError,
     ProviderMessage,
     SenderConfig,
@@ -39,6 +44,8 @@ from sms_sender.sender import (
     UncertainSendError,
 )
 from sms_sender.shortlink import LinkVisits, ShortLink
+
+logger = logging.getLogger(__name__)
 
 COST = 3020  # rials: what the real test SMS cost on 2026-10-04
 CREDIT = 1_000_000_000
@@ -73,13 +80,19 @@ def read_outbox() -> list[dict]:
 class SandboxKavenegar:
     """Stands in for `sms_sender.sender.Sender`. Never makes a request."""
 
-    def __init__(self, cfg: SenderConfig | None = None, delay: float = 0.05):
+    def __init__(
+        self, cfg: SenderConfig | None = None, *,
+        on_attempt: Callable[[Attempt], None] | None = None, delay: float = 0.05,
+    ):
         self.cfg = cfg  # the runner logs cfg.template
+        self.on_attempt = on_attempt
         self.delay = delay  # so progress can be watched
 
     def send(self, phone: str, tokens: dict[str, str] | None = None) -> SendResult:
+        started = time.time()
         time.sleep(self.delay)
         if phone.endswith("000"):
+            self._report(phone, "rejected", started, status_code=411)
             raise PermanentSendError(411, "sandbox: this number is rejected")
         with _lock:
             message_id = next(_message_ids)
@@ -90,8 +103,20 @@ class SandboxKavenegar:
         _record({"at": time.time(), "phone": phone, "message_id": message_id,
                  "template": self.cfg.template if self.cfg else "", "tokens": final})
         if phone.endswith("999"):
+            # The real Sender learns no message ID when the reply is lost.
+            self._report(phone, "unknown", started)
             raise UncertainSendError(None, "sandbox: accepted, but the reply was lost")
+        self._report(phone, "accepted", started, status_code=200, message_id=message_id, cost=COST)
         return SendResult(message_id=message_id, status_code=200, cost=COST)
+
+    def _report(self, phone: str, outcome: str, started: float, **fields) -> None:
+        if self.on_attempt is None:
+            return
+        try:
+            self.on_attempt(Attempt(phone=phone, outcome=outcome, started_at=started,
+                                    finished_at=time.time(), **fields))
+        except Exception:  # noqa: BLE001 — as in Sender: never changes the outcome
+            logger.exception("attempt_record_failed", extra={"phone": phone})
 
     def account_info(self) -> AccountInfo:
         return AccountInfo(remaining_credit=CREDIT, expire_date=None, type="sandbox")

@@ -35,6 +35,9 @@ SMS_SENDER_DB_DIR = DATA_DIR / "db"
 # start in sandbox mode, or a fresh install): the app DB, and every
 # campaign's. Only these two; the CLI's own --state paths are never created.
 SMS_SENDER_DB_DIR.mkdir(parents=True, exist_ok=True)
+# `manage.py backup` writes here. Keep it off the data volume's disk, or
+# copy it elsewhere (encrypted): it holds phone numbers (docs/deploy.md).
+BACKUP_DIR = Path(os.environ.get("SMS_SENDER_BACKUP_DIR") or DATA_DIR / "backups").resolve()
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
 if not SECRET_KEY:
@@ -150,6 +153,11 @@ STORAGES = {
 # Locally the traffic is plain HTTP inside NetBird's WireGuard tunnel; behind
 # TLS in production, set DJANGO_SECURE_COOKIES=1.
 SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = _bool("DJANGO_SECURE_COOKIES")
+# Behind a TLS proxy that sets X-Forwarded-Proto (and drops any value a
+# client sent), DJANGO_TRUST_PROXY_SSL=1 lets Django see HTTPS requests as
+# secure. Never set it when clients reach gunicorn directly.
+if _bool("DJANGO_TRUST_PROXY_SSL"):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_AGE = 8 * 3600
 SESSION_COOKIE_HTTPONLY = True
 SECURE_CONTENT_TYPE_NOSNIFF = True

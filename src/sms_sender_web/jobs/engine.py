@@ -88,5 +88,5 @@ class Engine:
             approval_test_number=test_number,
             test_only=test_number is not None,
             cost_per_sms=cost_per_sms,
-            sender=SandboxKavenegar(sender_cfg) if django_settings.SANDBOX else None,
+            make_sender=SandboxKavenegar if django_settings.SANDBOX else Sender,
         )

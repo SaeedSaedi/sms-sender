@@ -12,7 +12,12 @@ fresh message is listed within a minute, and the entries carry no time.
 `sms/select`, which has each message's time and text, needs our IP on an
 allowlist (error 407), so it isn't used.
 
-So the candidates are the phone's messages on the day(s) of the attempt,
+First, the row's own call records: if Kavenegar accepted the SMS after the
+row's claim and the process stopped before marking it, the row is `sent`
+with that message, without a lookup. (The lookup couldn't find it: its ID
+is already known, so it would be skipped, and the row sent again.)
+
+Otherwise the candidates are the phone's messages on the day(s) of the attempt,
 minus every message ID already recorded — in this campaign's DB (sent rows,
 the approval test) and in the other campaign DBs next to it, since another
 campaign may have reached the same person that day. Then:
@@ -111,6 +116,21 @@ def reconcile_unknown(
     known = state.known_message_ids() | state.neighbour_message_ids()
     for phone, attempted_at in rows:
         started = now()
+        recorded = state.accepted_since(phone, attempted_at)
+        if recorded is not None:
+            # Kavenegar accepted it and the call was recorded, but the process
+            # stopped before the row was marked. The record is the proof; a
+            # lookup would skip this message as one we already know.
+            message_id, cost = recorded
+            if state.settle_unknown_sent(phone, message_id, cost):
+                sent += 1
+                state.record_attempt(
+                    phone=phone, kind="reconcile", outcome="reconciled_sent", started_at=started,
+                    finished_at=now(), message_id=message_id,
+                    detail=f"kavenegar accepted message {message_id} before the process stopped",
+                )
+                logger.info("reconciled", extra={"phone": phone, "outcome": "reconciled_sent"})
+            continue
         if attempted_at is None or started - attempted_at < min_age_sec:
             deferred += 1
             continue

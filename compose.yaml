@@ -8,10 +8,22 @@
 # Sandbox (nothing is sent; Kavenegar and Shlink are simulated): put
 # SMS_SENDER_SANDBOX=1 in .env. Both services read it, and everything then
 # lives in ./data/sandbox.
+#
+# Deploying it for real (backups, TLS, health, upgrades): docs/deploy.md.
+
+# The logs carry phone numbers: keep them small and short-lived.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   web:
     build: .
-    image: sms-sender-dashboard
+    # IMAGE_TAG (in .env): build and run a tagged image, e.g. the git commit,
+    # so an upgrade can be rolled back to the previous one.
+    image: sms-sender-dashboard:${IMAGE_TAG:-latest}
     env_file: .env
     environment:
       SMS_SENDER_DATA_DIR: /app/data
@@ -22,18 +34,19 @@ services:
     volumes:
       - ./data:/app/data
     ports:
-      - "${BIND_ADDR:-127.0.0.1}:8000:8000"
+      - "${BIND_ADDR:-127.0.0.1}:${WEB_PORT:-8000}:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
+    logging: *logging
     restart: unless-stopped
 
   # Runs the jobs the dashboard queues (sends, reconciliation, delivery and
   # click updates), one at a time. Exactly one worker.
   worker:
-    image: sms-sender-dashboard
+    image: sms-sender-dashboard:${IMAGE_TAG:-latest}
     command: ["python", "manage.py", "run_worker"]
     env_file: .env
     environment:
@@ -50,4 +63,13 @@ services:
     # flight finish; the job is queued again for the next start. Anything
     # still in flight when the time runs out is reconciled, never resent.
     stop_grace_period: 90s
+    # Alive: the worker on this container wrote its heartbeat within a
+    # minute. Docker only reports it; a monitor has to act on "unhealthy".
+    healthcheck:
+      test: ["CMD", "python", "manage.py", "worker_status"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+    logging: *logging
     restart: unless-stopped

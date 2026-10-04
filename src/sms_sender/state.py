@@ -490,6 +490,25 @@ class StateStore:
             "SELECT * FROM attempts WHERE phone=? ORDER BY id", (phone,)
         ).fetchall()
 
+    def recipient_calls(self) -> Iterator[sqlite3.Row]:
+        """Every call that may have sent a recipient an SMS, or settled one
+        (`send`, `recovery`, `reconcile`): by phone, oldest first."""
+        yield from self._conn().execute(
+            "SELECT phone, kind, outcome, message_id FROM attempts "
+            "WHERE kind IN ('send', 'recovery', 'reconcile') ORDER BY phone, id"
+        )
+
+    def test_sms_count(self) -> int:
+        """Approval-test SMS that Kavenegar accepted."""
+        return self._conn().execute(
+            "SELECT COUNT(*) FROM attempts WHERE kind='test' AND outcome='accepted'"
+        ).fetchone()[0]
+
+    def phones_with_status(self, status: str) -> set[str]:
+        return {r[0] for r in self._conn().execute(
+            "SELECT phone FROM recipients WHERE status=?", (status,)
+        )}
+
     # ---------- campaign identity (meta) ----------
 
     def get_meta(self, key: str) -> str | None:
@@ -606,16 +625,29 @@ class StateStore:
                 continue
         return ids
 
-    def settle_unknown_sent(self, phone: str, message_id: int) -> bool:
+    def settle_unknown_sent(self, phone: str, message_id: int, cost: int | None = None) -> bool:
         """Kavenegar has the message, so it was sent. Only an `unknown` row
         changes; returns whether one did."""
         with self._tx() as conn:
             cur = conn.execute(
                 "UPDATE recipients SET status=?, message_id=?, status_code=200, "
-                "sent_at=last_attempt_at, last_error=NULL WHERE phone=? AND status=?",
-                (SENT, message_id, phone, UNKNOWN),
+                "cost=COALESCE(?, cost), sent_at=last_attempt_at, last_error=NULL "
+                "WHERE phone=? AND status=?",
+                (SENT, message_id, cost, phone, UNKNOWN),
             )
             return cur.rowcount == 1
+
+    def accepted_since(self, phone: str, since: float | None) -> tuple[int, int | None] | None:
+        """(message ID, cost) of the latest SMS to this phone that Kavenegar
+        accepted at or after `since` (the row's claim), by the call records.
+        Approval-test calls don't count."""
+        row = self._conn().execute(
+            "SELECT message_id, cost FROM attempts WHERE phone=? AND kind='send' "
+            "AND outcome='accepted' AND message_id IS NOT NULL AND started_at >= ? "
+            "ORDER BY id DESC LIMIT 1",
+            (phone, since or 0),
+        ).fetchone()
+        return (row["message_id"], row["cost"]) if row else None
 
     def settle_unknown_not_sent(self, phone: str, reason: str) -> bool:
         """Kavenegar never got it, so it's safe to send again."""
