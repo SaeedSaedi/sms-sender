@@ -5,6 +5,8 @@ from django.utils.translation import gettext as gettext_now
 from django.utils.translation import gettext_lazy as _
 
 from ..accounts.terms import ROLE_LABELS
+from ..dashboard.templatetags.fa import fa_digits, fa_number
+from ..privacy import mask_phone
 
 ACTION_LABELS = {
     "login": _("Signed in"),
@@ -19,6 +21,11 @@ ACTION_LABELS = {
     "user_deactivated": _("Account deactivated"),
     "user_activated": _("Account activated"),
     "password_changed": _("Password changed"),
+    "segment_uploaded": _("Segment uploaded"),
+    "segment_mapped": _("Segment columns chosen"),
+    "segment_deleted": _("Segment deleted"),
+    "suppression_added": _("Added to the suppression list"),
+    "suppression_removed": _("Removed from the suppression list"),
 }
 
 
@@ -43,6 +50,18 @@ def describe(event) -> str:
         )
     if event.action in ("2fa_reset", "user_activated", "user_deactivated"):
         return _who(target)
+    if event.action in ("segment_uploaded", "segment_deleted"):
+        return _who(d.get("segment", ""))
+    if event.action == "segment_mapped":
+        return format_html(
+            gettext_now("{segment}: {valid} valid numbers, {invalid} invalid rows"),
+            segment=_who(d.get("segment", "")), valid=fa_number(d.get("valid", 0)),
+            invalid=fa_number(d.get("invalid", 0)),
+        )
+    if event.action == "suppression_added":
+        return format_html(gettext_now("{count} numbers"), count=fa_number(d.get("count", 0)))
+    if event.action == "suppression_removed":
+        return _who(fa_digits(mask_phone(d.get("phone", ""))))
     if event.action == "2fa_failed":
         when = gettext_now("while setting up") if d.get("during") == "setup" else gettext_now("while signing in")
         if d.get("throttled"):

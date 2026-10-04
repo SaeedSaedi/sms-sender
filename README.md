@@ -401,8 +401,17 @@ internal, multi-user tool built with Django and HTMX. So far it has:
 - sign-in, with two-step verification for operators and admins;
 - the three roles, and a users page for admins;
 - an activity log;
+- segments: upload a CSV or TXT list (Excel's encodings and separators are
+  fine), choose the phone, user-ID and token columns, and see the counts:
+  valid, invalid, repeated, missing or conflicting user IDs, and numbers on
+  the suppression list;
+- the suppression list: operators add numbers (pasted or from a file),
+  admins remove them, and every send leaves them out;
 - a read-only list of campaigns, read from the same campaign DBs the CLI
   writes.
+
+Uploaded lists are kept in `data/segments/`, which git ignores, like every
+other list of phone numbers. Pages show numbers masked (`۰۹۱۲*****۳۴`).
 
 It also has a background **worker** (`python manage.py run_worker`, the
 `worker` service in Compose) that runs the jobs the dashboard queues: sends,

@@ -89,7 +89,8 @@ def test_persian_typography():
     entries, _, _ = parse_po(PO.read_text(encoding="utf-8"))
     text = "\n".join(form for forms in entries.values() for form in forms)
     assert "ي" not in text and "ك" not in text  # Persian ی and ک, never Arabic
-    assert not re.search(r"[0-9]", text)                  # digits come from the data, in Persian
+    # Digits come from the data, in Persian. Names like «CSV UTF-8» keep theirs.
+    assert not re.search(r"[0-9]", re.sub(r"[A-Za-z][A-Za-z0-9.-]*", "", text))
     # Compounds and plurals take the zero-width non-joiner, not a space.
     for joined in ("کمپین‌ها", "پذیرفته‌شده", "ارسال‌نشده", "تحویل‌شده", "کاوه‌نگار",
                    "دومرحله‌ای", "راه‌اندازی", "شش‌رقمی", "فعالیت‌ها", "دست‌کم"):

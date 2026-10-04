@@ -29,6 +29,7 @@ html {
 }
 
 body { margin: 0; background: var(--bg); color: var(--fg); }
+a { color: var(--accent); }
 
 .topbar {
   display: flex;
@@ -62,7 +63,7 @@ h2 { font-size: 1.15rem; margin-block: 0 .75rem; }
 .form-card { max-inline-size: 28rem; margin-block-start: 1.5rem; }
 
 label { display: block; margin-block: .75rem .25rem; }
-input[type="text"], input[type="password"], select {
+input[type="text"], input[type="password"], select, textarea {
   inline-size: 100%;
   padding-block: .5rem;
   padding-inline: .7rem;
@@ -115,7 +116,43 @@ button.danger { background: var(--card); border-color: var(--error); color: var(
   background: var(--card);
 }
 .message.success { border-inline-start-color: var(--ok); }
+.message.warning { border-inline-start-color: var(--warn); }
 .message.error { border-inline-start-color: var(--error); }
+
+/* A page title with its main action beside it. */
+.page-head { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; align-items: baseline; justify-content: space-between; }
+a.button {
+  display: inline-block;
+  padding-block: .45rem;
+  padding-inline: 1.1rem;
+  border-radius: .5rem;
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+}
+label.check { display: flex; gap: .5rem; align-items: center; margin-block: .75rem; }
+input[type="file"] { font: inherit; max-inline-size: 100%; }
+.sample {
+  display: inline-block;
+  margin-inline-end: .35rem;
+  padding-inline: .4rem;
+  border: 1px solid var(--line);
+  border-radius: .35rem;
+  background: var(--bg);
+}
+.plain { padding-inline-start: 1.25rem; }
+.figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: .75rem;
+  margin: 0 0 .5rem;
+}
+.figures > div { padding: .75rem 1rem; background: var(--card); border: 1px solid var(--line); border-radius: .75rem; }
+.figures dt { color: var(--muted); font-size: .9rem; }
+.figures dd { margin: 0; font-size: 1.3rem; font-weight: 600; }
+.danger-zone { margin-block-start: 2rem; }
+form.search { margin-block-end: 1rem; }
+form.search input { inline-size: 16rem; }
 
 form.inline { display: inline-flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin: 0; }
 form.inline select { inline-size: auto; padding-block: .2rem; }

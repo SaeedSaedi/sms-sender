@@ -16,6 +16,7 @@ from django import template
 from django.utils import timezone
 from django.utils.html import format_html
 
+from ...privacy import mask_phone as _mask_phone
 from ..terms import DELIVERY_STATUS, SUBMISSION_STATUS
 
 register = template.Library()
@@ -57,6 +58,12 @@ def jalali(value, fmt: str = "%Y/%m/%d %H:%M") -> str:
 def ltr(value):
     """Keep a left-to-right value whole inside Persian text."""
     return format_html('<bdi dir="ltr">{}</bdi>', value)
+
+
+@register.filter
+def mask_phone(value) -> str:
+    """'09120001234' → '0912*****34' (spec 4.12: pages show numbers masked)."""
+    return _mask_phone(str(value))
 
 
 @register.filter

@@ -10,5 +10,7 @@ urlpatterns = [
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("activity/", audit_views.audit_log, name="audit_log"),
     path("", include("sms_sender_web.accounts.urls")),
+    path("", include("sms_sender_web.segments.urls")),
+    path("", include("sms_sender_web.suppression.urls")),
     path("", include("sms_sender_web.dashboard.urls")),
 ]

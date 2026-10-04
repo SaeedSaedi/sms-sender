@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% load i18n %}
+{% block title %}{% translate "Upload a segment" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<section class="card medium">
+  <h1>{% translate "Upload a segment" %}</h1>
+  <p>{% translate "A CSV or TXT file with one recipient per row. In the next step you choose which column holds the mobile numbers." %}</p>
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <label for="id_file">{% translate "File" %}</label>
+    <input id="id_file" name="file" type="file" accept=".csv,.txt,text/csv,text/plain" required>
+    {% for error in form.file.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+    <label for="id_name">{% translate "Name" %}</label>
+    <input id="id_name" name="name" type="text" maxlength="200" value="{{ form.name.value|default:'' }}">
+    <p class="hint">{% translate "Any name that helps you recognise it, in Persian or English." %}</p>
+    <label for="id_slug">{% translate "Short name" %}</label>
+    <input id="id_slug" name="slug" type="text" dir="ltr" maxlength="64" value="{{ form.slug.value|default:'' }}">
+    <p class="hint">{% translate "Lowercase English letters, digits and dashes. It's recorded with each recipient and appears in the links' UTM values. Empty: taken from the file's name." %}</p>
+    {% for error in form.slug.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+    <button type="submit">{% translate "Upload" %}</button>
+  </form>
+</section>
+{% endblock %}

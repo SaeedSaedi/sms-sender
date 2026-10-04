@@ -269,6 +269,19 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - Status names live in `dashboard/terms.py`, worded as in the spec's glossary.
   - Show numbers with the `fa` filters: `fa_number`, `fa_digits`, `jalali` (Solar Hijri, Tehran time) and `ltr` (`<bdi dir="ltr">` for values with separators or Latin letters).
   - Never put Persian digits inside links or codes.
+- **Segments (`segments/`):**
+  - An upload is stored as `data/segments/<slug>.upload` until its columns are chosen. Then it becomes the prepared copy, `data/segments/<slug>.csv`, in the CLI's own input format: UTF-8, commas, the phone first under the header `phone`, then the user-ID column and the token columns under their own names. The upload is deleted.
+  - Every row is kept, invalid ones too, so a send records them like the CLI does. The engine reads the prepared copy unchanged.
+  - `files.parse` reads UTF-8 (with or without a BOM), UTF-16 and Windows-1256, with `,` `;` or tab separators, and refuses `.xlsx` / `.xls` by their magic bytes. Windows-1256 has no Persian «ی», so text read that way gets the Arabic «ي»/«ى» turned into «ی».
+  - `files.summarize` counts with `input_loader.load`, exactly as a send would. Its invalid-row sample is stored masked.
+  - The slug follows the CLI's `--segment` rules (`SLUG_RE`). `upload` is reserved, because of `/segments/upload/`.
+  - A segment that a `Campaign` names in `settings["segment"]` can't be deleted.
+- **Suppression list (`suppression/`):**
+  - A `Suppression` row is a canonical phone, either global (`campaign` null) or for one campaign. Two partial unique constraints keep each number once per scope, because NULLs never collide in a plain UNIQUE.
+  - `service.add` and `service.phones_for(campaign)` are the API. `jobs.engine.Engine.runner` passes `phones_for(campaign)` into the runner's `opt_out`, so every send skips them.
+  - Operators (`add_suppression`) see the page and add numbers. Only admins (`remove_suppression`) remove them. Both changes are audited.
+- **Phone numbers on pages** are masked with `privacy.mask_phone` (filter `mask_phone`): the first four and last two digits are shown, the rest become `*`. Values with fewer than ten digits are hidden entirely. Use `*`, never `•`, because next to Persian digits a dot reads as «۰».
+- **`accounts.decorators.forbidden(request)`** renders the Persian 403. Use it for checks inside a view, such as an action only admins may take.
 - **Jobs and the worker** (`jobs/`, spec 4.6 / 4.8). `Campaign` holds a campaign's send settings, in the CLI's terms; its `slug` names `data/db/<slug>.db`. `Job` kinds: send, reconcile, delivery, clicks. `JobEvent` holds the engine's notes.
   - **Claiming:** `Worker.claim` takes the oldest queued job, or a running one whose lease expired, with an atomic UPDATE. A heartbeat thread renews the lease every 10 s and reads `Job.control`.
   - **Stopping:** pause, cancel and SIGTERM all end in `Runner.cancel()`. Afterwards, a paused job waits, a cancelled one runs `StateStore.cancel_remaining()` (claimable → `cancelled`), and an interrupted one goes back to queued.

@@ -1,0 +1,51 @@
+{% extends "base.html" %}{% load i18n fa %}
+{% block title %}{% translate "Choose the columns" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<h1>{% translate "Choose the columns" %}</h1>
+<p><bdi>{{ segment.name }}</bdi> · {{ segment.original_name|ltr }} · {{ rows|fa_number }} {% translate "rows" %}</p>
+<p>{% translate "Choose the column with the mobile numbers. A user ID column, and columns whose values go into the message's tokens, are optional." %}</p>
+<form method="post">
+  {% csrf_token %}
+  {% for error in form.non_field_errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+  {% for error in form.phone.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+  <label class="check">
+    <input type="checkbox" name="has_header"{% if has_header %} checked{% endif %}>
+    {% translate "The first row holds the column names" %}
+  </label>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">{% translate "Column" %}</th>
+          <th scope="col">{% translate "First rows" %}</th>
+          <th scope="col">{% translate "Mobile number" %}</th>
+          <th scope="col">{% translate "User ID" %}</th>
+          <th scope="col">{% translate "For a token" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for col in columns %}
+        <tr>
+          <th scope="row">{% translate "Column" %} {{ col.number|fa_number }}{% if col.header %} · <bdi>{{ col.header }}</bdi>{% endif %}</th>
+          <td>{% for text, is_phone in col.samples %}{% if is_phone %}<bdi class="sample" dir="ltr">{{ text|fa_digits }}</bdi>{% else %}<bdi class="sample">{{ text }}</bdi>{% endif %}{% empty %}—{% endfor %}</td>
+          <td><input type="radio" name="phone" value="{{ col.value }}"{% if col.value == phone %} checked{% endif %}
+                     aria-label="{% translate "Mobile number" %}: {% translate "Column" %} {{ col.number|fa_number }}"></td>
+          <td><input type="radio" name="user_id" value="{{ col.value }}"{% if col.value == user_id %} checked{% endif %}
+                     aria-label="{% translate "User ID" %}: {% translate "Column" %} {{ col.number|fa_number }}"></td>
+          <td><input type="checkbox" name="tokens" value="{{ col.value }}"{% if col.value in tokens %} checked{% endif %}
+                     aria-label="{% translate "For a token" %}: {% translate "Column" %} {{ col.number|fa_number }}"></td>
+        </tr>
+      {% endfor %}
+        <tr>
+          <th scope="row" colspan="3">{% translate "No user ID column" %}</th>
+          <td><input type="radio" name="user_id" value=""{% if not user_id %} checked{% endif %}
+                     aria-label="{% translate "No user ID column" %}"></td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">{% translate "Without a user ID, recipients are still sent, and appear as “missing user ID” in reports. A number that comes with two different user IDs is not sent." %}</p>
+  <button type="submit">{% translate "Save and check the list" %}</button>
+</form>
+{% endblock %}
