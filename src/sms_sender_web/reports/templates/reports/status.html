@@ -34,6 +34,30 @@
   {% else %}<p class="error">{% translate "The short-link service reports a problem." %}</p>{% endif %}
 </section>
 
+{% if sandbox %}
+<section class="card step">
+  <h2>{% translate "Simulated SMS" %}</h2>
+  <p>{% translate "What would have been sent, newest first. The sandbox sends nothing." %}
+     <span class="muted">({{ outbox_count|fa_number }})</span></p>
+  {% if outbox_latest %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">{% translate "Number" %}</th><th scope="col">{% translate "Template" %}</th><th scope="col">{% translate "Tokens" %}</th></tr></thead>
+      <tbody>
+      {% for sms in outbox_latest %}
+        <tr>
+          <td>{{ sms.phone|mask_phone|fa_digits|ltr }}</td>
+          <td>{{ sms.template|ltr }}</td>
+          <td>{% for name, value in sms.tokens.items %}<code dir="ltr">{{ name }}</code> <bdi class="sample">{{ value }}</bdi> {% endfor %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
 <section class="card step">
   <h2>{% translate "Worker" %}</h2>
   {% if worker_alive %}<p class="ok">{% translate "Running" %} · {% translate "last seen" %} {{ worker_seen|jalali:"%H:%M:%S" }}</p>

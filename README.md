@@ -453,8 +453,12 @@ services read `.env`. In sandbox mode:
   `docker compose exec web python manage.py createsuperuser`.
   Simulated sends never mix with real campaigns.
 - To see every state: numbers ending in `000` are rejected, and numbers
-  ending in `999` get no answer (their status stays unknown). Every SMS
+  ending in `999` are accepted but their reply is lost. Their status becomes
+  unknown until reconciliation finds them, without sending again. Every SMS
   costs 3,020 rials, and links get a few clicks.
+- Every simulated SMS is written, with its final tokens, to
+  `data/sandbox/sandbox-outbox.jsonl`. The status page lists the latest ones,
+  so you can read exactly what would have gone out.
 
 Remove the line (or set it to `0`) and restart to go back to real sending.
 

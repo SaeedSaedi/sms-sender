@@ -452,6 +452,8 @@ class Runner:
             self.state, self.link_client, campaign=self.campaign, settings=self.links,
             workers=self.link_workers, rate_per_sec=self.link_rate_per_sec,
             stop=self._stop, note=self._reporter.note,
+            # A reporter may show link progress too (the dashboard's does).
+            progress=getattr(self._reporter, "links", None),
         )
         try:
             result = stage.run(

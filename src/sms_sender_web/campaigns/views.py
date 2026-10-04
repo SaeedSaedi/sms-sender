@@ -102,6 +102,28 @@ def _locked_message() -> str:
     return _("This campaign has started sending, so its settings can't change. For a different message, make a new campaign.")
 
 
+def _links_progress(job: Job | None) -> dict | None:
+    """While a job makes its short links: how far, and about how long."""
+    p = (job.progress or {}) if job else {}
+    if p.get("stage") != "links" or not p.get("total"):
+        return None
+    eta = p.get("eta_sec")
+    if eta is None:
+        left = ""
+    elif eta >= 60:
+        left = _("About %(minutes)s minutes left") % {"minutes": fa_number(-(-eta // 60))}
+    else:
+        left = _("Less than a minute left")
+    return {
+        "total": p["total"],
+        "done": p.get("processed", 0),
+        "label": _("Short links made: %(done)s of %(total)s") % {
+            "done": fa_number(p.get("processed", 0)), "total": fa_number(p["total"]),
+        },
+        "left": left,
+    }
+
+
 def _live(request, campaign: Campaign) -> dict:
     """What the live part of the page shows: the steps, the jobs, the counts."""
     jobs = list(
@@ -128,6 +150,8 @@ def _live(request, campaign: Campaign) -> dict:
         "active": bool(active),
         "active_send": next((j for j in active if j.kind == Job.Kind.SEND), None),
         "active_test": next((j for j in active if j.kind == Job.Kind.TEST), None),
+        "test_links": _links_progress(next((j for j in active if j.kind == Job.Kind.TEST), None)),
+        "send_links": _links_progress(next((j for j in active if j.kind == Job.Kind.SEND), None)),
         "test": test,
         "test_reason": stop_reason(test.result.get("stop_reason"), test.result.get("stop_fields")) if test else "",
         "approved": services.approval(campaign),

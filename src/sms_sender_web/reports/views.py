@@ -40,6 +40,7 @@ from ..campaigns.terms import stop_reason
 from ..dashboard.terms import DELIVERY_STATUS, STATUS_ORDER
 from ..jobs.engine import Engine
 from ..jobs.models import Campaign, Job
+from ..jobs.sandbox import read_outbox
 from ..jobs.worker import last_seen, worker_alive
 
 PAGE = 100
@@ -214,7 +215,10 @@ def status(request):
     except ShlinkError as e:
         shlink = {"problem": "unreachable", "code": e.status}
 
+    outbox = read_outbox() if django_settings.SANDBOX else []
     return render(request, "reports/status.html", {
+        "outbox_count": len(outbox),
+        "outbox_latest": outbox[-5:][::-1],
         "kavenegar": kavenegar,
         "shlink": shlink,
         "worker_alive": worker_alive(),

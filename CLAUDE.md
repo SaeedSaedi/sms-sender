@@ -235,7 +235,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 - `signed_in` (a viewer, so it needs no second step);
 - `verified(client, user)`: signed in and through the second step, with a linked app. It returns the TOTP device; get codes with `django_otp.oath.totp`.
 
-- **Settings come from the environment** (`settings.py`): `DJANGO_SECRET_KEY` is required, plus `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `SMS_SENDER_DATA_DIR` and `DJANGO_SECURE_COOKIES`. `.env` is loaded by `manage.py` and `wsgi.py`, **never by settings**, so the test session can't pick up real values. Tests run with `settings_test.py`: a dummy key and a temporary data dir.
+- **Settings come from the environment** (`settings.py`, which also creates `DATA_DIR/db`, so a first start, e.g. in sandbox mode, can open its SQLite files; the CLI's `--state` paths are never created): `DJANGO_SECRET_KEY` is required, plus `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `SMS_SENDER_DATA_DIR` and `DJANGO_SECURE_COOKIES`. `.env` is loaded by `manage.py` and `wsgi.py`, **never by settings**, so the test session can't pick up real values. Tests run with `settings_test.py`: a dummy key and a temporary data dir.
 - **Data:** the app DB is `data/app.db` (SQLite, WAL, IMMEDIATE transactions, because the worker will write to it too). Campaign DBs are read through `StateStore` from `data/db/`, the same files as the CLI. Opening one upgrades its schema in place, as the CLI does.
 - **Login on every page:** `LoginRequiredMiddleware`. Only views marked `@login_not_required` are open; for now that's `/healthz` and the login page.
 - **Roles ([accounts/roles.py](src/sms_sender_web/accounts/roles.py)):**
@@ -308,11 +308,15 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - `Engine.sender()`, `Engine.link_client()` and `Engine.runner()` return `SandboxKavenegar` / `SandboxShlink`. `make_runner(sender=…)` takes the simulated sender, so no API key is read and no request is made.
   - `settings.DATA_DIR` becomes `<data>/sandbox`, the app DB included. A worker not in sandbox mode reads another DB and can't see a sandbox job.
   - The simulation is deterministic, so tests can rely on it:
-    - numbers ending in `000` are rejected (411), and `999` uncertain;
+    - numbers ending in `000` are rejected (411);
+    - `999` are accepted but raise `UncertainSendError` (the reply is lost);
     - message IDs ending in 7 are undelivered;
-    - lookups find nothing;
     - clicks are 0–3 per link, by a hash of the code.
+  - Every accepted SMS, with its final tokens (static, then the row's), is a line in `<DATA_DIR>/sandbox-outbox.jsonl` (`read_outbox()`). `find_messages` answers from it, as Kavenegar's `statusbyreceptor` would, so reconciliation settles a lost reply as `sent` without a resend. The status page shows the latest entries.
   - The `sandbox` context processor drives the banner on every page.
+- **Link-stage progress:**
+  - `LinkStage(progress=…)` reports `(done, total)`. The runner passes `reporter.links` when the reporter has one; the CLI's doesn't.
+  - `JobReporter.links` stores `{"stage": "links", "total", "processed", "eta_sec"}` on `Job.progress`. The campaign page shows a bar and the time left, since Shlink is capped at 10 links a second (about 18 minutes for 11,000).
 - **Engine messages in Persian (spec 4.11):**
   - The engine writes English for the CLI and the logs. The dashboard renders keys, so engine English never appears on a page.
   - `PreflightError(message, key, **fields)` → `RunSummary.stop_reason` / `stop_fields`. That includes `provider_halt` with Kavenegar's code, and `window_closed`. The worker adds `busy`, `settings_mismatch`, `input_unreadable`, `crashed` and `given_up` in `Job.result`.
