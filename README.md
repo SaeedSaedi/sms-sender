@@ -407,6 +407,15 @@ docker compose exec web python manage.py createsuperuser
 
 Then open http://127.0.0.1:8000.
 
+If PyPI is only reachable through a local proxy (e.g. privoxy on port 8118),
+pass it to the build. Docker Desktop forwards `host.docker.internal` to
+services on your Mac:
+
+```bash
+docker compose build --build-arg HTTPS_PROXY=http://host.docker.internal:8118 \
+                     --build-arg HTTP_PROXY=http://host.docker.internal:8118
+```
+
 To let colleagues on NetBird reach it:
 1. Set `BIND_ADDR` to this machine's NetBird IP.
 2. Add that IP to `DJANGO_ALLOWED_HOSTS` and `DJANGO_CSRF_TRUSTED_ORIGINS`.
