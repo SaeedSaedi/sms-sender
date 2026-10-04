@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% load i18n roles %}
+{% block title %}{% translate "Page not found" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>{% translate "Page not found" %}</h1>
+  <p>{% translate "The address may be wrong, or the page was removed." %}</p>
+  {% if user|can:"view_campaigns" %}<p><a href="{% url 'home' %}">{% translate "Back to campaigns" %}</a></p>{% endif %}
+</section>
+{% endblock %}

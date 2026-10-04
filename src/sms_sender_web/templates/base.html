@@ -1,4 +1,4 @@
-{% load static i18n %}<!doctype html>
+{% load static i18n roles %}<!doctype html>
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="utf-8">
@@ -6,19 +6,35 @@
   <title>{% block title %}{% translate "SMS campaigns" %}{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
   <script src="{% static 'vendor/htmx.min.js' %}" defer></script>
+  <script src="{% static 'js/app.js' %}" defer></script>
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   <header class="topbar">
     <a class="brand" href="{% url 'home' %}">{% translate "SMS campaigns" %}</a>
+    {% if user|fully_signed_in %}
+      <nav class="nav" aria-label="{% translate "Main menu" %}">
+        {% if user|can:"view_campaigns" %}<a href="{% url 'home' %}">{% translate "Campaigns" %}</a>{% endif %}
+        {% if user|can:"manage_users" %}<a href="{% url 'users' %}">{% translate "Users" %}</a>{% endif %}
+        {% if user|can:"view_audit_log" %}<a href="{% url 'audit_log' %}">{% translate "Activity log" %}</a>{% endif %}
+      </nav>
+    {% endif %}
     {% if user.is_authenticated %}
       <form class="session" method="post" action="{% url 'logout' %}">
         {% csrf_token %}
-        <span class="who"><bdi dir="ltr">{{ user.get_username }}</bdi></span>
+        <span class="who"><bdi dir="ltr">{{ user.get_username }}</bdi> · {{ user|role|role_label }}</span>
+        {% if user|fully_signed_in %}<a href="{% url 'password_change' %}">{% translate "Change password" %}</a>{% endif %}
         <button type="submit" class="link">{% translate "Log out" %}</button>
       </form>
     {% endif %}
   </header>
   <main class="page">
+    {% if messages %}
+      <ul class="messages">
+        {% for message in messages %}
+          <li class="message {{ message.tags }}" role="{% if message.level_tag == 'error' %}alert{% else %}status{% endif %}">{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
     {% block content %}{% endblock %}
   </main>
 </body>

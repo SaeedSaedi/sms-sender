@@ -1,0 +1,102 @@
+{% extends "base.html" %}{% load i18n fa roles %}
+{% block title %}{% translate "Users" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<h1>{% translate "Users" %}</h1>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">{% translate "Username" %}</th>
+        <th scope="col">{% translate "Role" %}</th>
+        <th scope="col">{% translate "Two-step verification" %}</th>
+        <th scope="col">{% translate "Last sign-in" %}</th>
+        <th scope="col">{% translate "Account status" %}</th>
+        <th scope="col"><span class="visually-hidden">{% translate "Actions" %}</span></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in rows %}
+      <tr>
+        <th scope="row">{{ row.user.username|ltr }}{% if row.is_me %} <span class="muted">({% translate "you" %})</span>{% endif %}</th>
+        <td>
+          {% if row.is_me %}
+            {{ row.role|role_label }}
+          {% elif row.user.is_superuser %}
+            {{ row.role|role_label }} <span class="muted">({% translate "set on the server" %})</span>
+          {% else %}
+            <form method="post" class="inline">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="role">
+              <input type="hidden" name="user" value="{{ row.user.pk }}">
+              <select name="role" aria-label="{% translate "Role" %}">
+                {% for role in roles %}<option value="{{ role }}"{% if role == row.role %} selected{% endif %}>{{ role|role_label }}</option>{% endfor %}
+                <option value=""{% if not row.role %} selected{% endif %}>{{ None|role_label }}</option>
+              </select>
+              <button type="submit" class="small secondary">{% translate "Change role" %}</button>
+            </form>
+          {% endif %}
+        </td>
+        <td>
+          {% if row.two_factor %}{% translate "Set up" %}
+          {% elif row.needs_two_factor %}<span class="warn">{% translate "Not set up yet" %}</span>
+          {% else %}—{% endif %}
+        </td>
+        <td>{% if row.user.last_login %}{{ row.user.last_login|jalali }}{% else %}—{% endif %}</td>
+        <td>{% if row.user.is_active %}{% translate "Active" %}{% else %}<span class="muted">{% translate "Deactivated" %}</span>{% endif %}</td>
+        <td>
+          {% if not row.is_me %}<div class="actions">
+            {% if row.two_factor %}
+              <form method="post" class="inline"
+                    data-confirm="{% translate "Reset this user's two-step verification? At the next sign-in, they set up their app again." %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="reset_2fa">
+                <input type="hidden" name="user" value="{{ row.user.pk }}">
+                <button type="submit" class="small secondary">{% translate "Reset two-step verification" %}</button>
+              </form>
+            {% endif %}
+            {% if row.user.is_active %}
+              <form method="post" class="inline"
+                    data-confirm="{% translate "Deactivate this account? The user is signed out and can't sign in until it is activated again." %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="deactivate">
+                <input type="hidden" name="user" value="{{ row.user.pk }}">
+                <button type="submit" class="small danger">{% translate "Deactivate" %}</button>
+              </form>
+            {% else %}
+              <form method="post" class="inline">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="activate">
+                <input type="hidden" name="user" value="{{ row.user.pk }}">
+                <button type="submit" class="small secondary">{% translate "Activate" %}</button>
+              </form>
+            {% endif %}
+          </div>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<section class="card form-card">
+  <h2>{% translate "New user" %}</h2>
+  <form method="post" autocomplete="off">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="create">
+    <label for="id_username">{% translate "Username" %}</label>
+    <input id="id_username" name="username" type="text" dir="ltr" maxlength="150" required
+           autocomplete="off" value="{{ form.username.value|default:'' }}">
+    {% for error in form.username.errors %}<p class="error" role="alert">{{ error|fa_digits }}</p>{% endfor %}
+    <label for="id_password">{% translate "First password" %}</label>
+    <input id="id_password" name="password" type="password" dir="ltr" required autocomplete="new-password">
+    <p class="hint">{% translate "At least twelve characters. Give it to the person safely; they can change it after signing in." %}</p>
+    {% for error in form.password.errors %}<p class="error" role="alert">{{ error|fa_digits }}</p>{% endfor %}
+    <label for="id_role">{% translate "Role" %}</label>
+    <select id="id_role" name="role">
+      {% for role in roles %}<option value="{{ role }}"{% if form.role.value == role %} selected{% endif %}>{{ role|role_label }}</option>{% endfor %}
+    </select>
+    {% for error in form.role.errors %}<p class="error" role="alert">{{ error|fa_digits }}</p>{% endfor %}
+    <button type="submit">{% translate "Create user" %}</button>
+  </form>
+</section>
+{% endblock %}

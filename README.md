@@ -397,9 +397,12 @@ sms-sender dry-run --input ./numbers.csv          # parse + normalize only, no A
 ## Dashboard (Phase 3, in progress)
 
 A Persian, right-to-left web dashboard for running campaigns. It's an
-internal, multi-user tool built with Django and HTMX. So far it has the
-sign-in page and a read-only list of campaigns, read from the same campaign
-DBs the CLI writes.
+internal, multi-user tool built with Django and HTMX. So far it has:
+- sign-in, with two-step verification for operators and admins;
+- the three roles, and a users page for admins;
+- an activity log;
+- a read-only list of campaigns, read from the same campaign DBs the CLI
+  writes.
 
 It also has a background **worker** (`python manage.py run_worker`, the
 `worker` service in Compose) that runs the jobs the dashboard queues: sends,
@@ -423,7 +426,33 @@ docker compose up --build
 docker compose exec web python manage.py createsuperuser
 ```
 
-Then open http://127.0.0.1:8000.
+Then open http://127.0.0.1:8000 and sign in as that superuser. Admins and
+operators confirm a code from an authenticator app (Google Authenticator,
+Microsoft Authenticator, …) at every sign-in. The first sign-in shows a QR
+code to set the app up. Then create everyone else on the users page
+(«کاربران»). Each person has their own account and exactly one role:
+
+| Role | Persian | Can |
+|---|---|---|
+| `viewer` | مشاهده‌گر | see campaigns and reports (phone numbers masked); no code needed |
+| `operator` | اپراتور | also create and run campaigns, and see full numbers one at a time |
+| `admin` | مدیر سامانه | also manage users, the suppression list and settings, and read the activity log |
+
+The campaign actions arrive in the next steps; the roles already decide who
+gets them. A user without a role can sign in but sees nothing until an
+admin gives them one. Superusers are always admins.
+
+Someone who loses their phone asks an admin to reset their two-step
+verification on the users page; they set the app up again at their next
+sign-in. If the only admin loses theirs:
+1. Run `docker compose exec web python manage.py createsuperuser` to create a
+   second admin.
+2. Sign in with it and reset the first admin's verification.
+3. Deactivate the spare account.
+
+Sign-ins, failed sign-ins, codes and every change to an account are
+recorded in the activity log («سابقه فعالیت‌ها»). The username tried is
+recorded, never a password.
 
 If PyPI is only reachable through a local proxy (e.g. privoxy on port 8118),
 pass it to the build. Docker Desktop forwards `host.docker.internal` to

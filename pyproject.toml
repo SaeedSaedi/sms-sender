@@ -32,6 +32,8 @@ web = [
     "jdatetime>=5.0",
     "whitenoise>=6.7",
     "gunicorn>=23",
+    "django-otp>=1.5",
+    "segno>=1.6",
     "pytest-django>=4.9",
 ]
 
@@ -44,6 +46,8 @@ where = ["src"]
 [tool.setuptools.package-data]
 sms_sender_web = [
     "templates/**/*",
+    "accounts/templates/**/*",
+    "audit/templates/**/*",
     "dashboard/templates/**/*",
     "static/**/*",
     "locale/**/*",

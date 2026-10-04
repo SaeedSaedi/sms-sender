@@ -39,12 +39,17 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
   background: var(--card);
   border-block-end: 1px solid var(--line);
 }
+.topbar { flex-wrap: wrap; gap: .5rem 1.5rem; }
 .brand { font-weight: 700; color: var(--fg); text-decoration: none; }
-.session { display: flex; gap: .75rem; align-items: center; margin: 0; }
+.nav { display: flex; flex-wrap: wrap; gap: 1.25rem; margin-inline-end: auto; }
+.nav a, .session a { color: var(--accent); text-decoration: none; }
+.nav a:hover, .session a:hover { text-decoration: underline; }
+.session { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin: 0; }
 .who { color: var(--muted); }
 
 .page { max-inline-size: 76rem; margin-inline: auto; padding: 1.25rem; }
 h1 { font-size: 1.4rem; margin-block: 0 1rem; }
+h2 { font-size: 1.15rem; margin-block: 0 .75rem; }
 
 .card {
   background: var(--card);
@@ -53,9 +58,11 @@ h1 { font-size: 1.4rem; margin-block: 0 1rem; }
   padding: 1.5rem;
 }
 .narrow { max-inline-size: 24rem; margin-inline: auto; margin-block-start: 3rem; }
+.medium { max-inline-size: 34rem; margin-inline: auto; margin-block-start: 2rem; }
+.form-card { max-inline-size: 28rem; margin-block-start: 1.5rem; }
 
 label { display: block; margin-block: .75rem .25rem; }
-input[type="text"], input[type="password"] {
+input[type="text"], input[type="password"], select {
   inline-size: 100%;
   padding-block: .5rem;
   padding-inline: .7rem;
@@ -81,8 +88,58 @@ button.link {
   background: none;
   color: var(--accent);
 }
+button.small { margin: 0; padding-block: .2rem; padding-inline: .7rem; font-size: .9rem; }
+button.secondary { background: var(--card); color: var(--accent); }
+button.danger { background: var(--card); border-color: var(--error); color: var(--error); }
 .error { color: var(--error); }
-.empty { color: var(--muted); }
+.empty, .muted, .hint { color: var(--muted); }
+.hint { font-size: .9rem; margin-block: .25rem 0; }
+.warn { color: var(--warn); }
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.messages { margin: 0 0 1rem; padding: 0; list-style: none; }
+.message {
+  margin-block-end: .5rem;
+  padding-block: .6rem;
+  padding-inline: 1rem;
+  border: 1px solid var(--line);
+  border-inline-start-width: 4px;
+  border-radius: .5rem;
+  background: var(--card);
+}
+.message.success { border-inline-start-color: var(--ok); }
+.message.error { border-inline-start-color: var(--error); }
+
+form.inline { display: inline-flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin: 0; }
+form.inline select { inline-size: auto; padding-block: .2rem; }
+.actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+
+/* Two-step setup: the QR image on white, whatever the theme; the key is
+   copied exactly, so it stays left to right in a fixed-width font. */
+.steps { padding-inline-start: 1.5rem; list-style-type: persian; }
+.steps li { margin-block-end: 1rem; }
+.qr { margin-block: .75rem; }
+.qr svg { display: block; inline-size: 12rem; block-size: auto; padding: .5rem; background: #fff; }
+.secret {
+  display: inline-block;
+  margin-block: .35rem;
+  padding-block: .2rem;
+  padding-inline: .5rem;
+  border: 1px solid var(--line);
+  border-radius: .35rem;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  letter-spacing: .05em;
+  user-select: all;
+}
+
+.pager { display: flex; gap: 1.25rem; align-items: center; justify-content: center; margin-block: 1rem; }
 
 .table-wrap {
   overflow-x: auto;

@@ -43,4 +43,4 @@ numbers.csv
 sms-sender.toml
 
 # Local review / planning notes (not part of the project)
-audit/
+/audit/

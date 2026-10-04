@@ -148,3 +148,312 @@ msgstr "توقف موقت"
 
 msgid "Cancel"
 msgstr "لغو"
+
+# --- Navigation, messages and error pages ---
+
+msgid "Main menu"
+msgstr "منوی اصلی"
+
+msgid "Users"
+msgstr "کاربران"
+
+msgid "Activity log"
+msgstr "سابقه فعالیت‌ها"
+
+msgid "Change password"
+msgstr "تغییر گذرواژه"
+
+msgid "You don't have access to this page"
+msgstr "به این صفحه دسترسی ندارید"
+
+msgid "Your account has no role yet. Ask a system admin to give you one."
+msgstr "هنوز نقشی به حساب شما داده نشده است. از مدیر سامانه بخواهید برای شما نقشی تعیین کند."
+
+msgid "Your role doesn't allow this page. If you need it, ask a system admin."
+msgstr "نقش شما اجازه دیدن این صفحه را نمی‌دهد. اگر به آن نیاز دارید، از مدیر سامانه بخواهید."
+
+msgid "Back to campaigns"
+msgstr "بازگشت به کمپین‌ها"
+
+msgid "This form has expired"
+msgstr "اعتبار این فرم تمام شده است"
+
+msgid "Go back, reload the page, and try again."
+msgstr "به صفحه قبل برگردید، آن را از نو بارگذاری کنید و دوباره تلاش کنید."
+
+msgid "Page not found"
+msgstr "صفحه پیدا نشد"
+
+msgid "The address may be wrong, or the page was removed."
+msgstr "ممکن است نشانی نادرست باشد یا این صفحه حذف شده باشد."
+
+msgid "Something went wrong"
+msgstr "خطایی رخ داد"
+
+msgid "Try again in a few minutes. If it happens again, tell a system admin."
+msgstr "چند دقیقه دیگر دوباره تلاش کنید. اگر خطا تکرار شد، به مدیر سامانه اطلاع دهید."
+
+# --- Roles (glossary) ---
+
+msgid "Viewer"
+msgstr "مشاهده‌گر"
+
+msgid "Operator"
+msgstr "اپراتور"
+
+msgid "System admin"
+msgstr "مدیر سامانه"
+
+msgid "No role"
+msgstr "بدون نقش"
+
+# --- Two-step verification (glossary: «تأیید دومرحله‌ای») ---
+
+msgid "Two-step verification"
+msgstr "تأیید دومرحله‌ای"
+
+msgid "Set up two-step verification"
+msgstr "راه‌اندازی تأیید دومرحله‌ای"
+
+msgid "Your role needs a code from an authenticator app at every sign-in. Set it up once:"
+msgstr "نقش شما در هر ورود به کدی از برنامه احراز هویت نیاز دارد. این برنامه را یک بار راه‌اندازی کنید:"
+
+msgid "Install an authenticator app on your phone, such as Google Authenticator or Microsoft Authenticator."
+msgstr "یک برنامه احراز هویت، مانند Google Authenticator یا Microsoft Authenticator، روی گوشی خود نصب کنید."
+
+msgid "In the app, add an account and scan this image:"
+msgstr "در برنامه، حساب تازه‌ای بسازید و این تصویر را اسکن کنید:"
+
+msgid "QR image for the authenticator app"
+msgstr "تصویر QR برای برنامه احراز هویت"
+
+msgid "If you can't scan it, type this key instead:"
+msgstr "اگر اسکن ممکن نیست، این کلید را به‌جای آن دستی وارد کنید:"
+
+msgid "Enter the six-digit code the app shows:"
+msgstr "کد شش‌رقمی‌ای را که برنامه نشان می‌دهد وارد کنید:"
+
+msgid "Enter the six-digit code your authenticator app shows for this account."
+msgstr "کد شش‌رقمی‌ای را که برنامه احراز هویت برای این حساب نشان می‌دهد وارد کنید."
+
+msgid "Six-digit code"
+msgstr "کد شش‌رقمی"
+
+msgid "Confirm"
+msgstr "تأیید"
+
+msgid "Lost your phone? Ask a system admin to reset your two-step verification."
+msgstr "گوشی خود را گم کرده‌اید؟ از مدیر سامانه بخواهید تأیید دومرحله‌ای شما را بازنشانی کند."
+
+msgid "Enter the six-digit code from your authenticator app."
+msgstr "کد شش‌رقمی برنامه احراز هویت را وارد کنید."
+
+msgid "Too many wrong codes. Wait a little, then try the newest code."
+msgstr "چند بار کد نادرست وارد شده است. کمی صبر کنید و سپس تازه‌ترین کد را وارد کنید."
+
+msgid "The code is wrong or has expired. Enter the newest code from the app."
+msgstr "کد نادرست است یا اعتبار آن تمام شده است. تازه‌ترین کد برنامه را وارد کنید."
+
+# --- Users ---
+
+msgid "Role"
+msgstr "نقش"
+
+msgid "Last sign-in"
+msgstr "آخرین ورود"
+
+msgid "Account status"
+msgstr "وضعیت حساب"
+
+msgid "Actions"
+msgstr "اقدام‌ها"
+
+msgid "you"
+msgstr "شما"
+
+msgid "set on the server"
+msgstr "تعیین‌شده در سرور"
+
+msgid "Change role"
+msgstr "تغییر نقش"
+
+msgid "Set up"
+msgstr "راه‌اندازی‌شده"
+
+msgid "Not set up yet"
+msgstr "هنوز راه‌اندازی نشده"
+
+msgid "Active"
+msgstr "فعال"
+
+msgid "Deactivated"
+msgstr "غیرفعال"
+
+msgid "Reset two-step verification"
+msgstr "بازنشانی تأیید دومرحله‌ای"
+
+msgid "Reset this user's two-step verification? At the next sign-in, they set up their app again."
+msgstr "تأیید دومرحله‌ای این کاربر بازنشانی شود؟ کاربر در ورود بعدی، برنامه احراز هویت را دوباره راه‌اندازی می‌کند."
+
+msgid "Deactivate"
+msgstr "غیرفعال‌کردن"
+
+msgid "Activate"
+msgstr "فعال‌کردن"
+
+msgid "Deactivate this account? The user is signed out and can't sign in until it is activated again."
+msgstr "این حساب غیرفعال شود؟ کاربر از سامانه خارج می‌شود و تا فعال‌شدن دوباره حساب نمی‌تواند وارد شود."
+
+msgid "New user"
+msgstr "کاربر تازه"
+
+msgid "First password"
+msgstr "گذرواژه نخست"
+
+msgid "At least twelve characters. Give it to the person safely; they can change it after signing in."
+msgstr "دست‌کم دوازده کاراکتر. آن را به روشی امن به کاربر بدهید؛ پس از ورود می‌تواند آن را تغییر دهد."
+
+msgid "Create user"
+msgstr "ساخت کاربر"
+
+msgid "This username is already taken."
+msgstr "این نام کاربری قبلاً ثبت شده است."
+
+msgid "The user was created. Give them the first password safely; they can change it after signing in."
+msgstr "کاربر ساخته شد. گذرواژه نخست را به روشی امن به او بدهید؛ پس از ورود می‌تواند آن را تغییر دهد."
+
+msgid "The role was changed."
+msgstr "نقش کاربر تغییر کرد."
+
+msgid "Two-step verification was reset. At the next sign-in, they set up their app again."
+msgstr "تأیید دومرحله‌ای بازنشانی شد. کاربر در ورود بعدی، برنامه احراز هویت را دوباره راه‌اندازی می‌کند."
+
+msgid "The account status was changed."
+msgstr "وضعیت حساب تغییر کرد."
+
+msgid "You can't change your own role or account status."
+msgstr "نقش یا وضعیت حساب خودتان را نمی‌توانید تغییر دهید."
+
+# --- Password ---
+
+msgid "Current password"
+msgstr "گذرواژه فعلی"
+
+msgid "New password"
+msgstr "گذرواژه تازه"
+
+msgid "New password again"
+msgstr "تکرار گذرواژه تازه"
+
+msgid "At least twelve characters, not only digits, and not like your username."
+msgstr "دست‌کم دوازده کاراکتر، نه فقط رقم، و نه شبیه نام کاربری شما."
+
+msgid "Your password was changed."
+msgstr "گذرواژه شما تغییر کرد."
+
+# --- Activity log (glossary: «سابقه فعالیت‌ها») ---
+
+msgid "Time"
+msgstr "زمان"
+
+msgid "User"
+msgstr "کاربر"
+
+msgid "Action"
+msgstr "فعالیت"
+
+msgid "Details"
+msgstr "جزئیات"
+
+msgid "IP address"
+msgstr "نشانی IP"
+
+msgid "Pages"
+msgstr "صفحه‌ها"
+
+msgid "Newer"
+msgstr "جدیدتر"
+
+msgid "Older"
+msgstr "قدیمی‌تر"
+
+msgid "Nothing recorded yet."
+msgstr "هنوز فعالیتی ثبت نشده است."
+
+msgid "Signed in"
+msgstr "ورود"
+
+msgid "Signed out"
+msgstr "خروج"
+
+msgid "Failed sign-in"
+msgstr "ورود ناموفق"
+
+msgid "Two-step verification set up"
+msgstr "راه‌اندازی تأیید دومرحله‌ای"
+
+msgid "Two-step code confirmed"
+msgstr "تأیید موفق کد دومرحله‌ای"
+
+msgid "Wrong two-step code"
+msgstr "کد دومرحله‌ای نادرست"
+
+msgid "Two-step verification reset"
+msgstr "بازنشانی تأیید دومرحله‌ای"
+
+msgid "User created"
+msgstr "ساخت کاربر"
+
+msgid "Role changed"
+msgstr "تغییر نقش"
+
+msgid "Account deactivated"
+msgstr "غیرفعال‌سازی حساب"
+
+msgid "Account activated"
+msgstr "فعال‌سازی حساب"
+
+msgid "Password changed"
+msgstr "تغییر گذرواژه"
+
+#, python-brace-format
+msgid "{who}: from {before} to {after}"
+msgstr "{who}: از {before} به {after}"
+
+#, python-brace-format
+msgid "{who}, role: {role}"
+msgstr "{who}، نقش: {role}"
+
+msgid "while setting up"
+msgstr "هنگام راه‌اندازی"
+
+msgid "while signing in"
+msgstr "هنگام ورود"
+
+msgid "blocked after repeated wrong codes"
+msgstr "مسدود به‌دلیل کدهای نادرست پیاپی"
+
+# --- Django's own messages, reworded with the glossary's terms (Django's
+# Persian mixes «رمز عبور» and «گذرواژه»). This catalog comes first. ---
+
+msgid "Your old password was entered incorrectly. Please enter it again."
+msgstr "گذرواژه فعلی نادرست است. دوباره وارد کنید."
+
+msgid "The two password fields didn’t match."
+msgstr "گذرواژه تازه و تکرار آن یکسان نیستند."
+
+#, python-format
+msgid "This password is too short. It must contain at least %d character."
+msgid_plural "This password is too short. It must contain at least %d characters."
+msgstr[0] "این گذرواژه کوتاه است؛ باید دست‌کم %d کاراکتر داشته باشد."
+msgstr[1] "این گذرواژه کوتاه است؛ باید دست‌کم %d کاراکتر داشته باشد."
+
+#, python-format
+msgid "The password is too similar to the %(verbose_name)s."
+msgstr "این گذرواژه بیش از حد به %(verbose_name)s شبیه است."
+
+msgid "This password is too common."
+msgstr "این گذرواژه بیش از حد رایج است."
+
+msgid "This password is entirely numeric."
+msgstr "گذرواژه نباید فقط از رقم تشکیل شده باشد."

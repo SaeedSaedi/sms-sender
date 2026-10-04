@@ -8,6 +8,8 @@ pytest.importorskip("django")
 
 from sms_sender.state import StateStore  # noqa: E402
 
+from .conftest import PASSWORD  # noqa: E402
+
 pytestmark = pytest.mark.django_db
 
 
@@ -29,13 +31,13 @@ def test_the_sign_in_page_is_persian_and_right_to_left(client):
     assert "ورود" in html and "گذرواژه" in html and "نام کاربری" in html
 
 
-def test_a_wrong_password_gets_a_persian_message(client, operator):
-    response = client.post("/login/", {"username": "operator1", "password": "wrong"})
+def test_a_wrong_password_gets_a_persian_message(client, viewer):
+    response = client.post("/login/", {"username": "viewer1", "password": "wrong"})
     assert "نام کاربری یا گذرواژه نادرست است" in response.content.decode()
 
 
-def test_signing_in_leads_to_the_campaigns(client, operator):
-    response = client.post("/login/", {"username": "operator1", "password": "a-long-test-password-1"})
+def test_signing_in_leads_to_the_campaigns(client, viewer):
+    response = client.post("/login/", {"username": "viewer1", "password": PASSWORD})
     assert response.status_code == 302 and response["Location"] == "/"
 
 

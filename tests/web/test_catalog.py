@@ -14,31 +14,36 @@ PO = ROOT / "locale" / "fa" / "LC_MESSAGES" / "django.po"
 MO = PO.with_suffix(".mo")
 
 
-def parse_po(text: str) -> tuple[dict[str, str], set[str]]:
-    """msgid → msgstr, and the fuzzy msgids. Enough for our catalog: single
-    or continued strings, no plurals or contexts."""
-    entries: dict[str, str] = {}
+def parse_po(text: str) -> tuple[dict[str, list[str]], dict[str, str], set[str]]:
+    """msgid → its translations (one, or one per plural form), msgid → its
+    plural msgid, and the fuzzy msgids. Enough for our catalog: single or
+    continued strings, no contexts."""
+    entries: dict[str, list[str]] = {}
+    plurals: dict[str, str] = {}
     fuzzy: set[str] = set()
     for block in re.split(r"\n\s*\n", text):
         lines = block.strip().splitlines()
         flags = " ".join(line for line in lines if line.startswith("#,"))
         body = [line for line in lines if not line.startswith("#")]
-        field, parts = None, {"msgid": [], "msgstr": []}
+        field, parts = None, {}
         for line in body:
-            m = re.match(r'(msgid|msgstr)\s+"(.*)"$', line)
+            m = re.match(r'(msgid|msgid_plural|msgstr(?:\[\d\])?)\s+"(.*)"$', line)
             if m:
                 field = m.group(1)
-                parts[field].append(m.group(2))
+                parts.setdefault(field, []).append(m.group(2))
             elif line.startswith('"') and field:
                 parts[field].append(line.strip()[1:-1])
-        msgid = "".join(parts["msgid"])
+        msgid = "".join(parts.get("msgid", []))
         if not msgid:
             continue
-        msgstr = "".join(parts["msgstr"])
-        entries[msgid] = msgstr
+        if "msgid_plural" in parts:
+            plurals[msgid] = "".join(parts["msgid_plural"])
+            entries[msgid] = ["".join(v) for k, v in sorted(parts.items()) if k.startswith("msgstr[")]
+        else:
+            entries[msgid] = ["".join(parts.get("msgstr", []))]
         if "fuzzy" in flags:
             fuzzy.add(msgid)
-    return entries, fuzzy
+    return entries, plurals, fuzzy
 
 
 def used_msgids() -> set[str]:
@@ -46,33 +51,49 @@ def used_msgids() -> set[str]:
     for template in ROOT.rglob("*.html"):
         ids |= set(re.findall(r'{%\s*translate\s+"([^"]+)"', template.read_text(encoding="utf-8")))
     for module in ROOT.rglob("*.py"):
-        ids |= set(re.findall(r'\b_\(\s*"([^"]+)"\s*\)', module.read_text(encoding="utf-8")))
+        # _("…"), including a message split over lines as adjacent literals.
+        for call in re.finditer(
+            r'\b(?:_|gettext|gettext_now|gettext_lazy)\(\s*((?:"[^"]*"\s*)+)[,)]',
+            module.read_text(encoding="utf-8"),
+        ):
+            ids.add("".join(re.findall(r'"([^"]*)"', call.group(1))))
     return ids
 
 
 def test_every_string_the_dashboard_uses_is_translated():
-    entries, fuzzy = parse_po(PO.read_text(encoding="utf-8"))
+    entries, _, fuzzy = parse_po(PO.read_text(encoding="utf-8"))
     used = used_msgids()
     assert used, "found no translatable strings — the extraction is broken"
     assert sorted(used - set(entries)) == []
-    assert sorted(m for m in used if not entries.get(m)) == []
+    # Every entry, including the Django messages the catalog rewords.
+    assert sorted(m for m, forms in entries.items() if not all(forms)) == []
     assert fuzzy == set()
 
 
 def test_the_compiled_catalog_matches_the_source():
-    entries, _ = parse_po(PO.read_text(encoding="utf-8"))
+    entries, plurals, _ = parse_po(PO.read_text(encoding="utf-8"))
     with MO.open("rb") as f:
         compiled = gettext.GNUTranslations(f)
-    stale = {m: s for m, s in entries.items() if compiled.gettext(m) != s}
+    stale = {}
+    for msgid, forms in entries.items():
+        if msgid in plurals:
+            got = [compiled.ngettext(msgid, plurals[msgid], n) for n in (1, 2)]
+        else:
+            got = [compiled.gettext(msgid)]
+        if got != forms:
+            stale[msgid] = got
     assert stale == {}, "run: msgfmt -o django.mo django.po (in the catalog's folder)"
 
 
 def test_persian_typography():
-    entries, _ = parse_po(PO.read_text(encoding="utf-8"))
-    text = "\n".join(entries.values())
+    entries, _, _ = parse_po(PO.read_text(encoding="utf-8"))
+    text = "\n".join(form for forms in entries.values() for form in forms)
     assert "ي" not in text and "ك" not in text  # Persian ی and ک, never Arabic
     assert not re.search(r"[0-9]", text)                  # digits come from the data, in Persian
     # Compounds and plurals take the zero-width non-joiner, not a space.
-    for joined in ("کمپین‌ها", "پذیرفته‌شده", "ارسال‌نشده", "تحویل‌شده", "کاوه‌نگار"):
-        if joined.replace("‌", " ") in text:
-            raise AssertionError(f"{joined!r} written with a space instead of a half-space")
+    for joined in ("کمپین‌ها", "پذیرفته‌شده", "ارسال‌نشده", "تحویل‌شده", "کاوه‌نگار",
+                   "دومرحله‌ای", "راه‌اندازی", "شش‌رقمی", "فعالیت‌ها", "دست‌کم"):
+        if joined.replace("‌", " ") in text or joined.replace("‌", "") in text:
+            raise AssertionError(f"{joined!r} written without its half-space")
+    # The verb prefixes می / نمی join their verb with a half-space.
+    assert not re.search(r"(?<![\w‌])ن?می [\u0600-\u06FF]", text)
