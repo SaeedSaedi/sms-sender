@@ -25,6 +25,8 @@ from tqdm import tqdm
 
 from . import input_loader
 from .input_loader import LoadResult, TokenColumns
+from .links import DEFAULT_WORKERS as DEFAULT_LINK_WORKERS
+from .links import LinkClient, LinkError, LinkSettings, LinkStage
 from .locking import RunLock
 from .rate import TokenBucket
 from .reconcile import DEFAULT_MIN_AGE_SEC, REQUEUE_NOT_FOUND, reconcile_unknown
@@ -39,6 +41,7 @@ from .sender import (
     SenderConfig,
     UncertainSendError,
 )
+from .shortlink import ShlinkHaltError
 from .state import NEEDS_REVIEW, SUPPRESSED, UNKNOWN, StateStore
 from .window import TEHRAN, SendWindow, now_tehran
 
@@ -79,6 +82,9 @@ class RunSummary:
     # with two different user IDs.
     missing_user_id: int = 0
     user_id_conflicts: int = 0
+    # Short links this run's SMS carry, and how many it had to create.
+    links_ready: int = 0
+    links_created: int = 0
 
 
 class PreflightError(Exception):
@@ -186,7 +192,22 @@ class Runner:
         clock: Callable[[], datetime] = now_tehran,
         user_id_column: str | None = None,
         segment: str | None = None,
+        links: LinkSettings | None = None,
+        link_client: LinkClient | None = None,
+        link_workers: int = DEFAULT_LINK_WORKERS,
+        link_rate_per_sec: float = 10.0,
     ):
+        if links is not None and (link_client is None or not campaign):
+            raise ValueError("links need a link client and a campaign name")
+        # Short links (Phase 2): created for every recipient before any SMS.
+        self.links = links
+        self.link_client = link_client
+        self.link_workers = link_workers
+        self.link_rate_per_sec = link_rate_per_sec
+        self._link_tokens: dict[str, str] | None = None  # phone → link token value
+        self._test_link_token: str | None = None
+        self._links_ready = 0
+        self._links_created = 0
         self.input_path = Path(input_path)
         # Which input column holds each recipient's user ID (None: no IDs),
         # and the segment this input is (default: the file's name).
@@ -301,11 +322,16 @@ class Runner:
         if self.send_window and not self.send_window.contains(self.clock()):
             self._close_window()
             return ("skipped", phone)
+        # Before the claim: a recipient whose link is missing is skipped,
+        # never claimed and never sent without it.
+        tokens = self._tokens_for(phone)
+        if self.links is not None and (tokens or {}).get(self.links.token) is None:
+            logger.error("link_missing", extra={"phone": phone})
+            return ("skipped", phone)
         recipient = self.state.claim(phone)
         if recipient is None:
             # Already sent or claimed by someone else.
             return ("already_done", phone)
-        tokens = self._row_tokens.get(phone) if self._row_tokens is not None else None
         try:
             result = self.sender.send(phone, tokens=tokens)
         except HaltError as e:
@@ -364,6 +390,54 @@ class Runner:
                 },
             )
             return ("sent", phone)
+
+    def _tokens_for(self, phone: str) -> dict[str, str] | None:
+        """Per-recipient tokens (CSV columns) plus the recipient's link;
+        None when every recipient gets the static tokens only."""
+        tokens = dict(self._row_tokens.get(phone) or {}) if self._row_tokens is not None else {}
+        if self.links is not None and self._link_tokens is not None:
+            link = self._link_tokens.get(phone)
+            if link is not None:
+                tokens[self.links.token] = link
+        return tokens or None
+
+    def _links_stage(self, phones: list[str]) -> None:
+        """Stage 2: every short link this run's SMS need, before any SMS —
+        the approval test's own link included. Raises PreflightError when
+        one can't be made; the links already made are kept for next time."""
+        if self.links is None or not (phones or self.approval_test_number):
+            return
+        assert self.link_client is not None and self.campaign
+        segments = self.state.segments_for(phones)
+        stage = LinkStage(
+            self.state, self.link_client, campaign=self.campaign, settings=self.links,
+            workers=self.link_workers, rate_per_sec=self.link_rate_per_sec,
+            stop=self._stop, note=self._reporter.note,
+        )
+        try:
+            result = stage.run(
+                {p: segments.get(p) or self.segment for p in phones},
+                test_phone=self.approval_test_number,
+            )
+        except ShlinkHaltError as e:
+            logger.error("links_halt", extra={"status": e.status, "detail": str(e)})
+            raise PreflightError(f"Shlink refused the link stage: {e}") from e
+        except LinkError as e:
+            logger.error("links_not_ready", extra={"detail": str(e)})
+            raise PreflightError(f"links: {e}") from e
+        self._link_tokens = result.tokens
+        self._test_link_token = result.test_token
+        self._links_ready, self._links_created = result.needed, result.created
+        # (`created` would clash with LogRecord's own attribute.)
+        logger.info(
+            "links_ready",
+            extra={"links_needed": result.needed, "links_created": result.created,
+                   "links_extended": result.extended, "strategy": self.links.strategy},
+        )
+        extended = f", {result.extended} given more time" if result.extended else ""
+        self._reporter.note(
+            f"Links: {result.needed} ready ({result.created} created now{extended})."
+        )
 
     def _preflight(self, phones: list[str]) -> None:
         """Account info check. Raises PreflightError on auth/quota failures.
@@ -496,6 +570,9 @@ class Runner:
                 raise PreflightError("approval test needs a recipient row to borrow tokens from")
             tokens = self._row_tokens[sample]
             self._reporter.note(f"Approval test uses the tokens of {sample}.")
+        if self.links is not None and self._test_link_token is not None:
+            # Its own link, so the operator's click never counts for a recipient.
+            tokens = {**(tokens or {}), self.links.token: self._test_link_token}
         logger.info("approval_test_target", extra={"phone": target})
         self._reporter.note(f"Approval test: sending to {target} synchronously …")
 
@@ -597,9 +674,10 @@ class Runner:
         except PreflightError as e:
             logger.error("preflight_failed", extra={"detail": str(e)})
             self._reporter.note(f"Preflight failed: {e}")
+            # A cancel during the link stage is a stop, not a halt.
             summary = self._build_summary(
                 loaded=loaded, new_count=new_count, counts=SendCounts(),
-                halted=True, started=started,
+                halted=not self._cancelled.is_set(), started=started,
             )
             self._record_last_run(summary)
             return summary
@@ -751,6 +829,7 @@ class Runner:
                     f"{now.astimezone(TEHRAN):%H:%M} there; run again inside it"
                 )
         self._preflight(phones)
+        self._links_stage(phones)
         self._approval_test(phones)
         self._check_credit(phones)
         self._smoke_test_run(phones)
@@ -825,6 +904,8 @@ class Runner:
             cost=self._run_cost,
             missing_user_id=loaded.missing_user_id,
             user_id_conflicts=self._user_id_conflicts,
+            links_ready=self._links_ready,
+            links_created=self._links_created,
         )
 
 
@@ -847,6 +928,8 @@ def _summary_log_fields(s: RunSummary) -> dict:
         "cost": s.cost,
         "missing_user_id": s.missing_user_id,
         "user_id_conflicts": s.user_id_conflicts,
+        "links_ready": s.links_ready,
+        "links_created": s.links_created,
         "halted": s.halted,
         "stopped": s.stopped,
         "elapsed_sec": s.elapsed_sec,
@@ -878,6 +961,8 @@ def format_report(s: RunSummary) -> str:
         lines.append(f"  missing user ID   {s.missing_user_id}  (sent; not attributable to a user)")
     if s.user_id_conflicts:
         lines.append(f"  user ID conflict  {s.user_id_conflicts}  (two different user IDs; not sent)")
+    if s.links_ready:
+        lines.append(f"  links             {s.links_ready}  ({s.links_created} created this run)")
     if s.stopped:
         lines.append("  stopped           True  (re-run the same command to continue)")
     if s.cost:
@@ -906,11 +991,13 @@ def _attempt_recorder(state: StateStore) -> Callable[[Attempt], None]:
     return record
 
 
-def campaign_settings(cfg: SenderConfig, token_columns: TokenColumns | None) -> dict:
+def campaign_settings(
+    cfg: SenderConfig, token_columns: TokenColumns | None, links: LinkSettings | None = None,
+) -> dict:
     """What a campaign sends — the part that must stay the same across its
     runs. Throughput knobs (workers, rate, timeouts) and the input file are
     not part of it: one campaign can be fed several inputs (segments)."""
-    return {
+    settings = {
         "template": cfg.template,
         "tokens": {
             name: getattr(cfg, name)
@@ -922,6 +1009,10 @@ def campaign_settings(cfg: SenderConfig, token_columns: TokenColumns | None) -> 
             if token_columns else {}
         ),
     }
+    if links is not None:
+        # Absent without links, so campaigns from before links keep matching.
+        settings["links"] = links.as_settings()
+    return settings
 
 
 def make_runner(
@@ -941,6 +1032,9 @@ def make_runner(
     send_window: SendWindow | None = None,
     user_id_column: str | None = None,
     segment: str | None = None,
+    links: LinkSettings | None = None,
+    link_client: LinkClient | None = None,
+    link_rate_per_sec: float = 10.0,
 ) -> Runner:
     state = StateStore(db_path)
     sender = Sender(sender_cfg, on_attempt=_attempt_recorder(state))
@@ -955,10 +1049,13 @@ def make_runner(
         approval_test_number=approval_test_number,
         token_columns=token_columns,
         campaign=campaign,
-        settings=campaign_settings(sender_cfg, token_columns),
+        settings=campaign_settings(sender_cfg, token_columns, links),
         allow_settings_change=allow_settings_change,
         opt_out=opt_out,
         send_window=send_window,
         user_id_column=user_id_column,
         segment=segment,
+        links=links,
+        link_client=link_client,
+        link_rate_per_sec=link_rate_per_sec,
     )

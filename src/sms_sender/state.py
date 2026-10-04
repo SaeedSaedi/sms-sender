@@ -71,6 +71,28 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         "ALTER TABLE recipients ADD COLUMN user_id TEXT",
         "ALTER TABLE recipients ADD COLUMN segment TEXT",
     ),
+    (  # 5 → 6: one row per short link, written before Shlink is called (links.py)
+        """
+        CREATE TABLE links (
+            key              TEXT PRIMARY KEY,
+            ref              TEXT UNIQUE,
+            long_url         TEXT NOT NULL,
+            title            TEXT NOT NULL,
+            tags             TEXT NOT NULL,
+            valid_until      TEXT NOT NULL,
+            status           TEXT NOT NULL,
+            short_code       TEXT,
+            short_url        TEXT,
+            attempts         INTEGER NOT NULL DEFAULT 0,
+            last_error       TEXT,
+            created_at       REAL NOT NULL,
+            ready_at         REAL,
+            clicks           INTEGER,
+            clicks_synced_at REAL
+        )
+        """,
+        "CREATE INDEX idx_links_status ON links(status)",
+    ),
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)
@@ -108,12 +130,31 @@ SUPPRESSED = "suppressed"
 
 CLAIMABLE = (PENDING, FAILED_RETRIABLE)
 
+# Link statuses (`links` table)
+LINK_PENDING = "pending"  # written, not created at Shlink yet (or Shlink was unreachable)
+LINK_READY = "ready"      # created; short_code / short_url set
+LINK_FAILED = "failed"    # Shlink refused it; the next run asks again
+
 
 @dataclass(frozen=True)
 class Recipient:
     phone: str
     raw: str
     attempts: int
+
+
+@dataclass(frozen=True)
+class LinkRow:
+    """A short link exactly as it is (or will be) requested from Shlink."""
+    key: str             # phone, 'segment:<name>', 'campaign' or 'test:<phone>'
+    ref: str | None      # random reference in the long URL; None on shared links
+    long_url: str
+    title: str
+    tags: tuple[str, ...]
+    valid_until: str     # ISO 8601, UTC
+    status: str = LINK_PENDING
+    short_code: str | None = None
+    short_url: str | None = None
 
 
 class StateStore:
@@ -541,6 +582,83 @@ class StateStore:
                 "UPDATE recipients SET status=?, status_code=?, last_error=? WHERE phone=?",
                 (target, status_code, redact_secrets(error), phone),
             )
+
+    # ---------- short links (see links.py) ----------
+
+    def _select_in(self, sql: str, keys: Iterable[str]) -> list[sqlite3.Row]:
+        """Run `sql` (with one `{in}` placeholder for an IN-list) over `keys`
+        in chunks: SQLite caps the number of parameters."""
+        batch, rows = list(keys), []
+        conn = self._conn()
+        for start in range(0, len(batch), 500):
+            chunk = batch[start:start + 500]
+            rows += conn.execute(sql.format(**{"in": ",".join("?" * len(chunk))}), chunk).fetchall()
+        return rows
+
+    def segments_for(self, phones: Iterable[str]) -> dict[str, str | None]:
+        rows = self._select_in("SELECT phone, segment FROM recipients WHERE phone IN ({in})", phones)
+        return {r["phone"]: r["segment"] for r in rows}
+
+    def get_links(self, keys: Iterable[str]) -> dict[str, LinkRow]:
+        rows = self._select_in(
+            "SELECT key, ref, long_url, title, tags, valid_until, status, short_code, short_url "
+            "FROM links WHERE key IN ({in})",
+            keys,
+        )
+        return {
+            r["key"]: LinkRow(
+                key=r["key"], ref=r["ref"], long_url=r["long_url"], title=r["title"],
+                tags=tuple(json.loads(r["tags"])), valid_until=r["valid_until"],
+                status=r["status"], short_code=r["short_code"], short_url=r["short_url"],
+            )
+            for r in rows
+        }
+
+    def add_links(self, rows: Iterable[LinkRow]) -> int:
+        """Write links before Shlink is asked for them. A key that already
+        has a row keeps it — its request must be repeated exactly. Returns
+        how many rows were added (a clashing `ref` is skipped too)."""
+        now = time.time()
+        with self._tx() as conn:
+            before = conn.total_changes
+            conn.executemany(
+                "INSERT OR IGNORE INTO links "
+                "(key, ref, long_url, title, tags, valid_until, status, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (r.key, r.ref, r.long_url, r.title, json.dumps(list(r.tags)),
+                     r.valid_until, LINK_PENDING, now)
+                    for r in rows
+                ],
+            )
+            return conn.total_changes - before
+
+    def mark_link_ready(self, key: str, short_code: str, short_url: str) -> None:
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE links SET status=?, short_code=?, short_url=?, attempts=attempts+1, "
+                "last_error=NULL, ready_at=? WHERE key=?",
+                (LINK_READY, short_code, short_url, time.time(), key),
+            )
+
+    def mark_link_not_ready(self, key: str, error: str, *, refused: bool) -> None:
+        """Shlink refused the link (`failed`) or couldn't be reached (stays
+        `pending`). Either way the next run asks again with the same request."""
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE links SET status=?, attempts=attempts+1, last_error=? WHERE key=?",
+                (LINK_FAILED if refused else LINK_PENDING, error, key),
+            )
+
+    def set_link_expiry(self, key: str, valid_until: str) -> None:
+        with self._tx() as conn:
+            conn.execute("UPDATE links SET valid_until=? WHERE key=?", (valid_until, key))
+
+    def link_counts(self) -> dict[str, int]:
+        rows = self._conn().execute(
+            "SELECT status, COUNT(*) AS n FROM links GROUP BY status"
+        ).fetchall()
+        return {r["status"]: r["n"] for r in rows}
 
     # ---------- reporting ----------
 

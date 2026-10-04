@@ -100,16 +100,21 @@ class ShlinkConfig:
     backoff_max: float = 30.0
 
 
+def shlink_base_url() -> str:
+    """Where Shlink lives (no key needed): SHLINK_BASE_URL, else the default."""
+    load_dotenv(".env")
+    return (os.environ.get(ENV_BASE_URL, "").strip() or DEFAULT_BASE_URL).rstrip("/")
+
+
 def load_shlink_config(timeout: float = 15.0) -> ShlinkConfig:
     """Shlink settings from the environment (or `.env` in cwd)."""
-    load_dotenv(".env")
+    base = shlink_base_url()
     key = os.environ.get(ENV_API_KEY, "").strip()
     if not key:
         raise RuntimeError(
             f"{ENV_API_KEY} is not set. Put it in `.env` or export it before using links."
         )
-    base = os.environ.get(ENV_BASE_URL, "").strip() or DEFAULT_BASE_URL
-    return ShlinkConfig(api_key=key, base_url=base.rstrip("/"), timeout=timeout)
+    return ShlinkConfig(api_key=key, base_url=base, timeout=timeout)
 
 
 class ShlinkClient:
