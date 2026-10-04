@@ -268,6 +268,11 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - The catalog also rewords Django's own messages that a page can show: password rules, and the password-change errors. Django's Persian mixes «رمز عبور» with «گذرواژه». It comes first because it's in `LOCALE_PATHS`. Django 5.2's short-password message id uses `%d`, and Django's own Persian catalog still has the old `%(min_length)d` id. Without our entry that message is English. When upgrading Django, check those ids still match.
   - Error pages: `403.html`, `403_csrf.html`, `404.html` and `500.html`. `500.html` extends nothing, because it's rendered without a request.
   - Form errors go through `|fa_digits` (Django fills in Latin digits, e.g. the minimum password length).
+  - Identifiers (slugs, template names, user IDs) go through `|copyable`. It renders the value, with Persian digits if it's purely numeric, and a copy button holding the exact stored value. The button falls back from the clipboard API, which needs HTTPS, for plain-HTTP NetBird access.
+  - Text people type (names, notes, fixed token values, value translations) goes through `text.persian_text`: Arabic «ي»/«ى»/«ك» become «ی»/«ک».
+  - Kavenegar's codes come with their meaning (`campaigns/terms.KAVENEGAR_CODES`, `code_meaning`). A reason with `code=None` reads "Kavenegar didn't answer".
+  - Confirmations state the consequence with the real number, e.g. how many recipients a cancel cancels.
+  - `test_catalog.py` also fails on stale entries, so the specialist reviews only text that's shown. Django's own reworded messages are listed in `DJANGO_OWN`.
   - Status names live in `dashboard/terms.py`, worded as in the spec's glossary.
   - Show numbers with the `fa` filters: `fa_number`, `fa_digits`, `jalali` (Solar Hijri, Tehran time) and `ltr` (`<bdi dir="ltr">` for values with separators or Latin letters).
   - Never put Persian digits inside links or codes.

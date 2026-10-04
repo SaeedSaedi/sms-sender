@@ -15,6 +15,7 @@ from ..accounts.decorators import forbidden, requires
 from ..accounts.roles import can
 from ..audit.record import record
 from ..dashboard.templatetags.fa import fa_number
+from ..text import persian_text
 from . import service
 from .forms import AddForm
 from .models import Suppression
@@ -42,7 +43,8 @@ def suppression_list(request):
             return redirect("suppression")
         if form.is_valid():
             phones, invalid = form.cleaned_data["phones"], form.cleaned_data["invalid"]
-            added = service.add(phones, note=form.cleaned_data["note"].strip(), user=request.user)
+            note = persian_text(form.cleaned_data["note"].strip())
+            added = service.add(phones, note=note, user=request.user)
             if added:
                 record("suppression_added", request=request, count=added)
             already = len(phones) - added

@@ -89,7 +89,7 @@
         {% endif %}
         {% if active_send.control != "cancel" %}
           <form method="post" action="{% url 'campaign_action' campaign.slug 'cancel' %}" class="inline"
-                data-confirm="{% translate "Cancel the campaign? Everyone not sent yet is cancelled. SMS that Kavenegar already accepted can't be recalled." %}">
+                data-confirm="{{ cancel_confirm }}">
             {% csrf_token %}<input type="hidden" name="job" value="{{ active_send.pk }}">
             <button type="submit" class="small danger">{% translate "Cancel the campaign" %}</button>
           </form>
@@ -99,7 +99,7 @@
   {% elif approved %}
     {% if user|can:"run_campaigns" %}
       <form method="post" action="{% url 'campaign_action' campaign.slug 'send' %}"
-            data-confirm="{% translate "Start sending this campaign now?" %}">
+            data-confirm="{{ send_confirm }}">
         {% csrf_token %}
         <button type="submit">{% translate "Start sending" %}</button>
       </form>

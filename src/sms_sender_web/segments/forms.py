@@ -5,6 +5,7 @@ from django.utils.translation import gettext_lazy as _
 
 from sms_sender.input_loader import SLUG_RE, segment_from_path
 
+from ..text import persian_text
 from . import files
 from .models import Segment
 
@@ -64,7 +65,7 @@ class UploadForm(forms.Form):
             return data
         if Segment.objects.filter(slug=slug).exists():
             self.add_error("slug", _("A segment with this short name already exists. Choose another."))
-        data["name"] = (data.get("name") or "").strip() or slug
+        data["name"] = persian_text((data.get("name") or "").strip()) or slug
         return data
 
 

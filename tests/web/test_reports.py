@@ -176,7 +176,7 @@ def test_the_status_page_explains_problems_in_persian(signed_in, monkeypatch):
     monkeypatch.setattr(Engine, "sender", lambda self: FakeAccount(error=HaltError(401, "invalid key")))
     monkeypatch.setattr(Engine, "link_client", lambda self: FakeShlink(version=None))
     html = signed_in.get("/status/").content.decode()
-    assert "کاوه‌نگار کلید یا حساب را نپذیرفت" in html and "۴۰۱" in html
+    assert "کاوه‌نگار در بررسی حساب خطای ۴۰۱ برگرداند: حساب کاوه‌نگار غیرفعال است." in html
     assert "سرویس لینک کوتاه مشکلی گزارش می‌کند" in html
     assert "در حال اجرا نیست" in html  # no worker seen
 

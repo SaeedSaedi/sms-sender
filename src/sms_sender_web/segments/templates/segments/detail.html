@@ -5,7 +5,7 @@
   <h1><bdi>{{ segment.name }}</bdi></h1>
   <a href="{% url 'segment_list' %}">{% translate "All segments" %}</a>
 </div>
-<p class="muted">{{ segment.slug|ltr }} · {{ segment.original_name|ltr }} · {{ segment.uploaded_at|jalali }}{% if segment.uploaded_by %} · {{ segment.uploaded_by.username|ltr }}{% endif %}</p>
+<p class="muted">{{ segment.slug|copyable }} · {{ segment.original_name|ltr }} · {{ segment.uploaded_at|jalali }}{% if segment.uploaded_by %} · {{ segment.uploaded_by.username|ltr }}{% endif %}</p>
 
 {% if draft %}
   <p class="warn">{% translate "The columns of this file haven't been chosen yet, so it can't be used." %}</p>
