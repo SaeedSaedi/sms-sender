@@ -45,6 +45,9 @@ pytest                                   # full suite
 pytest tests/test_state.py               # one file
 pytest tests/test_state.py::test_claim   # one test
 pytest -k "claim or in_flight"           # by name pattern
+pytest -m e2e                            # browser tests: pip install -e ".[dev,web,e2e]" + Google Chrome
+E2E_SHOTS=/tmp/shots pytest -m e2e       # + a screenshot of every page at every width
+E2E_UPDATE_BASELINE=1 pytest -m e2e tests/web/e2e/test_pages.py   # rewrite baseline.json
 ```
 
 CI (`.github/workflows/tests.yml`) runs `pytest` on Python 3.10 (the `requires-python` floor) and 3.14 for pushes to `main` and every PR. Code must keep working on 3.10.
@@ -252,6 +255,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 - **Roles ([accounts/roles.py](src/sms_sender_web/accounts/roles.py)):**
   - A role is the Django group `viewer`, `operator` or `admin`; migration `accounts/0001_roles` creates them.
   - Each role adds capabilities to the one before it (`_ADDS`, the spec's permission matrix). Superusers are admins.
+  - Only people who can `run_campaigns` keep a number for test SMS (My account hides it from viewers and refuses their POST).
   - Gate views with `@requires("capability")`. It renders the Persian `403.html`, which also says when the user has no role yet.
   - In templates, use `user|can:"capability"`.
   - `role_of` caches the role on the user object, and `set_role` clears it.
@@ -342,6 +346,26 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - **Scheduler:** `Worker.schedule` queues delivery updates while sent rows are under 48 h old, and click updates for 14 days.
   - **One worker only.** Test DBs are files, not shared-memory SQLite (`settings_test`), because the heartbeat thread writes concurrently.
 - **CSS:** logical properties only (`margin-inline-start`, `padding-block`, …), so the layout mirrors for RTL. HTMX and the Vazirmatn font (OFL) are vendored in `static/`; no CDNs. Ordered lists use `list-style-type: persian`. A form with `data-confirm="…"` asks before submitting (`static/js/app.js`). Don't write inline `onclick` / `onsubmit` handlers.
+- **Parity with the CLI ([parity.py](src/sms_sender_web/parity.py), plan 05):**
+  - Every `sms-sender` command and option, and this app's management commands, has an entry. Each entry is one or more of:
+    - `Control(page, role)`;
+    - `Implied(how)`;
+    - `Excluded(why)` (Saeed approved these on 2026-10-04);
+    - `Planned(phase, what)`.
+  - Lookup: the exact key, then the same option of `send` for `ALIASES` (retry-failed, dry-run, preview), then `* --option`.
+  - A control carries `data-cli="<command> <option>"` (comma-separated for several).
+  - `tests/web/test_parity.py` fails when:
+    - a CLI command or option has no entry;
+    - an entry names something the CLI doesn't have;
+    - a control doesn't render on its page for its role, or does for the role below.
+  - Add a CLI option → add its entry and its control.
+  - P6 allows no `Planned` left.
+- **Browser tests (`tests/web/e2e/`, marker `e2e`, opt-in):**
+  - Playwright drives the installed Google Chrome (`channel="chrome"`) against pytest-django's live server, in sandbox mode with the real worker in a thread (`sandbox_worker`).
+  - The journey finds everything by its Persian name: `fa("msgid")` is the catalog's text. A redesign that keeps the words keeps the test.
+  - `test_pages.py` opens every page in `tests/web/world.py`'s `PAGES` at 360 / 390 / 768 / 1366 px. It checks for horizontal overflow and runs axe-core (vendored for tests only, MPL-2.0).
+  - Known problems live in `baseline.json`, a ratchet: a new problem fails, and a fixed one still listed fails too.
+  - `world.py` builds the made-up dashboard (users, segments, a campaign in every state) for these tests and the parity test.
 - **Packaging:** the image installs the package, not the source tree, so each app's `templates/` must be listed in `[tool.setuptools.package-data]`.
 - **Docker:** `Dockerfile` + `compose.yaml` (service `web`, gunicorn, `/healthz`; service `worker`, health check `manage.py worker_status`). The port is published on `${BIND_ADDR:-127.0.0.1}:${WEB_PORT:-8000}`, so it's shared over NetBird only on purpose. Images are `sms-sender-dashboard:${IMAGE_TAG:-latest}`. Both services' logs are capped (json-file, 10 MB × 5), since they hold phone numbers. `DJANGO_TRUST_PROXY_SSL=1` sets `SECURE_PROXY_SSL_HEADER`, only for a TLS proxy that overwrites `X-Forwarded-Proto`. The DevOps handover is [docs/deploy.md](docs/deploy.md); keep it in step with these files.
 - **Backups ([backup.py](src/sms_sender_web/backup.py), no Django):** `manage.py backup` / `verify_backup` / `restore_backup` (in `jobs/management/commands/`, with `worker_status`).

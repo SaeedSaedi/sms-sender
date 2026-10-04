@@ -609,8 +609,21 @@ never reach a row that has, or may have, the SMS.
 ## Testing
 
 ```bash
-pytest
+pytest                                  # everything but the browser tests
+pip install -e ".[dev,web,e2e]"         # once, for the browser tests
+pytest -m e2e                           # the dashboard in Google Chrome
+E2E_SHOTS=/tmp/shots pytest -m e2e      # also save a screenshot of every page and width
 ```
 
-GitHub Actions runs the suite on Python 3.10 and 3.14 for every push to
-`main` and every pull request (`.github/workflows/tests.yml`).
+The browser tests drive the Google Chrome you have installed, through
+Playwright. They run the dashboard in sandbox mode with a real worker, so
+nothing is sent:
+- a whole operator journey, from the first sign-in to the report;
+- every page at 360, 390, 768 and 1366 px: no sideways scrolling, and no
+  problem axe-core can find.
+
+Problems known before the redesign are listed in
+`tests/web/e2e/baseline.json` until they're fixed.
+
+GitHub Actions runs the suite on Python 3.10 and 3.14, and the browser tests,
+for every push to `main` and every pull request (`.github/workflows/tests.yml`).

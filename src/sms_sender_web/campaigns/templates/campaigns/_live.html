@@ -53,7 +53,7 @@
       {% if test_phone %}
         <form method="post" action="{% url 'campaign_action' campaign.slug 'test' %}">
           {% csrf_token %}
-          <button type="submit"{% if test %} class="secondary"{% endif %}>{% if test %}{% translate "Send a new test SMS" %}{% else %}{% translate "Send a test SMS" %}{% endif %}</button>
+          <button type="submit"{% if test %} class="secondary"{% endif %} data-cli="send --approval-test, preview --send">{% if test %}{% translate "Send a new test SMS" %}{% else %}{% translate "Send a test SMS" %}{% endif %}</button>
           <span class="hint">{% translate "to" %} {{ test_phone|mask_phone|fa_digits|ltr }}</span>
         </form>
       {% else %}
@@ -108,7 +108,7 @@
       <form method="post" action="{% url 'campaign_action' campaign.slug 'send' %}"
             data-confirm="{{ send_confirm }}">
         {% csrf_token %}
-        <button type="submit">{% translate "Start sending" %}</button>
+        <button type="submit" data-cli="send">{% translate "Start sending" %}</button>
       </form>
     {% endif %}
   {% else %}
@@ -127,14 +127,14 @@
   {% if user|can:"update_campaigns" %}
     <div class="actions follow-up">
       <form method="post" action="{% url 'campaign_action' campaign.slug 'reconcile' %}" class="inline">
-        {% csrf_token %}<button type="submit" class="small secondary">{% translate "Reconcile with Kavenegar" %}</button>
+        {% csrf_token %}<button type="submit" class="small secondary" data-cli="reconcile">{% translate "Reconcile with Kavenegar" %}</button>
       </form>
       <form method="post" action="{% url 'campaign_action' campaign.slug 'delivery' %}" class="inline">
-        {% csrf_token %}<button type="submit" class="small secondary">{% translate "Update delivery statuses" %}</button>
+        {% csrf_token %}<button type="submit" class="small secondary" data-cli="delivery">{% translate "Update delivery statuses" %}</button>
       </form>
       {% if campaign.settings.links %}
       <form method="post" action="{% url 'campaign_action' campaign.slug 'clicks' %}" class="inline">
-        {% csrf_token %}<button type="submit" class="small secondary">{% translate "Update clicks" %}</button>
+        {% csrf_token %}<button type="submit" class="small secondary" data-cli="clicks">{% translate "Update clicks" %}</button>
       </form>
       {% endif %}
     </div>

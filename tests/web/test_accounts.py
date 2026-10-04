@@ -494,3 +494,10 @@ def test_a_missing_page_gets_a_persian_page(signed_in):
 def test_the_server_error_page_is_persian_and_stands_alone():
     html = render_to_string("500.html")
     assert '<html lang="fa" dir="rtl">' in html and "خطایی رخ داد" in html
+
+
+def test_viewers_have_no_number_for_test_sms(signed_in):
+    """Only people who can ask for a test SMS keep a number for it."""
+    html = signed_in.get("/account/").content.decode()
+    assert 'name="test_phone"' not in html
+    assert signed_in.post("/account/", {"test_phone": "09120000012"}).status_code == 403
