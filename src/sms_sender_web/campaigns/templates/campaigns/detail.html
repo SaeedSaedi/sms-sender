@@ -36,7 +36,7 @@
   <p class="hint">{% translate "Reads the segment with these settings, without sending anything: who would get the SMS, and what's in the way." %}</p>
   <form method="post" action="{% url 'campaign_check' campaign.slug %}">
     {% csrf_token %}
-    <button type="submit" class="secondary">{% translate "Check now" %}</button>
+    <button type="submit" class="secondary" data-cli="dry-run">{% translate "Check now" %}</button>
   </form>
   {% if check %}
     {% for problem in check_problems %}<p class="error" role="alert">{{ problem }}</p>{% endfor %}

@@ -1,0 +1,185 @@
+"""A small, made-up dashboard with a campaign in every state, for the
+parity test and the browser tests. Fake numbers only (0912000xxxx).
+
+build_world(data_dir) → World; then World.pages maps a page's name to its
+URL and who opens it: a role ("viewer", "operator", "admin"), "<user>:password"
+for a session that hasn't passed the second step, or None (signed out).
+The operator and the admin have a linked authenticator app; the newcomer,
+an operator too, has none yet."""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from django.contrib.auth import get_user_model
+from django.utils import timezone
+from django_otp.plugins.otp_totp.models import TOTPDevice
+
+from sms_sender.state import StateStore
+from sms_sender_web.accounts.models import Profile
+from sms_sender_web.accounts.roles import set_role
+from sms_sender_web.audit.record import record
+from sms_sender_web.jobs import services
+from sms_sender_web.jobs.engine import campaign_db
+from sms_sender_web.jobs.models import Campaign, Job
+from sms_sender_web.segments.models import Segment
+from sms_sender_web.suppression.models import Suppression
+
+PASSWORD = "a-long-test-password-1"
+TEST_PHONE = "09120000099"
+PHONES = [f"0912000{i:04d}" for i in range(1, 7)]
+
+SETTINGS = {
+    "segment": "vip",
+    "user_id_column": "user_id",
+    "template": "coin-price",
+    "tokens": {"token": "نفت"},
+    "token_columns": {"token10": "first_name"},
+    "value_maps": {},
+    "links": {
+        "destination": "https://kifpool.me/wallet", "token": "token20", "format": "url",
+        "strategy": "recipient", "expiry_days": 7,
+        "utm_source": "sms", "utm_medium": "sms", "utm_campaign": None, "utm_content": None,
+    },
+    "send_window": "00:00-23:59",
+    "rate": None,
+    "workers": 2,
+}
+
+
+# Page name → (path, who opens it).
+PAGES: dict[str, tuple[str, str | None]] = {
+    "login": ("/login/", None),
+    "home": ("/", "viewer"),
+    "segment.list": ("/segments/", "viewer"),
+    "segment.detail": ("/segments/vip/", "viewer"),
+    "segment.upload": ("/segments/upload/", "operator"),
+    "segment.map": ("/segments/draft/columns/", "operator"),
+    "suppression": ("/suppression/", "operator"),
+    "campaign.new": ("/campaigns/new/", "operator"),
+    "campaign.settings": ("/campaigns/fresh/settings/", "operator"),
+    "campaign.fresh": ("/campaigns/fresh/", "operator"),
+    "campaign.awaiting": ("/campaigns/awaiting/", "operator"),
+    "campaign.approved": ("/campaigns/approved/", "operator"),
+    "campaign.sending": ("/campaigns/sending/", "operator"),
+    "campaign.paused": ("/campaigns/paused/", "operator"),
+    "campaign.halted": ("/campaigns/halted/", "operator"),
+    "report": ("/reports/approved/", "viewer"),
+    "status": ("/status/", "viewer"),
+    "account": ("/account/", "operator"),
+    "password": ("/password/", "operator"),
+    "users": ("/users/", "admin"),
+    "activity": ("/activity/", "admin"),
+    "two_factor": ("/2fa/", "operator:password"),
+    "two_factor_setup": ("/2fa/setup/", "newcomer:password"),
+    "forbidden": ("/campaigns/fresh/settings/", "viewer"),
+    "not_found": ("/campaigns/nothing-here/", "viewer"),
+}
+
+
+@dataclass
+class World:
+    users: dict[str, object] = field(default_factory=dict)
+    campaigns: dict[str, Campaign] = field(default_factory=dict)
+    pages: dict[str, tuple[str, str | None]] = field(default_factory=lambda: dict(PAGES))
+
+
+def _user(name: str, role: str | None, test_phone: str = ""):
+    user = get_user_model().objects.create_user(username=name, password=PASSWORD)
+    set_role(user, role)
+    if test_phone:
+        Profile.objects.create(user=user, test_phone=test_phone)
+    return user
+
+
+def _campaign(slug: str, name: str, segment: Segment, *, db_rows: dict[str, str] | None = None) -> Campaign:
+    campaign = Campaign.objects.create(
+        slug=slug, name=name, settings={**SETTINGS, "input": str(segment.path)},
+    )
+    if db_rows is not None:
+        store = StateStore(campaign_db(campaign))
+        store.upsert_pending([(phone, phone) for phone in db_rows], segment=segment.slug)
+        for n, (phone, status) in enumerate(db_rows.items()):
+            if status == "sent":
+                store.claim(phone)
+                store.mark_sent(phone, 1000 + n, 200, 3020)
+            elif status == "failed_permanent":
+                store.claim(phone)
+                store.mark_failed(phone, 411, "[411] invalid receptor", permanent=True)
+    return campaign
+
+
+def _test_job(campaign: Campaign, operator, *, approved: bool) -> Job:
+    now = timezone.now()
+    return Job.objects.create(
+        campaign=campaign, kind=Job.Kind.TEST, state=Job.State.DONE, requested_by=operator,
+        params={"test_number": TEST_PHONE}, settings_hash=services.settings_hash(campaign),
+        result={"cost_per_sms": 3020, "estimate": 3020 * len(PHONES), "credit": 264_731_842,
+                "links_ready": len(PHONES) + 1, "cost": 3020},
+        started_at=now, finished_at=now,
+        decision=Job.Decision.APPROVED if approved else "", decided_by=operator if approved else None,
+        decided_at=now if approved else None,
+    )
+
+
+def build_world(data_dir: Path) -> World:
+    world = World()
+    (data_dir / "db").mkdir(parents=True, exist_ok=True)
+    (data_dir / "segments").mkdir(parents=True, exist_ok=True)
+
+    viewer = world.users["viewer"] = _user("viewer1", "viewer")
+    operator = world.users["operator"] = _user("operator1", "operator", TEST_PHONE)
+    admin = world.users["admin"] = _user("admin1", "admin")
+    world.users["newcomer"] = _user("newcomer1", "operator")
+    for user in (operator, admin):
+        TOTPDevice.objects.create(user=user, name="authenticator", confirmed=True)
+
+    vip = Segment.objects.create(
+        slug="vip", name="مشتریان ویژه", original_name="vip.csv", status=Segment.Status.READY,
+        columns=["phone", "user_id", "first_name"], user_id_column="user_id",
+        token_columns=["first_name"], uploaded_by=operator,
+        summary={"rows": len(PHONES) + 1, "valid": len(PHONES), "invalid": 1, "duplicates": 0,
+                 "missing_user_id": 1, "conflicts": 0, "suppressed": 0,
+                 "invalid_sample": [{"value": "*******", "reason": "invalid_phone"}]},
+    )
+    vip.path.write_text(
+        "phone,user_id,first_name\n"
+        + "".join(f"{p},{'' if i == 0 else f'u-{i}'},Ali\n" for i, p in enumerate(PHONES))
+        + "not-a-number,u-9,Sara\n",
+        encoding="utf-8",
+    )
+    draft = Segment.objects.create(slug="draft", name="فهرست تازه", original_name="new.csv",
+                                   uploaded_by=operator)
+    draft.upload_path.write_text("mobile,id,name\n09120000001,u1,Ali\n09120000002,u2,Sara\n", encoding="utf-8")
+
+    rows = {PHONES[0]: "sent", PHONES[1]: "sent", PHONES[2]: "failed_permanent"}
+    rows.update({phone: "pending" for phone in PHONES[3:]})
+    campaigns = world.campaigns
+    campaigns["fresh"] = _campaign("fresh", "قیمت سکه", vip)
+    campaigns["approved"] = _campaign("approved", "نفت خام", vip, db_rows=rows)
+    _test_job(campaigns["approved"], operator, approved=True)
+    campaigns["awaiting"] = _campaign("awaiting", "در انتظار تأیید", vip)
+    _test_job(campaigns["awaiting"], operator, approved=False)
+
+    now = timezone.now()
+    for slug, name, state, result, progress, control in (
+        ("sending", "در حال ارسال", Job.State.RUNNING, {},
+         {"total": len(PHONES), "processed": 3, "sent": 2, "failed_permanent": 1}, ""),
+        ("paused", "متوقف موقت", Job.State.PAUSED, {}, {"total": len(PHONES), "processed": 3, "sent": 3}, ""),
+        ("halted", "توقف با خطا", Job.State.FAILED,
+         {"stop_reason": "provider_halt", "stop_fields": {"code": 418}, "sent": 2}, {}, ""),
+    ):
+        campaign = campaigns[slug] = _campaign(slug, name, vip, db_rows=rows)
+        _test_job(campaign, operator, approved=True)
+        Job.objects.create(
+            campaign=campaign, kind=Job.Kind.SEND, state=state, requested_by=operator,
+            settings_hash=services.settings_hash(campaign), result=result, progress=progress,
+            control=control, started_at=now, finished_at=now if state == Job.State.FAILED else None,
+        )
+
+    Suppression.objects.create(phone="09120000050", note="درخواست مشتری")
+    record("campaign_created", user=operator, campaign="approved")
+    record("segment_uploaded", user=operator, segment="vip", file="vip.csv")
+
+    assert viewer and draft  # built for the pages above
+    return world

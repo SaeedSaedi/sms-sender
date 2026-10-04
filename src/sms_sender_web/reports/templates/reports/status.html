@@ -7,7 +7,7 @@
 </div>
 <p class="muted">{% translate "Asked just now" %}: {{ checked_at|jalali:"%Y/%m/%d %H:%M:%S" }}</p>
 
-<section class="card step">
+<section class="card step" data-cli="preview --check-account">
   <h2>{% translate "Kavenegar account" %}</h2>
   {% if kavenegar.ok %}
     <dl class="figures">
@@ -58,7 +58,7 @@
 </section>
 {% endif %}
 
-<section class="card step">
+<section class="card step" data-cli="manage.py worker_status">
   <h2>{% translate "Worker" %}</h2>
   {% if worker_alive %}<p class="ok">{% translate "Running" %} · {% translate "last seen" %} {{ worker_seen|jalali:"%H:%M:%S" }}</p>
   {% else %}<p class="error">{% translate "Not running: jobs wait until it starts." %}{% if worker_seen %} {% translate "Last seen" %}: {{ worker_seen|jalali }}{% endif %}</p>{% endif %}

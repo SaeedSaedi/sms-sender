@@ -17,7 +17,7 @@
   <div><dt>{% translate "Cost of one SMS" %}</dt><dd class="num">{% if average_cost %}{{ average_cost|fa_number }} {% translate "rials" %}{% else %}—{% endif %}</dd></div>
 </dl>
 
-<section class="card step">
+<section class="card step" data-cli="status">
   <h2>{% translate "Statuses" %}</h2>
   <ul class="badges">
     {% for status in status_order %}{% with n=counts|get:status %}{% if n %}
@@ -75,8 +75,8 @@
   <div class="actions">
     {% if user|can:"download_aggregates" %}<a class="button secondary" href="{% url 'report_summary_csv' slug %}">{% translate "Summary (CSV)" %}</a>{% endif %}
     {% if user|can:"export_people" %}
-      <a class="button secondary" href="{% url 'report_attribution_csv' slug %}">{% translate "Attribution, no phone numbers (CSV)" %}</a>
-      <a class="button secondary" href="{% url 'report_clickers_csv' slug %}">{% translate "People who clicked, with phone numbers (CSV)" %}</a>
+      <a class="button secondary" href="{% url 'report_attribution_csv' slug %}" data-cli="export-attribution">{% translate "Attribution, no phone numbers (CSV)" %}</a>
+      <a class="button secondary" href="{% url 'report_clickers_csv' slug %}" data-cli="export-clickers">{% translate "People who clicked, with phone numbers (CSV)" %}</a>
     {% endif %}
   </div>
   <p class="hint">{% translate "Files use English column names and Latin digits, for other systems. Every download is recorded in the activity log." %}</p>

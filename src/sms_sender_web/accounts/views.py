@@ -20,10 +20,10 @@ from django_otp import user_has_device
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from ..audit.record import record
-from .decorators import requires
+from .decorators import forbidden, requires
 from .forms import CodeForm, NewUserForm, TestPhoneForm
 from .models import Profile
-from .roles import ROLES, needs_two_factor, role_of, set_role
+from .roles import ROLES, can, needs_two_factor, role_of, set_role
 
 
 def _next(request) -> str:
@@ -181,8 +181,12 @@ def users(request):
 @require_http_methods(["GET", "POST"])
 def my_account(request):
     """Your role, your two-step verification, and your own number for test
-    SMS (spec 3: the test SMS goes to the operator who asks for it)."""
+    SMS (spec 3: the test SMS goes to the operator who asks for it). Only
+    people who can ask for a test SMS see that number."""
     profile, _created = Profile.objects.get_or_create(user=request.user)
+    sends_tests = can(request.user, "run_campaigns")
+    if request.method == "POST" and not sends_tests:
+        return forbidden(request)
     form = TestPhoneForm(request.POST or None, initial={"test_phone": profile.test_phone})
     if request.method == "POST" and form.is_valid():
         phone = form.cleaned_data["test_phone"]
@@ -194,6 +198,7 @@ def my_account(request):
         return redirect("my_account")
     return render(request, "accounts/account.html", {
         "form": form,
+        "sends_tests": sends_tests,
         "profile": profile,
         "role": role_of(request.user),
         "two_factor": TOTPDevice.objects.filter(user=request.user, confirmed=True).exists(),

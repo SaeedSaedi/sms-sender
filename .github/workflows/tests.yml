@@ -24,3 +24,16 @@ jobs:
           cache: pip
       - run: pip install -e ".[dev,web]"
       - run: pytest
+
+  # Browser tests (pytest -m e2e): the dashboard in Google Chrome, which
+  # GitHub's Ubuntu runners have installed; Playwright drives it.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: pip install -e ".[dev,web,e2e]"
+      - run: pytest -m e2e

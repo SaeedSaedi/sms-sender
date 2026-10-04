@@ -64,7 +64,7 @@
 
 <section class="card form-card">
   <h2>{% translate "Add numbers" %}</h2>
-  <form method="post" enctype="multipart/form-data">
+  <form method="post" enctype="multipart/form-data" data-cli="send --opt-out">
     {% csrf_token %}
     <input type="hidden" name="action" value="add">
     {% for error in form.non_field_errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
