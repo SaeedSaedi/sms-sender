@@ -114,7 +114,7 @@ def test_a_viewer_sees_campaigns_but_not_users_or_activity(signed_in):
 def test_the_menu_shows_only_what_the_role_can_open(signed_in, client, make_user, verified):
     html = signed_in.get("/").content.decode()
     assert 'href="/users/"' not in html and 'href="/activity/"' not in html
-    assert 'href="/password/"' in html
+    assert 'href="/account/"' in html
     assert "مشاهده‌گر" in html  # the role, next to the username
 
     admin = Client()
@@ -209,7 +209,7 @@ def test_signing_in_takes_the_password_then_the_code(client, make_user):
 
     html = client.get("/2fa/?next=/").content.decode()
     assert "تأیید دومرحله‌ای" in html
-    assert 'href="/password/"' not in html  # no menu before the second step
+    assert 'href="/account/"' not in html  # no menu before the second step
     session_before = client.cookies["sessionid"].value
     response = client.post("/2fa/?next=/", {"code": code(device), "next": "/"})
     assert response.status_code == 302 and response["Location"] == "/"

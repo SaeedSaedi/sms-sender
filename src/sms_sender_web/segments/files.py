@@ -163,8 +163,7 @@ def summarize(path: Path, user_id_column: str | None, suppressed: frozenset[str]
     sample = [
         {
             "value": mask_phone(row.raw),
-            "reason": "conflicting_user_ids" if row.reason.startswith("conflicting user IDs")
-            else "invalid_phone",
+            "reason": row.key,
         }
         for row in loaded.invalid[:INVALID_SAMPLE]
     ]

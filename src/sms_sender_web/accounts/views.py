@@ -21,7 +21,8 @@ from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from ..audit.record import record
 from .decorators import requires
-from .forms import CodeForm, NewUserForm
+from .forms import CodeForm, NewUserForm, TestPhoneForm
+from .models import Profile
 from .roles import ROLES, needs_two_factor, role_of, set_role
 
 
@@ -169,6 +170,28 @@ def users(request):
         })
     return render(request, "accounts/users.html", {
         "rows": rows, "roles": ROLES, "form": new_user_form,
+    })
+
+
+@require_http_methods(["GET", "POST"])
+def my_account(request):
+    """Your role, your two-step verification, and your own number for test
+    SMS (spec 3: the test SMS goes to the operator who asks for it)."""
+    profile, _created = Profile.objects.get_or_create(user=request.user)
+    form = TestPhoneForm(request.POST or None, initial={"test_phone": profile.test_phone})
+    if request.method == "POST" and form.is_valid():
+        phone = form.cleaned_data["test_phone"]
+        if phone != profile.test_phone:
+            profile.test_phone = phone
+            profile.save(update_fields=["test_phone"])
+            record("test_number_changed", request=request, phone=phone)
+        messages.success(request, _("Saved."))
+        return redirect("my_account")
+    return render(request, "accounts/account.html", {
+        "form": form,
+        "profile": profile,
+        "role": role_of(request.user),
+        "two_factor": TOTPDevice.objects.filter(user=request.user, confirmed=True).exists(),
     })
 
 

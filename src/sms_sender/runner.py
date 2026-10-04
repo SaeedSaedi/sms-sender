@@ -85,10 +85,33 @@ class RunSummary:
     # Short links this run's SMS carry, and how many it had to create.
     links_ready: int = 0
     links_created: int = 0
+    # The pre-send figures: the account's credit, the cost of one SMS (from
+    # the approval test, or what the campaign already paid), and the
+    # estimate for the recipients still to send. None while unknown.
+    credit: int | None = None
+    cost_per_sms: int | None = None
+    estimate: int | None = None
+    # The approval test's message ID, when one was sent.
+    test_message_id: int | None = None
+    # A `test_only` run: everything up to the test SMS, and no sending.
+    test_only: bool = False
+    # Why the run halted or stopped early, as a key plus its numbers (see
+    # PreflightError); None when it ran to the end or the operator stopped it.
+    stop_reason: str | None = None
+    stop_fields: dict = field(default_factory=dict)
 
 
 class PreflightError(Exception):
-    """Preflight check failed — abort before fanning out."""
+    """Preflight check failed — abort before fanning out.
+
+    `key` names the reason and `fields` holds its numbers, so the dashboard
+    can say it in Persian (spec 4.11: engine text is English, for the CLI
+    and the logs; the dashboard renders keys)."""
+
+    def __init__(self, message: str, key: str = "preflight", **fields):
+        super().__init__(message)
+        self.key = key
+        self.fields = fields
 
 
 @dataclass
@@ -196,9 +219,18 @@ class Runner:
         link_client: LinkClient | None = None,
         link_workers: int = DEFAULT_LINK_WORKERS,
         link_rate_per_sec: float = 10.0,
+        test_only: bool = False,
+        cost_per_sms: int | None = None,
     ):
         if links is not None and (link_client is None or not campaign):
             raise ValueError("links need a link client and a campaign name")
+        if test_only and not approval_test_number:
+            raise ValueError("a test-only run needs an approval test number")
+        # The dashboard's test step: validate, links and pre-send checks,
+        # the test SMS to the operator, then stop. The operator approves it
+        # in the browser, and a later run sends, given this test's cost per
+        # SMS (`cost_per_sms`) for the credit estimate.
+        self.test_only = test_only
         # Short links (Phase 2): created for every recipient before any SMS.
         self.links = links
         self.link_client = link_client
@@ -251,8 +283,12 @@ class Runner:
         # Pre-send figures: credit from account/info, a real per-SMS cost from
         # the approval test, and what this run has spent so far.
         self._credit: int | None = None
-        self._approval_cost: int | None = None
+        self._approval_cost: int | None = cost_per_sms
+        self._approval_message_id: int | None = None
+        self._estimate: int | None = None
         self._run_cost = 0
+        self._stop_reason: tuple[str, dict] | None = None
+        self._halt_code: int | None = None  # the first HaltError while sending
 
     def _add_cost(self, cost: int | None) -> None:
         if cost:
@@ -338,6 +374,8 @@ class Runner:
         except HaltError as e:
             self.state.mark_failed(phone, e.status_code, e.message, permanent=False)
             self._record_error(e.status_code, e.message)
+            if self._halt_code is None:
+                self._halt_code = e.status_code
             logger.error(
                 "halt",
                 extra={"phone": phone, "status": e.status_code, "detail": e.message},
@@ -422,10 +460,12 @@ class Runner:
             )
         except ShlinkHaltError as e:
             logger.error("links_halt", extra={"status": e.status, "detail": str(e)})
-            raise PreflightError(f"Shlink refused the link stage: {e}") from e
+            raise PreflightError(
+                f"Shlink refused the link stage: {e}", "links_refused", status=e.status,
+            ) from e
         except LinkError as e:
             logger.error("links_not_ready", extra={"detail": str(e)})
-            raise PreflightError(f"links: {e}") from e
+            raise PreflightError(f"links: {e}", "links_failed") from e
         self._link_tokens = result.tokens
         self._link_keys = result.keys
         self._test_link_token = result.test_token
@@ -462,7 +502,10 @@ class Runner:
                 "preflight_halt",
                 extra={"status": e.status_code, "detail": e.message},
             )
-            raise PreflightError(f"account check failed: [{e.status_code}] {e.message}") from e
+            raise PreflightError(
+                f"account check failed: [{e.status_code}] {e.message}", "account_refused",
+                code=e.status_code,
+            ) from e
         except SendError as e:
             # Network blip on the account endpoint — non-fatal, log and move on.
             logger.warning("preflight_account_unreachable", extra={"detail": e.message})
@@ -484,7 +527,8 @@ class Runner:
             )
             if phones and info.remaining_credit <= 0:
                 raise PreflightError(
-                    f"remaining credit is {info.remaining_credit}; top up before sending"
+                    f"remaining credit is {info.remaining_credit}; top up before sending",
+                    "no_credit", credit=info.remaining_credit,
                 )
         self._check_account_config()
 
@@ -508,7 +552,8 @@ class Runner:
         if config.debug_mode:
             raise PreflightError(
                 "the Kavenegar account is in debug mode, so nothing would be delivered "
-                "(every SMS is cancelled); turn it off in the Kavenegar panel first"
+                "(every SMS is cancelled); turn it off in the Kavenegar panel first",
+                "debug_mode",
             )
         if config.resend_failed:
             self._reporter.note(
@@ -530,6 +575,7 @@ class Runner:
             )
             return
         estimate = per_sms * len(phones)
+        self._estimate = estimate
         varies = " (per-recipient tokens: the real cost varies with length)" \
             if self.token_columns is not None else ""
         self._reporter.note(
@@ -544,7 +590,8 @@ class Runner:
         if estimate > self._credit:
             raise PreflightError(
                 f"not enough credit: about {estimate} rials needed for {len(phones)} "
-                f"SMS, {self._credit} left"
+                f"SMS, {self._credit} left",
+                "not_enough_credit", estimate=estimate, recipients=len(phones), credit=self._credit,
             )
 
     def _approval_test(self, phones: list[str]) -> None:
@@ -569,7 +616,9 @@ class Runner:
             # message — their own row if they're in the file, else the first.
             sample = target if target in self._row_tokens else (phones[0] if phones else None)
             if sample is None:
-                raise PreflightError("approval test needs a recipient row to borrow tokens from")
+                raise PreflightError(
+                    "approval test needs a recipient row to borrow tokens from", "test_needs_recipient",
+                )
             tokens = self._row_tokens[sample]
             self._reporter.note(f"Approval test uses the tokens of {sample}.")
         if self.links is not None and self._test_link_token is not None:
@@ -583,25 +632,33 @@ class Runner:
         except HaltError as e:
             self._record_error(e.status_code, e.message)
             raise PreflightError(
-                f"approval test send to {target} halted: [{e.status_code}] {e.message}"
+                f"approval test send to {target} halted: [{e.status_code}] {e.message}",
+                "test_refused", code=e.status_code,
             ) from e
         except SendError as e:
             # PermanentSendError or retries-exhausted SendError — both fatal here.
             self._record_error(e.status_code, e.message)
             raise PreflightError(
-                f"approval test send to {target} failed: [{e.status_code}] {e.message}"
+                f"approval test send to {target} failed: [{e.status_code}] {e.message}",
+                "test_failed", code=e.status_code,
             ) from e
 
         logger.info(
             "approval_test_sent",
             extra={"phone": target, "msg_id": result.message_id},
         )
-        self._approval_cost = result.cost
+        self._approval_cost = result.cost or self._approval_cost
+        self._approval_message_id = result.message_id
         self._add_cost(result.cost)
+        if self.test_only:
+            self._reporter.note("Test SMS sent; it's approved in the dashboard before sending.")
+            return
         approved = self._approval_prompt(target, len(phones))
         if not approved:
             logger.warning("approval_declined", extra={"phone": target})
-            raise PreflightError("approval declined by operator; aborting before fan-out")
+            raise PreflightError(
+                "approval declined by operator; aborting before fan-out", "approval_declined",
+            )
         logger.info("approval_granted", extra={"phone": target})
         self._reporter.note("Approval granted.")
 
@@ -658,7 +715,8 @@ class Runner:
         if outcome != "sent":
             raise PreflightError(
                 f"smoke test to {target} did not succeed (outcome={outcome}); "
-                "fix the issue (template/tokens/account) before sending the rest"
+                "fix the issue (template/tokens/account) before sending the rest",
+                "smoke_failed", outcome=outcome,
             )
         self._reporter.note("Smoke test passed.")
 
@@ -676,12 +734,24 @@ class Runner:
         except PreflightError as e:
             logger.error("preflight_failed", extra={"detail": str(e)})
             self._reporter.note(f"Preflight failed: {e}")
+            if not self._cancelled.is_set():
+                self._stop_reason = (e.key, e.fields)
             # A cancel during the link stage is a stop, not a halt.
             summary = self._build_summary(
                 loaded=loaded, new_count=new_count, counts=SendCounts(),
                 halted=not self._cancelled.is_set(), started=started,
             )
-            self._record_last_run(summary)
+            if not self.test_only:
+                self._record_last_run(summary)
+            return summary
+
+        if self.test_only:
+            # Not the campaign's "last run": nothing was sent to recipients.
+            summary = self._build_summary(
+                loaded=loaded, new_count=new_count, counts=SendCounts(),
+                halted=False, started=started,
+            )
+            logger.info("test_run_end", extra=_summary_log_fields(summary))
             return summary
 
         counts, halted = self._fan_out(phones)
@@ -836,12 +906,16 @@ class Runner:
             if not self.send_window.contains(now):
                 raise PreflightError(
                     f"outside the sending window ({self.send_window}): it's "
-                    f"{now.astimezone(TEHRAN):%H:%M} there; run again inside it"
+                    f"{now.astimezone(TEHRAN):%H:%M} there; run again inside it",
+                    "outside_window", start=f"{self.send_window.start:%H:%M}",
+                    end=f"{self.send_window.end:%H:%M}", now=f"{now.astimezone(TEHRAN):%H:%M}",
                 )
         self._preflight(phones)
         self._links_stage(phones)
         self._approval_test(phones)
         self._check_credit(phones)
+        if self.test_only:
+            return phones, 0
         self._smoke_test_run(phones)
         if self.smoke_test and self.preflight and phones:
             # The smoke test consumed phones[0] synchronously.
@@ -894,6 +968,13 @@ class Runner:
         with self._error_lock:
             top = tuple(self._error_counter.most_common(3))
         db_counts = self.state.counts()
+        reason, fields = self._stop_reason or (None, {})
+        if reason is None and halted and self._halt_code is not None:
+            reason, fields = "provider_halt", {"code": self._halt_code}
+        elif reason is None and self._window_closed.is_set() and self.send_window is not None:
+            reason, fields = "window_closed", {
+                "start": f"{self.send_window.start:%H:%M}", "end": f"{self.send_window.end:%H:%M}",
+            }
         return RunSummary(
             total_input=len(loaded.valid) + len(loaded.invalid),
             new_recipients=new_count,
@@ -916,6 +997,13 @@ class Runner:
             user_id_conflicts=self._user_id_conflicts,
             links_ready=self._links_ready,
             links_created=self._links_created,
+            credit=self._credit,
+            cost_per_sms=self._approval_cost or self.state.average_cost() or None,
+            estimate=self._estimate,
+            test_message_id=self._approval_message_id,
+            test_only=self.test_only,
+            stop_reason=reason,
+            stop_fields=fields,
         )
 
 
@@ -1047,6 +1135,8 @@ def make_runner(
     link_rate_per_sec: float = 10.0,
     reporter: Reporter | None = None,
     install_signal_handlers: bool = True,
+    test_only: bool = False,
+    cost_per_sms: int | None = None,
 ) -> Runner:
     state = StateStore(db_path)
     sender = Sender(sender_cfg, on_attempt=_attempt_recorder(state))
@@ -1072,4 +1162,6 @@ def make_runner(
         link_rate_per_sec=link_rate_per_sec,
         reporter=reporter,
         install_signal_handlers=install_signal_handlers,
+        test_only=test_only,
+        cost_per_sms=cost_per_sms,
     )

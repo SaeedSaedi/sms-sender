@@ -111,26 +111,46 @@ def allowed_domains() -> tuple[str, ...]:
     return tuple(d.strip().lower() for d in raw.split(",") if d.strip()) or DEFAULT_LINK_DOMAINS
 
 
-def destination_problem(url: str, domains: Iterable[str], shlink_base: str) -> str | None:
-    """Why `url` can't be a campaign's destination, or None."""
+def destination_issue(url: str, domains: Iterable[str], shlink_base: str) -> tuple[str, dict] | None:
+    """Why `url` can't be a campaign's destination, as a key and its
+    details, or None."""
     parts = urlsplit(url)
     if parts.scheme != "https":
-        return f"{url!r} must start with https://"
-    host = (parts.hostname or "").lower()
+        return "not_https", {}
+    try:
+        host = (parts.hostname or "").lower()
+    except ValueError:  # e.g. a malformed IPv6 host
+        host = ""
     if not host:
-        return f"{url!r} has no domain"
+        return "no_domain", {}
     if parts.username or parts.password:
-        return f"{url!r} must not contain a user name or password"
+        return "credentials", {}
     domains = tuple(domains)
     if not any(host == d or host.endswith("." + d) for d in domains):
-        return (f"{host} isn't an allowed destination domain ({', '.join(domains)}); "
-                f"add it to {ENV_LINK_DOMAINS} if it should be")
+        return "domain_not_allowed", {"host": host, "domains": ", ".join(domains)}
     if url.startswith(shlink_base.rstrip("/") + "/"):
-        return f"{url!r} is a short link itself"
+        return "short_link", {}
     taken = sorted({k for k, _ in parse_qsl(parts.query, keep_blank_values=True)} & set(ADDED_PARAMS))
     if taken:
-        return f"{url!r} already has {', '.join(taken)}; the link stage adds those itself"
+        return "has_added_params", {"params": ", ".join(taken)}
     return None
+
+
+def destination_problem(url: str, domains: Iterable[str], shlink_base: str) -> str | None:
+    """`destination_issue` in words, for the CLI."""
+    issue = destination_issue(url, domains, shlink_base)
+    if issue is None:
+        return None
+    key, f = issue
+    return {
+        "not_https": f"{url!r} must start with https://",
+        "no_domain": f"{url!r} has no domain",
+        "credentials": f"{url!r} must not contain a user name or password",
+        "domain_not_allowed": (f"{f.get('host')} isn't an allowed destination domain "
+                               f"({f.get('domains')}); add it to {ENV_LINK_DOMAINS} if it should be"),
+        "short_link": f"{url!r} is a short link itself",
+        "has_added_params": f"{url!r} already has {f.get('params')}; the link stage adds those itself",
+    }[key]
 
 
 def build_long_url(destination: str, params: list[tuple[str, str]]) -> str:

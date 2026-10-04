@@ -143,7 +143,7 @@ input[type="file"] { font: inherit; max-inline-size: 100%; }
 .plain { padding-inline-start: 1.25rem; }
 .figures {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
   gap: .75rem;
   margin: 0 0 .5rem;
 }
@@ -206,3 +206,23 @@ thead th { font-weight: 600; color: var(--muted); white-space: nowrap; }
 .status-sent { border-color: var(--ok); color: var(--ok); }
 .status-unknown, .status-needs_review { border-color: var(--warn); color: var(--warn); }
 .status-failed_permanent, .status-invalid { border-color: var(--error); color: var(--error); }
+
+/* Campaign pages: the steps, live progress, the settings form. */
+a.button.secondary { background: var(--card); color: var(--accent); border: 1px solid var(--accent); }
+.head-actions { display: flex; gap: 1rem; align-items: center; }
+.step { margin-block: 1rem; }
+.step h2 { margin-block-end: .5rem; }
+.ok { color: var(--ok); }
+.busy { color: var(--accent); font-weight: 600; }
+progress { inline-size: 100%; block-size: .9rem; accent-color: var(--accent); }
+fieldset.card { margin-block: 0 1rem; }
+fieldset.card legend { padding-inline: .4rem; font-weight: 600; }
+h3 { font-size: 1rem; margin-block: 1rem .25rem; }
+.pairs { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; }
+.pairs dt { color: var(--muted); }
+.pairs dd { margin: 0; }
+.summary-card { margin-block: .5rem 1rem; padding-block: .75rem; }
+.summary-card summary { cursor: pointer; font-weight: 600; }
+input[type="number"] { font: inherit; padding-block: .4rem; padding-inline: .6rem; border: 1px solid var(--line); border-radius: .5rem; }
+.settings table select, .settings table input[type="text"] { inline-size: 100%; min-inline-size: 8rem; }
+.follow-up { margin-block-start: .75rem; }

@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% load i18n fa roles %}
+{% block title %}{% translate "My account" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<section class="card medium">
+  <h1>{% translate "My account" %}</h1>
+  <dl class="pairs">
+    <dt>{% translate "Username" %}</dt><dd>{{ user.get_username|ltr }}</dd>
+    <dt>{% translate "Role" %}</dt><dd>{{ role|role_label }}</dd>
+    <dt>{% translate "Two-step verification" %}</dt>
+    <dd>{% if two_factor %}{% translate "Set up" %}{% else %}—{% endif %}</dd>
+  </dl>
+  <p><a href="{% url 'password_change' %}">{% translate "Change password" %}</a></p>
+
+  <h2>{% translate "Your number for test SMS" %}</h2>
+  <p>{% translate "Before a campaign sends, its test SMS goes to this number, and only to it, so you can see the final text." %}</p>
+  <form method="post">
+    {% csrf_token %}
+    <label for="id_test_phone">{% translate "Mobile number" %}</label>
+    <input id="id_test_phone" name="test_phone" type="text" dir="ltr" inputmode="tel"
+           value="{{ form.test_phone.value|default:'' }}" autocomplete="tel">
+    {% for error in form.test_phone.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+    <button type="submit">{% translate "Save" %}</button>
+  </form>
+</section>
+{% endblock %}

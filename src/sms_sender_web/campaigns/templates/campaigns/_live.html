@@ -1,0 +1,173 @@
+{% load i18n fa roles %}
+<div id="live" class="live"{% if active %} hx-get="{% url 'campaign_live' campaign.slug %}" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+
+<section class="card step">
+  <h2>{% translate "Test SMS" %}</h2>
+  {% if not test %}
+    <p>{% translate "Before sending, one SMS goes to your own number, so you can see the final text. The short links are made first." %}</p>
+  {% elif active_test %}
+    <p class="busy">{{ active_test.get_state_display }}: {% translate "checks, short links and the test SMS…" %}</p>
+    {% if user|can:"run_campaigns" %}
+      <form method="post" action="{% url 'campaign_action' campaign.slug 'cancel' %}" class="inline">
+        {% csrf_token %}<input type="hidden" name="job" value="{{ active_test.pk }}">
+        <button type="submit" class="small secondary">{% translate "Cancel" %}</button>
+      </form>
+    {% endif %}
+  {% elif test.state == "done" %}
+    <p>{% translate "Sent to" %} {{ test.params.test_number|mask_phone|fa_digits|ltr }} · {{ test.finished_at|jalali }}</p>
+    <dl class="figures">
+      <div><dt>{% translate "Cost of one SMS" %}</dt><dd class="num">{% if test.result.cost_per_sms %}{{ test.result.cost_per_sms|fa_number }} {% translate "rials" %}{% else %}—{% endif %}</dd></div>
+      <div><dt>{% translate "Estimated cost" %}</dt><dd class="num">{% if test.result.estimate %}{{ test.result.estimate|fa_number }} {% translate "rials" %}{% else %}—{% endif %}</dd></div>
+      <div><dt>{% translate "Account credit" %}</dt><dd class="num">{% if test.result.credit is not None %}{{ test.result.credit|fa_number }} {% translate "rials" %}{% else %}—{% endif %}</dd></div>
+      {% if campaign.settings.links %}<div><dt>{% translate "Short links" %}</dt><dd class="num">{{ test.result.links_ready|default:0|fa_number }}</dd></div>{% endif %}
+    </dl>
+    {% if test.decision == "approved" %}
+      <p class="ok">{% translate "Approved" %}{% if test.decided_by %} · {{ test.decided_by.username|ltr }}{% endif %} · {{ test.decided_at|jalali }}</p>
+      {% if test_outdated %}<p class="warn">{% translate "The settings changed after this test. Send a new test SMS." %}</p>{% endif %}
+    {% elif test.decision == "rejected" %}
+      <p class="warn">{% translate "Rejected. Change the settings, then send a new test SMS." %}</p>
+    {% elif test_outdated %}
+      <p class="warn">{% translate "The settings changed after this test. Send a new test SMS." %}</p>
+    {% elif user|can:"run_campaigns" %}
+      <p>{% translate "Did the SMS arrive, and are its text and link right?" %}</p>
+      <div class="actions">
+        <form method="post" action="{% url 'campaign_action' campaign.slug 'approve' %}" class="inline">
+          {% csrf_token %}<input type="hidden" name="job" value="{{ test.pk }}">
+          <button type="submit" class="small">{% translate "Yes, approve" %}</button>
+        </form>
+        <form method="post" action="{% url 'campaign_action' campaign.slug 'reject' %}" class="inline">
+          {% csrf_token %}<input type="hidden" name="job" value="{{ test.pk }}">
+          <button type="submit" class="small danger">{% translate "No, something's wrong" %}</button>
+        </form>
+      </div>
+    {% endif %}
+  {% else %}
+    <p class="error">{{ test.get_state_display }}{% if test_reason %}: {{ test_reason }}{% endif %}</p>
+  {% endif %}
+  {% if user|can:"run_campaigns" and not active_test and not active_send and not awaiting_decision %}
+    {% if not approved %}
+      {% if test_phone %}
+        <form method="post" action="{% url 'campaign_action' campaign.slug 'test' %}">
+          {% csrf_token %}
+          <button type="submit"{% if test %} class="secondary"{% endif %}>{% if test %}{% translate "Send a new test SMS" %}{% else %}{% translate "Send a test SMS" %}{% endif %}</button>
+          <span class="hint">{% translate "to" %} {{ test_phone|mask_phone|fa_digits|ltr }}</span>
+        </form>
+      {% else %}
+        <p class="warn">{% translate "First set your own mobile number on “My account”: test SMS go only there." %}
+          <a href="{% url 'my_account' %}">{% translate "My account" %}</a></p>
+      {% endif %}
+    {% endif %}
+  {% endif %}
+</section>
+
+<section class="card step">
+  <h2>{% translate "Send" %}</h2>
+  {% if active_send %}
+    <p class="busy">{{ active_send.get_state_display }}{% if active_send.control == "pause" %} · {% translate "pausing…" %}{% elif active_send.control == "cancel" %} · {% translate "cancelling…" %}{% endif %}</p>
+    {% with p=active_send.progress %}
+      {% if p.total %}
+        <progress max="{{ p.total }}" value="{{ p.processed|default:0 }}"></progress>
+        <p class="num">{{ p.processed|default:0|fa_number }} / {{ p.total|fa_number }} ·
+          {% translate "Accepted" %} {{ p.sent|default:0|fa_number }} ·
+          {% translate "Not sent" %} {{ p.failed_retriable|default:0|fa_number }} ·
+          {% translate "Rejected" %} {{ p.failed_permanent|default:0|fa_number }} ·
+          {% translate "Unknown" %} {{ p.unknown|default:0|fa_number }}</p>
+      {% endif %}
+    {% endwith %}
+    {% if user|can:"run_campaigns" %}
+      <div class="actions">
+        {% if active_send.state == "paused" %}
+          <form method="post" action="{% url 'campaign_action' campaign.slug 'resume' %}" class="inline">
+            {% csrf_token %}<input type="hidden" name="job" value="{{ active_send.pk }}">
+            <button type="submit" class="small">{% translate "Resume sending" %}</button>
+          </form>
+        {% elif not active_send.control %}
+          <form method="post" action="{% url 'campaign_action' campaign.slug 'pause' %}" class="inline">
+            {% csrf_token %}<input type="hidden" name="job" value="{{ active_send.pk }}">
+            <button type="submit" class="small secondary">{% translate "Pause" %}</button>
+          </form>
+        {% endif %}
+        {% if active_send.control != "cancel" %}
+          <form method="post" action="{% url 'campaign_action' campaign.slug 'cancel' %}" class="inline"
+                data-confirm="{% translate "Cancel the campaign? Everyone not sent yet is cancelled. SMS that Kavenegar already accepted can't be recalled." %}">
+            {% csrf_token %}<input type="hidden" name="job" value="{{ active_send.pk }}">
+            <button type="submit" class="small danger">{% translate "Cancel the campaign" %}</button>
+          </form>
+        {% endif %}
+      </div>
+    {% endif %}
+  {% elif approved %}
+    {% if user|can:"run_campaigns" %}
+      <form method="post" action="{% url 'campaign_action' campaign.slug 'send' %}"
+            data-confirm="{% translate "Start sending this campaign now?" %}">
+        {% csrf_token %}
+        <button type="submit">{% translate "Start sending" %}</button>
+      </form>
+    {% endif %}
+  {% else %}
+    <p class="muted">{% translate "Sending needs an approved test SMS for the current settings." %}</p>
+  {% endif %}
+</section>
+
+{% if summary %}
+<section class="card step">
+  <h2>{% translate "Recipients" %}</h2>
+  <ul class="badges">
+    {% for status in status_order %}{% with n=summary.counts|get:status %}{% if n %}
+      <li class="badge status-{{ status }}">{{ status|status_label }} <span class="num">{{ n|fa_number }}</span></li>
+    {% endif %}{% endwith %}{% endfor %}
+  </ul>
+  {% if user|can:"update_campaigns" %}
+    <div class="actions follow-up">
+      <form method="post" action="{% url 'campaign_action' campaign.slug 'reconcile' %}" class="inline">
+        {% csrf_token %}<button type="submit" class="small secondary">{% translate "Reconcile with Kavenegar" %}</button>
+      </form>
+      <form method="post" action="{% url 'campaign_action' campaign.slug 'delivery' %}" class="inline">
+        {% csrf_token %}<button type="submit" class="small secondary">{% translate "Update delivery statuses" %}</button>
+      </form>
+      {% if campaign.settings.links %}
+      <form method="post" action="{% url 'campaign_action' campaign.slug 'clicks' %}" class="inline">
+        {% csrf_token %}<button type="submit" class="small secondary">{% translate "Update clicks" %}</button>
+      </form>
+      {% endif %}
+    </div>
+    <p class="hint">{% translate "None of these sends an SMS." %}</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if jobs %}
+<section class="step">
+  <h2>{% translate "Jobs" %}</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">{% translate "Job" %}</th>
+          <th scope="col">{% translate "State" %}</th>
+          <th scope="col">{% translate "Requested" %}</th>
+          <th scope="col">{% translate "Finished" %}</th>
+          <th scope="col">{% translate "Result" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for job, reason in jobs %}
+        <tr>
+          <td>{{ job.get_kind_display }}</td>
+          <td>{{ job.get_state_display }}</td>
+          <td>{{ job.created_at|jalali }}{% if job.requested_by %} · {{ job.requested_by.username|ltr }}{% endif %}</td>
+          <td>{% if job.finished_at %}{{ job.finished_at|jalali }}{% else %}—{% endif %}</td>
+          <td>
+            {% if reason %}{{ reason }}
+            {% elif job.kind == "send" and job.result %}{% translate "Accepted" %} {{ job.result.sent|default:0|fa_number }} · {% translate "Cost" %} {{ job.result.cost|default:0|fa_number }} {% translate "rials" %}
+            {% elif job.kind == "test" and job.result.cost %}{% translate "Cost" %} {{ job.result.cost|fa_number }} {% translate "rials" %}
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+</div>

@@ -224,6 +224,10 @@ def test_run_outside_the_sending_window_does_not_start(tmp_path):
     assert summary.halted is True
     assert sender.calls == []
     assert any("outside the sending window" in n and "22:15" in n for n in reporter.notes)
+    # The dashboard says it in Persian from the key, never the note.
+    assert (summary.stop_reason, summary.stop_fields) == (
+        "outside_window", {"start": "08:00", "end": "21:00", "now": "22:15"},
+    )
 
 
 def test_run_stops_when_the_sending_window_closes(tmp_path):
@@ -247,6 +251,7 @@ def test_run_stops_when_the_sending_window_closes(tmp_path):
     assert summary.stopped is True and summary.halted is False
     assert state.counts() == {SENT: 2, PENDING: 2}
     assert any("sending window" in n and "closed" in n for n in reporter.notes)
+    assert (summary.stop_reason, summary.stop_fields) == ("window_closed", {"start": "08:00", "end": "21:00"})
 
 
 class AccountFakeSender(FakeSender):
@@ -316,6 +321,9 @@ def test_not_enough_credit_for_the_estimate_stops_after_the_test_sms(tmp_path):
     assert sender.calls == ["09150000077"]  # only the approval test went out
     assert summary.cost == 1_200
     assert any("not enough credit" in n and "3600" in n for n in reporter.notes)
+    assert (summary.stop_reason, summary.stop_fields) == (
+        "not_enough_credit", {"estimate": 3_600, "recipients": 3, "credit": 3_000},
+    )
 
 
 def test_enough_credit_shows_the_estimate_and_sums_the_real_cost(tmp_path):
@@ -1002,3 +1010,81 @@ def test_token_columns_approval_test_borrows_first_recipients_tokens(tmp_path):
     ).run()
     assert summary.sent == 2
     assert sender.tokens["09150000000"] == {"token": "خرید", "token10": "علی"}
+
+
+# ---------- the dashboard's test step (test_only) ----------
+
+
+def test_a_test_only_run_sends_just_the_test_sms(tmp_path):
+    """Validate, pre-send checks and the test SMS, then stop: the operator
+    approves in the dashboard. Recipients are queued but nobody is sent."""
+    sender = AccountFakeSender(credit=10_000, cost=1_200)
+    prompt_calls = []
+    summary, reporter = _run(
+        tmp_path, sender, ["09120000001", "09120000002"], smoke_test=True,
+        approval_test_number=TEST_NUMBER, test_only=True,
+        approval_prompt=lambda *a: prompt_calls.append(a) or True,
+    )
+    assert sender.calls == [TEST_NUMBER]  # no recipient, not even a smoke test
+    assert prompt_calls == []
+    assert (summary.test_only, summary.halted, summary.stopped, summary.sent) == (True, False, False, 0)
+    assert (summary.cost, summary.cost_per_sms, summary.estimate, summary.credit) == (1_200, 1_200, 2_400, 10_000)
+    assert summary.test_message_id == 1
+    state = StateStore(tmp_path / "s.db")
+    assert state.counts() == {PENDING: 2}
+    assert state.get_meta("last_run") is None  # a test isn't the campaign's last run
+
+
+def test_a_test_only_run_needs_a_test_number(tmp_path):
+    import pytest
+
+    with pytest.raises(ValueError):
+        Runner(
+            input_path=write_input(tmp_path, ["09120000001"]), state=StateStore(tmp_path / "s.db"),
+            sender=FakeSender(), test_only=True,
+        )
+
+
+def test_a_test_only_run_still_refuses_what_the_credit_cannot_cover(tmp_path):
+    sender = AccountFakeSender(credit=2_000, cost=1_200)
+    summary, _ = _run(
+        tmp_path, sender, ["09120000001", "09120000002"],
+        approval_test_number=TEST_NUMBER, test_only=True,
+    )
+    assert summary.halted is True and sender.calls == [TEST_NUMBER]
+
+
+def test_a_send_after_the_test_estimates_from_its_cost(tmp_path):
+    """The send run has no test SMS of its own: the test's cost per SMS is
+    handed over, so the credit check still works on a fresh campaign."""
+    sender = AccountFakeSender(credit=3_000, cost=1_200)
+    summary, reporter = _run(
+        tmp_path, sender, ["09120000001", "09120000002", "09120000003"], cost_per_sms=1_200,
+    )
+    assert summary.halted is True and sender.calls == []
+    assert any("3 SMS × 1200 = 3600 rials" in n for n in reporter.notes)
+
+    sender = AccountFakeSender(credit=10_000, cost=1_200)
+    summary, _ = _run(tmp_path, sender, ["09120000001", "09120000002", "09120000003"], cost_per_sms=1_200)
+    assert summary.sent == 3 and summary.estimate == 3_600 and not summary.test_only
+
+
+def test_a_halt_while_sending_names_kavenegars_code(tmp_path):
+    sender = FakeSender()
+    sender.behavior["09120000002"] = lambda: (_ for _ in ()).throw(HaltError(418, "no credit"))
+    summary, _ = _run(tmp_path, sender, ["09120000001", "09120000002", "09120000003"])
+    assert summary.halted is True
+    assert (summary.stop_reason, summary.stop_fields) == ("provider_halt", {"code": 418})
+
+
+def test_a_debug_mode_account_is_named(tmp_path):
+    from sms_sender.sender import AccountConfig
+
+    sender = AccountFakeSender(config=AccountConfig(debug_mode=True, resend_failed=False))
+    summary, _ = _run(tmp_path, sender, ["09120000001"])
+    assert summary.stop_reason == "debug_mode"
+
+
+def test_a_run_to_the_end_has_no_stop_reason(tmp_path):
+    summary, _ = _run(tmp_path, FakeSender(), ["09120000001"])
+    assert (summary.stop_reason, summary.stop_fields) == (None, {})

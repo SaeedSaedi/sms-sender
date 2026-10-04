@@ -24,7 +24,7 @@
       <form class="session" method="post" action="{% url 'logout' %}">
         {% csrf_token %}
         <span class="who"><bdi dir="ltr">{{ user.get_username }}</bdi> · {{ user|role|role_label }}</span>
-        {% if user|fully_signed_in %}<a href="{% url 'password_change' %}">{% translate "Change password" %}</a>{% endif %}
+        {% if user|fully_signed_in %}<a href="{% url 'my_account' %}">{% translate "My account" %}</a>{% endif %}
         <button type="submit" class="link">{% translate "Log out" %}</button>
       </form>
     {% endif %}

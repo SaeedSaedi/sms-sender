@@ -76,7 +76,8 @@ def set_role(user, role: str | None) -> None:
         raise ValueError(f"unknown role {role!r}")
     user.groups.remove(*Group.objects.filter(name__in=ROLES))
     if role is not None:
-        user.groups.add(Group.objects.get(name=role))
+        # The migration creates the groups; a missing one is made again.
+        user.groups.add(Group.objects.get_or_create(name=role)[0])
     try:
         del user._sms_role
     except AttributeError:

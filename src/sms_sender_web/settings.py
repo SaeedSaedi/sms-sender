@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "sms_sender_web.jobs",
     "sms_sender_web.segments",
     "sms_sender_web.suppression",
+    "sms_sender_web.campaigns",
 ]
 
 MIDDLEWARE = [

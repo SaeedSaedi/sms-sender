@@ -35,6 +35,9 @@ class Campaign(models.Model):
 
 class Job(models.Model):
     class Kind(models.TextChoices):
+        # Validate, links and pre-send checks, then one SMS to the operator's
+        # own number; the operator approves it before a send can start.
+        TEST = "test", _("Test SMS")
         SEND = "send", _("Send")
         RECONCILE = "reconcile", _("Reconcile")
         DELIVERY = "delivery", _("Delivery update")
@@ -52,6 +55,11 @@ class Job(models.Model):
         NONE = "", ""
         PAUSE = "pause", _("Pause")
         CANCEL = "cancel", _("Cancel")
+
+    class Decision(models.TextChoices):
+        NONE = "", ""
+        APPROVED = "approved", _("Approved")
+        REJECTED = "rejected", _("Rejected")
 
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name="jobs")
     kind = models.CharField(max_length=16, choices=Kind.choices)
@@ -73,6 +81,18 @@ class Job(models.Model):
     last_error = models.TextField(blank=True)
     progress = models.JSONField(default=dict, blank=True)  # live counts while running
     result = models.JSONField(default=dict, blank=True)    # the run's summary
+    # What the job was given: a test's phone number, a send's cost per SMS.
+    params = models.JSONField(default=dict, blank=True)
+    # The campaign's message settings when a test was asked for (or a send
+    # started): an approval holds only while they're unchanged.
+    settings_hash = models.CharField(max_length=64, blank=True)
+    # A test SMS, approved or rejected by the operator who received it.
+    decision = models.CharField(max_length=8, choices=Decision.choices, default="", blank=True)
+    decided_by = models.ForeignKey(
+        django_settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=["state", "created_at"])]

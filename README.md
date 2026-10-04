@@ -407,8 +407,29 @@ internal, multi-user tool built with Django and HTMX. So far it has:
   the suppression list;
 - the suppression list: operators add numbers (pasted or from a file),
   admins remove them, and every send leaves them out;
-- a read-only list of campaigns, read from the same campaign DBs the CLI
-  writes.
+- campaigns, run from the browser in the spec's stages:
+  1. **Settings:** the segment, the template, and what fills each token: a
+     fixed value, a column of the segment, or the short link. Then value
+     translations, the link's destination, the sending window and a rate
+     limit.
+  2. **Check:** reads the segment with those settings and sends nothing:
+     who would get the SMS, who is suppressed or already sent, and what's
+     in the way.
+  3. **Test SMS:** runs the checks, makes the short links, checks the
+     account, and sends one SMS to *your own* number (set on «حساب من» /
+     My account). It shows the cost per SMS, the estimate and the credit.
+     You approve it or reject it.
+  4. **Send:** only after an approved test SMS for the current settings.
+     Progress updates live, with pause, resume and cancel.
+  5. **Follow-up:** reconcile, update delivery statuses and clicks.
+     None of these sends an SMS.
+
+  Changing the message (template, tokens, link, segment) needs a new test
+  SMS. Once sending has started, a campaign's settings are fixed.
+- the campaign list: the CLI's campaigns and the dashboard's.
+
+The campaign pages hand their work to the worker (`docker compose up`
+starts it next to the web app), and the pages follow it as it runs.
 
 Uploaded lists are kept in `data/segments/`, which git ignores, like every
 other list of phone numbers. Pages show numbers masked (`۰۹۱۲*****۳۴`).
