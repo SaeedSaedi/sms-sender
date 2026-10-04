@@ -743,8 +743,9 @@ class Runner:
         new_count = self.state.upsert_pending(
             [(r.phone, r.raw) for r in loaded.valid], segment=self.segment,
         )
-        if self.user_id_column is not None:
-            self._apply_user_ids(loaded)
+        conflicting = (
+            self._record_user_ids(loaded) if self.user_id_column is not None else set()
+        )
         orphans = self.state.mark_orphans_unknown()
         if orphans:
             logger.warning("orphans_marked_unknown", extra={"n": orphans})
@@ -755,8 +756,9 @@ class Runner:
         # Settle old-enough `unknown` rows first, so the ones Kavenegar never
         # got go out in this run like everyone else.
         self._reconcile_unknown("start")
-        # The opt-out list goes last, right before the queue is read: a row
-        # that reconciliation just made claimable again must not slip past it.
+        # Exclusions go last, right before the queue is read: a row that
+        # reconciliation just made claimable again must not slip past them.
+        self._exclude_conflicts(conflicting)
         if self.opt_out:
             suppressed = self.state.suppress(self.opt_out)
             if suppressed:
@@ -789,11 +791,11 @@ class Runner:
         )
         return loaded, new_count, phones
 
-    def _apply_user_ids(self, loaded: LoadResult) -> None:
-        """Record user IDs and take phones with two different ones out of
-        the queue — within this file, or against an earlier import. They
-        can't be attributed to anyone, so they aren't sent (decided
-        2026-10-04); a phone that already got the SMS stays `sent`."""
+    def _record_user_ids(self, loaded: LoadResult) -> set[str]:
+        """Record user IDs and return the phones that came with two
+        different ones — within this file, or against an earlier import.
+        They can't be attributed to anyone, so they aren't sent (decided
+        2026-10-04); `_exclude_conflicts` takes them out of the queue."""
         self.state.set_meta("user_id_column", self.user_id_column or "")
         earlier = self.state.assign_user_ids(
             {r.phone: r.user_id for r in loaded.valid if r.user_id}
@@ -802,20 +804,26 @@ class Runner:
             logger.warning(
                 "user_id_conflict", extra={"phone": phone, "stored": stored, "new": new},
             )
-        conflicting = set(loaded.conflicts) | {phone for phone, _, _ in earlier}
-        if conflicting:
-            excluded = self.state.exclude(conflicting, "conflicting user IDs; not sent")
-            self._user_id_conflicts = len(conflicting)
-            self._reporter.note(
-                f"{len(conflicting)} phone(s) came with two different user IDs and "
-                f"won't be sent ({excluded} taken out of the queue; any already "
-                "sent stay sent). Fix the IDs at the source."
-            )
         if loaded.missing_user_id:
             self._reporter.note(
                 f"{loaded.missing_user_id} recipient(s) have no user ID: they're sent, "
                 "and reported as missing user ID."
             )
+        return set(loaded.conflicts) | {phone for phone, _, _ in earlier}
+
+    def _exclude_conflicts(self, conflicting: set[str]) -> None:
+        """`invalid` is never claimable, and unlike `failed_permanent` no
+        retry resets it — only an explicit `reset --status invalid`. Rows
+        already sent stay `sent`."""
+        if not conflicting:
+            return
+        excluded = self.state.exclude(conflicting, "conflicting user IDs; not sent")
+        self._user_id_conflicts = len(conflicting)
+        self._reporter.note(
+            f"{len(conflicting)} phone(s) came with two different user IDs and "
+            f"won't be sent ({excluded} taken out of the queue; any already "
+            "sent stay sent). Fix the IDs at the source."
+        )
 
     def _preflight_checks(self, phones: list[str]) -> tuple[list[str], int]:
         """Account check → optional approval test (manual gate) → optional

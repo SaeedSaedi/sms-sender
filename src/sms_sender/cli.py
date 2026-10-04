@@ -64,6 +64,7 @@ from .shortlink import (
 )
 from .window import DEFAULT_WINDOW, ENV_SEND_WINDOW, parse_window
 from .state import (
+    INVALID,
     NEEDS_REVIEW,
     SUPPRESSED,
     UNKNOWN,
@@ -713,6 +714,7 @@ def export_failed(db_path: str, out: str, campaign: str | None) -> None:
     "--status", "from_status", default="failed_permanent", show_default=True,
     type=click.Choice([
         "failed_permanent", "failed_retriable", "sent", UNKNOWN, NEEDS_REVIEW, SUPPRESSED,
+        INVALID,
     ]),
     help="Which status to promote back to pending so it gets resent.",
 )
@@ -743,6 +745,9 @@ def reset(db_path: str, from_status: str, yes: bool, campaign: str | None) -> No
                       "Are you sure?",
         SUPPRESSED: "These recipients are on the opt-out list. Resetting them sends "
                     "them the campaign. Are you sure?",
+        INVALID: "These phones came with two different user IDs, so their clicks "
+                 "can't be attributed. Reset only after fixing the IDs at the source; "
+                 "a run with --user-id-column checks them again. Are you sure?",
     }
     if from_status in risky and not yes:
         click.confirm(risky[from_status], abort=True)

@@ -127,6 +127,9 @@ UNKNOWN = "unknown"
 NEEDS_REVIEW = "needs_review"
 # On the opt-out list: never sent. Not claimable.
 SUPPRESSED = "suppressed"
+# The input says not to send (a phone with two different user IDs). Not
+# claimable, and no retry resets it — only an explicit `reset --status invalid`.
+INVALID = "invalid"
 
 CLAIMABLE = (PENDING, FAILED_RETRIABLE)
 
@@ -300,9 +303,9 @@ class StateStore:
 
     def exclude(self, phones: Iterable[str], reason: str) -> int:
         """Take recipients that must not be sent (e.g. conflicting user IDs)
-        out of the send queue as invalid (`failed_permanent`). Only claimable
-        rows change; returns how many did."""
-        return self._move_claimable(phones, FAILED_PERMANENT, reason)
+        out of the send queue as `invalid`. Only claimable rows change;
+        returns how many did."""
+        return self._move_claimable(phones, INVALID, reason)
 
     def _move_claimable(self, phones: Iterable[str], status: str, reason: str) -> int:
         """Set `status` on the claimable rows among `phones`. Chunked:

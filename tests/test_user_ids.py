@@ -13,7 +13,7 @@ from sms_sender import cli as cli_module
 from sms_sender.cli import cli
 from sms_sender.input_loader import InputError, TokenColumns, load, segment_from_path, slugify
 from sms_sender.runner import Runner, format_report
-from sms_sender.state import FAILED_PERMANENT, PENDING, SENT, StateStore
+from sms_sender.state import INVALID, PENDING, SENT, UNKNOWN, StateStore
 
 from .test_runner import FakeSender, RecordingReporter
 
@@ -109,7 +109,7 @@ def test_exclude_only_takes_unsent_rows_out_of_the_queue(tmp_path):
     state.claim(A)
     state.mark_sent(A, message_id=1, status_code=200)
     assert state.exclude({A, B}, "conflicting user IDs; not sent") == 1
-    assert state.counts() == {SENT: 1, FAILED_PERMANENT: 1}
+    assert state.counts() == {SENT: 1, INVALID: 1}
 
 
 # ---------- runner ----------
@@ -145,7 +145,7 @@ def test_a_queued_phone_whose_new_import_disagrees_is_not_sent(tmp_path):
     summary, sender = run(tmp_path, inp, state, user_id_column="uid")
     assert sender.calls == [B]
     assert summary.user_id_conflicts == 1
-    assert state.counts() == {SENT: 1, FAILED_PERMANENT: 1}
+    assert state.counts() == {SENT: 1, INVALID: 1}
 
 
 def test_a_phone_conflicting_in_the_file_is_taken_out_even_if_queued_before(tmp_path):
@@ -155,7 +155,7 @@ def test_a_phone_conflicting_in_the_file_is_taken_out_even_if_queued_before(tmp_
     _, sender = run(tmp_path, inp, state, user_id_column="uid")
     assert sender.calls == [B]
     status = state._conn().execute("SELECT status FROM recipients WHERE phone=?", (A,)).fetchone()
-    assert status[0] == FAILED_PERMANENT
+    assert status[0] == INVALID
 
 
 def test_an_explicit_segment_wins_over_the_file_name(tmp_path):
@@ -203,3 +203,52 @@ def test_status_counts_missing_user_ids(tmp_path):
     result = CliRunner().invoke(cli, ["status", "--state", str(db)])
     assert "user IDs   1 recipient(s); missing user ID: 1" in result.output
     assert PENDING in result.output
+
+
+def test_an_excluded_phone_stays_out_through_retries(tmp_path):
+    """Unlike failed_permanent, no retry resets an invalid row."""
+    state = StateStore(tmp_path / "s.db")
+    state.upsert_pending([(A, A), (B, B)])
+    state.assign_user_ids({A: "u-1"})
+    inp = csv_file(tmp_path, f"phone,uid\n{A},u-9\n")
+    _, first = run(tmp_path, inp, state, user_id_column="uid")
+    assert first.calls == [B]  # queued earlier, no conflict
+    assert state.reset_status("failed_permanent") == 0  # what retry-failed --include-permanent does
+    _, second = run(tmp_path, csv_file(tmp_path, f"{A}\n", "plain.txt"), state)
+    assert second.calls == []
+    assert state.counts() == {SENT: 1, INVALID: 1}
+
+
+def test_a_conflicting_leftover_requeued_by_reconciliation_is_not_sent(tmp_path):
+    """The exclusion comes after the start-of-run reconciliation, so a row
+    it makes claimable again is still caught."""
+    state = StateStore(tmp_path / "s.db")
+    state.upsert_pending([(A, A), (B, B)])
+    state.assign_user_ids({A: "u-1"})
+    state.claim(A)
+    state.mark_unknown(A, "read timeout")  # Kavenegar never got it, as it turns out
+
+    class NothingAtKavenegar(FakeSender):
+        def find_messages(self, phone, start, end):
+            return []
+
+    inp = csv_file(tmp_path, f"phone,uid\n{A},u-9\n{B},u-2\n")
+    _, sender = run(
+        tmp_path, inp, state, sender=NothingAtKavenegar(), user_id_column="uid",
+        reconcile_min_age_sec=0, reconcile_requeue_not_found=True,
+    )
+    assert sender.calls == [B]
+    assert state.counts() == {SENT: 1, INVALID: 1}
+    assert UNKNOWN not in state.counts()
+
+
+def test_reset_invalid_asks_first(tmp_path):
+    db = tmp_path / "s.db"
+    state = StateStore(db)
+    state.upsert_pending([(A, A)])
+    state.exclude({A}, "conflicting user IDs; not sent")
+    declined = CliRunner().invoke(cli, ["reset", "--status", "invalid", "--state", str(db)], input="n\n")
+    assert declined.exit_code == 1 and "two different user IDs" in declined.output
+    assert state.counts() == {INVALID: 1}
+    done = CliRunner().invoke(cli, ["reset", "--status", "invalid", "--state", str(db), "-y"])
+    assert done.exit_code == 0 and state.counts() == {PENDING: 1}
