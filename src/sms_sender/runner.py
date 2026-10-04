@@ -205,6 +205,7 @@ class Runner:
         self.link_workers = link_workers
         self.link_rate_per_sec = link_rate_per_sec
         self._link_tokens: dict[str, str] | None = None  # phone → link token value
+        self._link_keys: dict[str, str] = {}             # phone → link key, set at claim
         self._test_link_token: str | None = None
         self._links_ready = 0
         self._links_created = 0
@@ -328,7 +329,7 @@ class Runner:
         if self.links is not None and (tokens or {}).get(self.links.token) is None:
             logger.error("link_missing", extra={"phone": phone})
             return ("skipped", phone)
-        recipient = self.state.claim(phone)
+        recipient = self.state.claim(phone, link_key=self._link_keys.get(phone))
         if recipient is None:
             # Already sent or claimed by someone else.
             return ("already_done", phone)
@@ -426,6 +427,7 @@ class Runner:
             logger.error("links_not_ready", extra={"detail": str(e)})
             raise PreflightError(f"links: {e}") from e
         self._link_tokens = result.tokens
+        self._link_keys = result.keys
         self._test_link_token = result.test_token
         self._links_ready, self._links_created = result.needed, result.created
         # (`created` would clash with LogRecord's own attribute.)

@@ -12,13 +12,15 @@ DB. Titles and tags carry the campaign and segment names only.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import secrets
 import string
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Iterable, Protocol
 from urllib.parse import parse_qsl, urlencode, urlsplit
@@ -142,6 +144,14 @@ def _utc_iso(moment: datetime) -> str:
     return moment.astimezone(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def link_plan(settings: LinkSettings, campaign: str) -> str:
+    """Fingerprint of what shapes a link (destination, token, format,
+    strategy, UTM values, campaign) — not its expiry, which is extended in
+    place. A link row planned under another fingerprint is stale."""
+    shape = json.dumps({**settings.as_settings(), "campaign": campaign}, sort_keys=True)
+    return hashlib.sha256(shape.encode()).hexdigest()[:12]
+
+
 def plan_link(
     settings: LinkSettings, *, campaign: str, key: str, segment: str | None,
     test: bool = False, now: datetime | None = None,
@@ -178,6 +188,7 @@ def plan_link(
     return LinkRow(
         key=key, ref=ref, long_url=build_long_url(s.destination, params), title=title,
         tags=tags, valid_until=_utc_iso(moment + timedelta(days=s.expiry_days)),
+        plan=link_plan(s, campaign),
     )
 
 
@@ -187,6 +198,7 @@ class LinkStageResult:
     created: int    # made (or found again) at Shlink in this run
     extended: int   # expiry moved before sending
     tokens: dict[str, str]          # phone → link token value
+    keys: dict[str, str] = field(default_factory=dict)  # phone → link key (recorded at claim)
     test_token: str | None = None   # for the approval test SMS
 
 
@@ -211,15 +223,18 @@ class LinkStage:
         self._now = now
         self._stop = stop or threading.Event()
         self._note = note
+        self.plan = link_plan(settings, campaign)
 
     # ---------- plan ----------
 
     def _key(self, phone: str, segment: str) -> str:
+        # Shared links carry the plan in their key: after a settings change
+        # a new one is made, and the old one stays for whoever already got it.
         if self.settings.strategy == "recipient":
             return phone
         if self.settings.strategy == "segment":
-            return f"segment:{segment}"
-        return "campaign"
+            return f"segment:{segment}:{self.plan}"
+        return f"campaign:{self.plan}"
 
     def _row(self, key: str, segment: str | None, *, test: bool = False) -> LinkRow:
         return plan_link(
@@ -228,16 +243,27 @@ class LinkStage:
         )
 
     def _write(self, wanted: dict[str, tuple[str | None, bool]]) -> dict[str, LinkRow]:
-        """Make sure every wanted key has a row; returns them all. A key
-        that already has one keeps it, so a re-run repeats its request."""
+        """Make sure every wanted key has a row planned with the current
+        settings; returns them all. A current row is kept, so a re-run
+        repeats its request. A stale one (the destination, token, format,
+        strategy or UTM values changed since) is planned again: wanted keys
+        belong to recipients still in the queue, or to the approval test, so
+        nobody has received the old link."""
         for _ in range(3):  # a new ref clashing with an old one is retried
             rows = self.state.get_links(wanted)
             missing = [k for k in wanted if k not in rows]
-            if not missing:
+            stale = [k for k, row in rows.items() if row.plan != self.plan]
+            if not missing and not stale:
                 return rows
-            self.state.add_links(
-                self._row(k, wanted[k][0], test=wanted[k][1]) for k in missing
-            )
+            if stale:
+                logger.warning("links_replanned", extra={"n": len(stale), "plan": self.plan})
+                self.state.replan_links(
+                    self._row(k, wanted[k][0], test=wanted[k][1]) for k in stale
+                )
+            if missing:
+                self.state.add_links(
+                    self._row(k, wanted[k][0], test=wanted[k][1]) for k in missing
+                )
         raise LinkError("couldn't write link rows (random references kept clashing)")
 
     # ---------- create / extend ----------
@@ -354,6 +380,7 @@ class LinkStage:
         return LinkStageResult(
             needed=len(rows), created=created, extended=extended,
             tokens={phone: token(rows[key]) for phone, key in key_of.items()},
+            keys=dict(key_of),
             test_token=token(rows[test_key]) if test_key else None,
         )
 

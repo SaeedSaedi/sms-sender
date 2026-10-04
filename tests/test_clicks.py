@@ -41,7 +41,7 @@ def campaign_db(path: Path) -> StateStore:
         state.add_links([link(phone, f"ref{i:07d}")])
         state.mark_link_ready(phone, f"c{i}", f"{BASE}/c{i}")
     for i, phone in enumerate([A, B, C], start=1):
-        state.claim(phone)
+        state.claim(phone, link_key=phone)  # each was sent their own link
         state.mark_sent(phone, message_id=i, status_code=200)
     state.record_delivery({A: 10}, checked_at=0)
     return state
@@ -86,17 +86,22 @@ def test_report_per_segment_keeps_missing_user_ids_apart(tmp_path):
 def test_shared_links_count_for_the_segment_not_for_people(tmp_path):
     state = StateStore(tmp_path / "s.db")
     state.upsert_pending([(A, A), (B, B)], segment="vip-2")
-    state.add_links([link("segment:vip-2", None), link("campaign", None)])
-    state.mark_link_ready("segment:vip-2", "s1", f"{BASE}/s1")
-    state.mark_link_ready("campaign", "k1", f"{BASE}/k1")
-    for i, phone in enumerate([A, B], start=1):
-        state.claim(phone)
+    state.upsert_pending([(C, C)], segment="vip-2")
+    state.add_links([link("segment:vip-2:p1", None), link("campaign:p1", None)])
+    state.mark_link_ready("segment:vip-2:p1", "s1", f"{BASE}/s1")
+    state.mark_link_ready("campaign:p1", "k1", f"{BASE}/k1")
+    for i, (phone, key) in enumerate(
+        [(A, "segment:vip-2:p1"), (B, "segment:vip-2:p1"), (C, "campaign:p1")], start=1,
+    ):
+        state.claim(phone, link_key=key)
         state.mark_sent(phone, message_id=i, status_code=200)
     sync_clicks(state, Visits({"s1": 7, "k1": 4}), "coin-7")
     (vip,), campaign_clicks = click_report(state)
-    assert (vip.clicks, vip.clicked, vip.clicked_missing_user_id) == (7, None, None)
+    # The segment link counts once for the segment, however many got it.
+    assert (vip.sent, vip.clicks, vip.clicked, vip.clicked_missing_user_id) == (3, 7, None, None)
     assert campaign_clicks == 4
     assert list(clicker_rows(state)) == []  # nobody can be named from a shared link
+    assert list(attribution_rows(state)) == []
 
 
 def test_attribution_has_no_phone_numbers(tmp_path):

@@ -55,20 +55,21 @@ def sync_clicks(
 
 
 def click_report(state: StateStore) -> tuple[list[SegmentClicks], int]:
-    """Per-segment clicks, and the clicks on a campaign-wide link (0 if none)."""
-    shared = state.shared_link_clicks()
+    """Per-segment clicks, and the clicks on campaign-wide links (0 if none).
+    Only links recipients were actually sent count."""
+    shared_by_segment, campaign_clicks = state.shared_link_clicks()
     segments = []
     for row in state.clicks_by_segment():
         personal = row["own"] > 0
         segments.append(SegmentClicks(
             segment=row["segment"] or "(none)",
             sent=row["sent"],
-            clicks=row["clicks"] + shared.get(f"segment:{row['segment']}", 0),
+            clicks=row["clicks"] + shared_by_segment.get(row["segment"], 0),
             clicked=row["clicked"] if personal else None,
             missing_user_id=row["missing_user_id"],
             clicked_missing_user_id=row["clicked_missing_user_id"] if personal else None,
         ))
-    return segments, shared.get("campaign", 0)
+    return segments, campaign_clicks
 
 
 def describe(segments: list[SegmentClicks], campaign_clicks: int) -> list[str]:

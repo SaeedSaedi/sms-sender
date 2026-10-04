@@ -295,3 +295,112 @@ def test_link_stage_threads_share_nothing_unsafe(tmp_path):
     assert summary.links_ready == 60 and len(shlink.created) == 60
     assert state.link_counts() == {"ready": 60}
     assert threading.active_count() < 50
+
+
+# ---------- settings that change before or between sends ----------
+
+def test_a_corrected_destination_gets_new_links_not_the_old_ones(tmp_path):
+    """The approval test was declined (every link already made), and the
+    destination is fixed before anything goes out: nobody may get a link
+    to the old one."""
+    state, shlink = StateStore(tmp_path / "s.db"), FakeShlink()
+    inp = write(tmp_path, f"{A}\n{B}\n")
+    declined = runner(
+        tmp_path, inp, state=state, shlink=shlink, approval_test_number=A,
+        approval_prompt=lambda *_: False, links=links(destination="https://kifpool.me/WRONG"),
+    ).run()
+    assert declined.halted and declined.sent == 0
+
+    sender = FakeSender()
+    summary = runner(
+        tmp_path, inp, state=state, sender=sender, shlink=shlink,
+        approval_test_number=A, approval_prompt=lambda *_: True,
+        links=links(destination="https://kifpool.me/right"),
+    ).run()
+    assert summary.links_created == 3  # both recipients and the test link, again
+    rows = state.get_links([A, B, f"test:{A}"])
+    assert all("/right?" in row.long_url for row in rows.values())
+    for phone in (A, B):
+        assert sender.tokens[phone]["token3"] == rows[phone].short_url
+    old = {c["long_url"] for c in shlink.created if "WRONG" in c["long_url"]}
+    assert not {row.long_url for row in rows.values()} & old
+
+
+def test_a_recipient_already_sent_keeps_the_link_they_got(tmp_path):
+    state, shlink = StateStore(tmp_path / "s.db"), FakeShlink()
+    from sms_sender.runner import campaign_settings
+    from sms_sender.sender import SenderConfig
+
+    cfg = SenderConfig(api_key="k", template="t")
+    runner(tmp_path, write(tmp_path, f"{A}\n"), state=state, shlink=shlink,
+           settings=campaign_settings(cfg, None, links())).run()
+    got = state.get_links([A])[A]
+    other = links(destination="https://kifpool.me/another")
+    runner(tmp_path, write(tmp_path, f"{A}\n{B}\n"), state=state, shlink=shlink, links=other,
+           settings=campaign_settings(cfg, None, other), allow_settings_change=True).run()
+    assert state.get_links([A])[A] == got  # A was sent: its row is history
+    assert "/another?" in state.get_links([B])[B].long_url
+
+
+def test_reports_follow_the_link_each_recipient_actually_got(tmp_path):
+    """Personal links were made, then the campaign switched to segment links
+    before sending: clicks and attribution follow what was sent."""
+    from sms_sender.clicks import attribution_rows, click_report, sync_clicks
+    from sms_sender.shortlink import LinkVisits
+
+    state, shlink = StateStore(tmp_path / "s.db"), FakeShlink()
+    inp = write(tmp_path, f"{A}\n{B}\n")
+    runner(tmp_path, inp, state=state, shlink=shlink, approval_test_number=A,
+           approval_prompt=lambda *_: False).run()  # personal links made, nothing sent
+    runner(tmp_path, inp, state=state, shlink=shlink, links=links(strategy="segment")).run()
+
+    keys = dict(state._conn().execute("SELECT phone, link_key FROM recipients").fetchall())
+    assert keys[A] == keys[B] and keys[A].startswith("segment:vip-2:")
+    segment_code = state.get_links([keys[A]])[keys[A]].short_code
+
+    class Visits:
+        def visits_by_tag(self, tag):
+            return [LinkVisits(segment_code, 9, 5)]
+
+    sync_clicks(state, Visits(), "coin-7")
+    (vip,), _ = click_report(state)
+    assert (vip.sent, vip.clicks, vip.clicked) == (2, 5, None)
+    assert list(attribution_rows(state)) == []  # nobody got a personal link
+
+
+def test_click_counts_are_looked_up_by_an_index(tmp_path):
+    state = StateStore(tmp_path / "s.db")
+    plan = state._conn().execute(
+        "EXPLAIN QUERY PLAN UPDATE links SET clicks=1 WHERE short_code=?", ("x",),
+    ).fetchall()
+    assert any("idx_links_short_code" in str(tuple(row)) for row in plan)
+
+
+def test_click_counts_land_across_chunks(tmp_path):
+    from sms_sender.state import LinkRow
+
+    state = StateStore(tmp_path / "s.db")
+    rows = [LinkRow(key=f"k{i}", ref=f"r{i}", long_url=f"u{i}", title="t", tags=("x",),
+                    valid_until="2026-10-11T08:00:00+00:00") for i in range(1203)]
+    state.add_links(rows)
+    for i in range(1203):
+        state.mark_link_ready(f"k{i}", f"c{i}", f"{BASE}/c{i}")
+    assert state.record_clicks({f"c{i}": i % 3 for i in range(1203)}, 1.0) == 1203
+    assert state._conn().execute("SELECT SUM(clicks) FROM links").fetchone()[0] == sum(
+        i % 3 for i in range(1203)
+    )
+
+
+def test_dotenv_settings_are_read_before_the_link_checks(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # Absent for this test; monkeypatch removes whatever .env sets afterwards.
+    monkeypatch.setenv("SMS_SENDER_LINK_DOMAINS", "placeholder")
+    monkeypatch.delenv("SMS_SENDER_LINK_DOMAINS")
+    Path(".env").write_text("SMS_SENDER_LINK_DOMAINS=example.org\n", encoding="utf-8")
+    inp = write(tmp_path, f"{A}\n")
+    result = CliRunner().invoke(cli, [
+        "dry-run", "--input", str(inp), "--campaign", "coin-7",
+        "--link-url", "https://example.org/offer", "--link-token", "token3",
+    ])
+    assert result.exit_code == 0, result.output
+    assert "long URL   https://example.org/offer?" in result.output

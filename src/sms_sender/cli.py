@@ -13,6 +13,7 @@ from typing import Any, Callable, Iterator, TypeVar
 
 import click
 from click.core import ParameterSource
+from dotenv import load_dotenv
 
 from . import input_loader, logging_config
 from .config import load_api_key
@@ -320,6 +321,10 @@ def _db_lock(db_path: str) -> Iterator[None]:
 @click.pass_context
 def cli(ctx: click.Context, config_path: str | None, profile_name: str | None) -> None:
     """Reliable bulk SMS sender for Kavenegar verify/lookup."""
+    # `.env` first, before any subcommand reads a setting: options with an
+    # env var (e.g. --send-window) and SMS_SENDER_LINK_DOMAINS see it too.
+    # Never overrides a variable that's already set.
+    load_dotenv(".env")
     try:
         values = load_profile(config_path, profile_name)
     except ProfileError as e:

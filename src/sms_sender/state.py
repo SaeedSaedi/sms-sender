@@ -71,11 +71,13 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         "ALTER TABLE recipients ADD COLUMN user_id TEXT",
         "ALTER TABLE recipients ADD COLUMN segment TEXT",
     ),
-    (  # 5 → 6: one row per short link, written before Shlink is called (links.py)
+    (  # 5 → 6: one row per short link, written before Shlink is called (links.py),
+       # and which link each recipient was sent with
         """
         CREATE TABLE links (
             key              TEXT PRIMARY KEY,
             ref              TEXT UNIQUE,
+            plan             TEXT NOT NULL,
             long_url         TEXT NOT NULL,
             title            TEXT NOT NULL,
             tags             TEXT NOT NULL,
@@ -92,6 +94,8 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         )
         """,
         "CREATE INDEX idx_links_status ON links(status)",
+        "CREATE INDEX idx_links_short_code ON links(short_code)",
+        "ALTER TABLE recipients ADD COLUMN link_key TEXT",
     ),
 )
 
@@ -155,6 +159,7 @@ class LinkRow:
     title: str
     tags: tuple[str, ...]
     valid_until: str     # ISO 8601, UTC
+    plan: str = ""       # fingerprint of the link settings it was planned with
     status: str = LINK_PENDING
     short_code: str | None = None
     short_url: str | None = None
@@ -411,14 +416,17 @@ class StateStore:
 
     # ---------- per-row workflow ----------
 
-    def claim(self, phone: str) -> Recipient | None:
-        """Atomically transition a row to in_flight. Returns None if not claimable."""
+    def claim(self, phone: str, link_key: str | None = None) -> Recipient | None:
+        """Atomically transition a row to in_flight. Returns None if not claimable.
+
+        `link_key` records which short link this attempt carries (None: no
+        link), so reports know exactly which link each recipient got."""
         now = time.time()
         with self._tx() as conn:
             cur = conn.execute(
-                f"UPDATE recipients SET status=?, attempts=attempts+1, last_attempt_at=? "
-                f"WHERE phone=? AND status IN ({','.join('?' * len(CLAIMABLE))})",
-                (IN_FLIGHT, now, phone, *CLAIMABLE),
+                f"UPDATE recipients SET status=?, attempts=attempts+1, last_attempt_at=?, "
+                f"link_key=? WHERE phone=? AND status IN ({','.join('?' * len(CLAIMABLE))})",
+                (IN_FLIGHT, now, link_key, phone, *CLAIMABLE),
             )
             if cur.rowcount == 0:
                 return None
@@ -604,15 +612,16 @@ class StateStore:
 
     def get_links(self, keys: Iterable[str]) -> dict[str, LinkRow]:
         rows = self._select_in(
-            "SELECT key, ref, long_url, title, tags, valid_until, status, short_code, short_url "
-            "FROM links WHERE key IN ({in})",
+            "SELECT key, ref, plan, long_url, title, tags, valid_until, status, short_code, "
+            "short_url FROM links WHERE key IN ({in})",
             keys,
         )
         return {
             r["key"]: LinkRow(
                 key=r["key"], ref=r["ref"], long_url=r["long_url"], title=r["title"],
                 tags=tuple(json.loads(r["tags"])), valid_until=r["valid_until"],
-                status=r["status"], short_code=r["short_code"], short_url=r["short_url"],
+                plan=r["plan"], status=r["status"], short_code=r["short_code"],
+                short_url=r["short_url"],
             )
             for r in rows
         }
@@ -626,11 +635,33 @@ class StateStore:
             before = conn.total_changes
             conn.executemany(
                 "INSERT OR IGNORE INTO links "
-                "(key, ref, long_url, title, tags, valid_until, status, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "(key, ref, plan, long_url, title, tags, valid_until, status, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 [
-                    (r.key, r.ref, r.long_url, r.title, json.dumps(list(r.tags)),
+                    (r.key, r.ref, r.plan, r.long_url, r.title, json.dumps(list(r.tags)),
                      r.valid_until, LINK_PENDING, now)
+                    for r in rows
+                ],
+            )
+            return conn.total_changes - before
+
+    def replan_links(self, rows: Iterable[LinkRow]) -> int:
+        """Replace links planned with settings that changed since. Only for
+        links nobody has received: the caller passes rows of recipients
+        still in the queue (and approval-test links). The old link stays at
+        Shlink, unused, until it expires. A clashing new `ref` is skipped
+        (OR IGNORE) and the caller retries with another one."""
+        now = time.time()
+        with self._tx() as conn:
+            before = conn.total_changes
+            conn.executemany(
+                "UPDATE OR IGNORE links SET ref=?, plan=?, long_url=?, title=?, tags=?, "
+                "valid_until=?, status=?, short_code=NULL, short_url=NULL, attempts=0, "
+                "last_error=NULL, created_at=?, ready_at=NULL, clicks=NULL, "
+                "clicks_synced_at=NULL WHERE key=?",
+                [
+                    (r.ref, r.plan, r.long_url, r.title, json.dumps(list(r.tags)),
+                     r.valid_until, LINK_PENDING, now, r.key)
                     for r in rows
                 ],
             )
@@ -666,40 +697,58 @@ class StateStore:
     # ---------- clicks (see clicks.py) ----------
 
     def record_clicks(self, by_code: dict[str, int], synced_at: float) -> int:
-        """Store each link's (non-bot) visit count. Returns links updated."""
-        if not by_code:
-            return 0
-        with self._tx() as conn:
-            before = conn.total_changes
-            conn.executemany(
-                "UPDATE links SET clicks=?, clicks_synced_at=? WHERE short_code=?",
-                [(n, synced_at, code) for code, n in by_code.items()],
-            )
-            return conn.total_changes - before
+        """Store each link's (non-bot) visit count. Returns links updated.
+
+        Indexed by short code and committed in chunks, so a sync of 100k
+        links never holds the write lock long enough to stall a send that
+        runs at the same time (`clicks` doesn't take the run lock)."""
+        updated = 0
+        items = list(by_code.items())
+        for start in range(0, len(items), 500):
+            with self._tx() as conn:
+                before = conn.total_changes
+                conn.executemany(
+                    "UPDATE links SET clicks=?, clicks_synced_at=? WHERE short_code=?",
+                    [(n, synced_at, code) for code, n in items[start:start + 500]],
+                )
+                updated += conn.total_changes - before
+        return updated
 
     def clicks_by_segment(self) -> list[sqlite3.Row]:
         """Per segment, over sent recipients: how many, how many lack a user
-        ID, and — with a link of their own — who clicked and how often.
-        `own` is 0 when the segment's recipients had no personal links."""
+        ID, and — for those sent a link of their own — who clicked and how
+        often. Joins on `link_key`, the link each recipient actually got."""
         return self._conn().execute(
             "SELECT COALESCE(r.segment, '') AS segment, COUNT(*) AS sent, "
             "SUM(r.user_id IS NULL) AS missing_user_id, "
-            "SUM(l.key IS NOT NULL) AS own, "
-            "SUM(COALESCE(l.clicks, 0) > 0) AS clicked, "
-            "SUM(COALESCE(l.clicks, 0) > 0 AND r.user_id IS NULL) AS clicked_missing_user_id, "
-            "SUM(COALESCE(l.clicks, 0)) AS clicks "
-            "FROM recipients r LEFT JOIN links l ON l.key = r.phone "
+            "SUM(CASE WHEN r.link_key = r.phone THEN 1 ELSE 0 END) AS own, "
+            "SUM(CASE WHEN r.link_key = r.phone AND COALESCE(l.clicks, 0) > 0 "
+            "    THEN 1 ELSE 0 END) AS clicked, "
+            "SUM(CASE WHEN r.link_key = r.phone AND COALESCE(l.clicks, 0) > 0 "
+            "    AND r.user_id IS NULL THEN 1 ELSE 0 END) AS clicked_missing_user_id, "
+            "SUM(CASE WHEN r.link_key = r.phone THEN COALESCE(l.clicks, 0) ELSE 0 END) AS clicks "
+            "FROM recipients r LEFT JOIN links l ON l.key = r.link_key "
             "WHERE r.status=? GROUP BY r.segment ORDER BY r.segment",
             (SENT,),
         ).fetchall()
 
-    def shared_link_clicks(self) -> dict[str, int]:
-        """Clicks on shared links: 'segment:<name>' and 'campaign' keys."""
+    def shared_link_clicks(self) -> tuple[dict[str, int], int]:
+        """Clicks on shared links that were actually sent: per segment (each
+        segment link counted once) and on campaign-wide links."""
         rows = self._conn().execute(
-            "SELECT key, COALESCE(clicks, 0) AS clicks FROM links "
-            "WHERE key = 'campaign' OR key LIKE 'segment:%'"
+            "SELECT DISTINCT r.segment AS segment, l.key AS key, COALESCE(l.clicks, 0) AS clicks "
+            "FROM recipients r JOIN links l ON l.key = r.link_key "
+            "WHERE r.status=? AND r.link_key != r.phone",
+            (SENT,),
         ).fetchall()
-        return {r["key"]: r["clicks"] for r in rows}
+        per_segment: dict[str, int] = {}
+        campaign_keys: dict[str, int] = {}
+        for r in rows:
+            if r["key"].startswith("segment:"):
+                per_segment[r["segment"] or ""] = per_segment.get(r["segment"] or "", 0) + r["clicks"]
+            else:
+                campaign_keys[r["key"]] = r["clicks"]
+        return per_segment, sum(campaign_keys.values())
 
     def last_click_sync(self) -> float | None:
         row = self._conn().execute("SELECT MAX(clicks_synced_at) FROM links").fetchone()
@@ -710,8 +759,8 @@ class StateStore:
         yield from self._conn().execute(
             "SELECT l.ref, r.user_id, r.segment, l.short_url, r.sent_at, "
             "r.delivery_status, l.clicks "
-            "FROM recipients r JOIN links l ON l.key = r.phone "
-            "WHERE r.status=? ORDER BY r.sent_at, l.ref",
+            "FROM recipients r JOIN links l ON l.key = r.link_key "
+            "WHERE r.status=? AND r.link_key = r.phone ORDER BY r.sent_at, l.ref",
             (SENT,),
         )
 
@@ -719,8 +768,8 @@ class StateStore:
         """Recipients who clicked their own link, most clicks first."""
         yield from self._conn().execute(
             "SELECT r.phone, r.user_id, r.segment, l.ref, l.clicks "
-            "FROM recipients r JOIN links l ON l.key = r.phone "
-            "WHERE l.clicks > 0 ORDER BY l.clicks DESC, r.phone"
+            "FROM recipients r JOIN links l ON l.key = r.link_key "
+            "WHERE r.link_key = r.phone AND l.clicks > 0 ORDER BY l.clicks DESC, r.phone"
         )
 
     # ---------- reporting ----------
