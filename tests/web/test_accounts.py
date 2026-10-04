@@ -1,6 +1,8 @@
 """Step 3.4: sign-in with two-step verification for operators and admins,
 the three roles, the users page, password change, and the activity log
 (spec 4.12). Every page and message is Persian."""
+import re
+
 import pytest
 
 pytest.importorskip("django")
@@ -146,6 +148,10 @@ def test_an_operator_without_an_app_sets_one_up_first(client, make_user):
     assert page.status_code == 200
     assert "راه‌اندازی تأیید دومرحله‌ای" in html and "<svg" in html
     assert "no-store" in page["Cache-Control"]  # the page shows the secret key
+    # The QR code scales with the page: a viewBox, no fixed size (a fixed
+    # size inside a smaller box got cropped, and phones couldn't read it).
+    svg = re.search(r"<svg[^>]*>", html).group(0)
+    assert "viewBox=" in svg and "width=" not in svg and "height=" not in svg
     device = TOTPDevice.objects.get(user=operator)
     assert not device.confirmed
     assert page.context["secret"].replace(" ", "") in html.replace(" ", "")

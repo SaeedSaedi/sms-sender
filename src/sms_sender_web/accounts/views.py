@@ -85,7 +85,12 @@ def two_factor_setup(request):
     secret = b32encode(device.bin_key).decode()
     return render(request, "accounts/two_factor_setup.html", {
         "form": form,
-        "qr": segno.make(device.config_url, error="m").svg_inline(scale=5, dark="#1c1d21"),
+        # A viewBox and no fixed size (omitsize), so CSS scales the whole code.
+        # Without it the stylesheet's smaller box cropped the drawing, cutting
+        # off two of the corner squares a camera needs.
+        "qr": segno.make(device.config_url, error="m").svg_inline(
+            scale=5, dark="#1c1d21", light="#ffffff", omitsize=True,
+        ),
         "secret": " ".join(secret[i:i + 4] for i in range(0, len(secret), 4)),
         "next": _next(request),
     })
