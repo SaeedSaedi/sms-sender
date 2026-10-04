@@ -163,7 +163,7 @@ form.inline select { inline-size: auto; padding-block: .2rem; }
 .steps { padding-inline-start: 1.5rem; list-style-type: persian; }
 .steps li { margin-block-end: 1rem; }
 .qr { margin-block: .75rem; }
-.qr svg { display: block; inline-size: 12rem; block-size: auto; padding: .5rem; background: #fff; }
+.qr svg { display: block; inline-size: min(16rem, 100%); block-size: auto; background: #fff; }
 .secret {
   display: inline-block;
   margin-block: .35rem;
