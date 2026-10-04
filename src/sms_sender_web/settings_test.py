@@ -14,3 +14,6 @@ STORAGES = {
 }
 # Fast hashing: tests create users.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+# WhiteNoise looks for the collected files at startup; tests never collect.
+STATIC_ROOT = DATA_DIR / "static"  # noqa: F405
+STATIC_ROOT.mkdir(parents=True, exist_ok=True)
