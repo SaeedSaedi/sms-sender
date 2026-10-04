@@ -337,6 +337,16 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - `PreflightError(message, key, **fields)` → `RunSummary.stop_reason` / `stop_fields`. That includes `provider_halt` with Kavenegar's code, and `window_closed`. The worker adds `busy`, `settings_mismatch`, `input_unreadable`, `crashed` and `given_up` in `Job.result`.
   - `sender.token_issue`, `links.destination_issue` and `InvalidRow.key` are the keyed forms of the CLI's messages. `token_problem` / `destination_problem` word them in English.
   - `campaigns/terms.py` holds the Persian for every key. Add a key there, and in the catalog, whenever the engine gains one.
+  - Notes too: `Reporter.note(text, key, **fields)`. The English text is for the CLI and logs. `JobReporter` stores `key` and `data` on a `JobEvent`, and the history shows `terms.NOTES[key]` (`campaigns/present.notes`). A note without a key is never shown.
+- **Campaign lifecycle ([lifecycle.py](src/sms_sender_web/campaigns/lifecycle.py), plan 05 P2):**
+  - One derived stage, never stored, from the settings and the latest test and send jobs:
+    - `draft` → `ready` → `testing` → `awaiting` → `approved`;
+    - then `scheduled` / `sending` / `paused` / `stopped` → `completed` / `cancelled`.
+  - A test newer than the latest send takes over.
+  - `step` (1–5: message and list, check and preview, test SMS, send, results) drives the stepper, and `tone` the pill.
+  - The campaign page includes `campaigns/stage/_<stage>.html` as its current step. `present.py` turns jobs into Persian: `result_line`, `notes`, `top_errors`, `send_summary`.
+  - The overview (`dashboard/views.home`) counts stages into tiles and lists what needs attention: tests to approve, stopped sends with their reason, and leftovers after a send.
+  - **Sending window:** a send the window stops (`stop_reason` `window_closed` or `outside_window`) is `paused`, and `Worker.resume_when_window_opens` (every loop) queues it again once the window is open. An operator's pause is never resumed for them.
 - **Jobs and the worker** (`jobs/`, spec 4.6 / 4.8). `Campaign` holds a campaign's send settings, in the CLI's terms; its `slug` names `data/db/<slug>.db`. `Job` kinds: send, reconcile, delivery, clicks. `JobEvent` holds the engine's notes.
   - **Claiming:** `Worker.claim` takes the oldest queued job, or a running one whose lease expired, with an atomic UPDATE. A heartbeat thread renews the lease every 10 s and reads `Job.control`.
   - **Stopping:** pause, cancel and SIGTERM all end in `Runner.cancel()`. Afterwards, a paused job waits, a cancelled one runs `StateStore.cancel_remaining()` (claimable → `cancelled`), and an interrupted one goes back to queued.

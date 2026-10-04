@@ -1,0 +1,15 @@
+{% load i18n fa roles ui %}
+<h2>{% icon "message-square-text" %}{% translate "Test SMS" %}</h2>
+{% if active_test %}
+  <p class="busy">{{ active_test.get_state_display }}: {% translate "checks, short links and the test SMS…" %}</p>
+  {% if test_links %}
+    <progress id="test-progress" max="{{ test_links.total }}" value="{{ test_links.done }}" aria-labelledby="test-progress-label"></progress>
+    <p class="num" id="test-progress-label">{{ test_links.label }}{% if test_links.left %} · {{ test_links.left }}{% endif %}</p>
+  {% endif %}
+  {% if user|can:"run_campaigns" %}
+    <form method="post" action="{% url 'campaign_action' campaign.slug 'cancel' %}" class="form-actions" id="test-cancel-form">
+      {% csrf_token %}<input type="hidden" name="job" value="{{ active_test.pk }}">
+      <button type="submit" class="small secondary">{% translate "Cancel" %}</button>
+    </form>
+  {% endif %}
+{% endif %}

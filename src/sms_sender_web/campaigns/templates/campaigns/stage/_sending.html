@@ -1,0 +1,45 @@
+{% load i18n fa roles ui %}
+<h2>{% icon "megaphone" %}{% translate "Send" %}</h2>
+{% if life.paused_by_window and send_reason %}
+  <div class="callout callout-warning">{% icon "clock" %}<p>{{ send_reason }}</p></div>
+{% endif %}
+{% if active_send %}
+  <p class="busy">{{ active_send.get_state_display }}{% if active_send.control == "pause" %} · {% translate "pausing…" %}{% elif active_send.control == "cancel" %} · {% translate "cancelling…" %}{% endif %}</p>
+  {% with p=active_send.progress %}
+    {% if send_links %}
+      <progress id="send-progress" max="{{ send_links.total }}" value="{{ send_links.done }}" aria-labelledby="send-progress-label"></progress>
+      <p class="num" id="send-progress-label">{{ send_links.label }}{% if send_links.left %} · {{ send_links.left }}{% endif %}</p>
+    {% elif p.total %}
+      <progress id="send-progress" max="{{ p.total }}" value="{{ p.processed|default:0 }}" aria-labelledby="send-progress-label"></progress>
+      <p class="num" id="send-progress-label">{{ p.processed|default:0|fa_number }} / {{ p.total|fa_number }}</p>
+      <ul class="meta-list">
+        <li>{% translate "Accepted" %} <span class="num">{{ p.sent|default:0|fa_number }}</span></li>
+        <li>{% translate "Not sent" %} <span class="num">{{ p.failed_retriable|default:0|fa_number }}</span></li>
+        <li>{% translate "Rejected" %} <span class="num">{{ p.failed_permanent|default:0|fa_number }}</span></li>
+        <li>{% translate "Unknown" %} <span class="num">{{ p.unknown|default:0|fa_number }}</span></li>
+      </ul>
+    {% endif %}
+  {% endwith %}
+  {% if user|can:"run_campaigns" %}
+    <div class="actions follow-up">
+      {% if active_send.state == "paused" and not life.paused_by_window %}
+        <form method="post" action="{% url 'campaign_action' campaign.slug 'resume' %}" class="inline" id="resume-form">
+          {% csrf_token %}<input type="hidden" name="job" value="{{ active_send.pk }}">
+          <button type="submit" class="small">{% icon "play" %}{% translate "Resume sending" %}</button>
+        </form>
+      {% elif active_send.state != "paused" and not active_send.control %}
+        <form method="post" action="{% url 'campaign_action' campaign.slug 'pause' %}" class="inline" id="pause-form">
+          {% csrf_token %}<input type="hidden" name="job" value="{{ active_send.pk }}">
+          <button type="submit" class="small secondary">{% icon "pause" %}{% translate "Pause" %}</button>
+        </form>
+      {% endif %}
+      {% if active_send.control != "cancel" %}
+        <form method="post" action="{% url 'campaign_action' campaign.slug 'cancel' %}" class="inline" id="cancel-form"
+              data-confirm="{{ cancel_confirm }}">
+          {% csrf_token %}<input type="hidden" name="job" value="{{ active_send.pk }}">
+          <button type="submit" class="small danger">{% icon "square" %}{% translate "Cancel the campaign" %}</button>
+        </form>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endif %}

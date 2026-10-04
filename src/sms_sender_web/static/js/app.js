@@ -167,6 +167,15 @@
     if (summary) summary.focus();
   });
 
+  // ---------- live updates ----------
+
+  // A live update morphs the page in place; a <details> someone opened stays
+  // open (the server's copy never has `open`).
+  document.addEventListener("DOMContentLoaded", () => {
+    if (!window.Idiomorph) return;
+    Idiomorph.defaults.callbacks.beforeAttributeUpdated = (name, node) => !(name === "open" && node.tagName === "DETAILS");
+  });
+
   // ---------- HTMX: connection and stale pages ----------
 
   function banner(kind) {

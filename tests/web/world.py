@@ -77,6 +77,8 @@ PAGES: dict[str, tuple[str, str | None]] = {
     "campaign.sending": ("/campaigns/sending/", "operator"),
     "campaign.paused": ("/campaigns/paused/", "operator"),
     "campaign.halted": ("/campaigns/halted/", "operator"),
+    "campaign.completed": ("/campaigns/completed/", "operator"),
+    "campaign.draft": ("/campaigns/draft-1/", "operator"),
     "report": ("/reports/approved/", "viewer"),
     "status": ("/status/", "viewer"),
     "account": ("/account/", "operator"),
@@ -116,9 +118,12 @@ def _campaign(slug: str, name: str, segment: Segment, *, db_rows: dict[str, str]
             if status == "sent":
                 store.claim(phone)
                 store.mark_sent(phone, 1000 + n, 200, 3020)
-            elif status == "failed_permanent":
+            elif status in ("failed_permanent", "failed_retriable"):
                 store.claim(phone)
-                store.mark_failed(phone, 411, "[411] invalid receptor", permanent=True)
+                store.mark_failed(phone, 411, "[411] invalid receptor", permanent=status == "failed_permanent")
+            elif status == "unknown":
+                store.claim(phone)
+                store.mark_unknown(phone, "outcome unknown: read timed out")
     return campaign
 
 
@@ -189,6 +194,24 @@ def build_world(data_dir: Path) -> World:
             settings_hash=services.settings_hash(campaign), result=result, progress=progress,
             control=control, started_at=now, finished_at=now if state == Job.State.FAILED else None,
         )
+
+    # A finished send with something left to do: an unknown outcome, one
+    # not sent, one rejected (Kavenegar 411), and the engine's notes.
+    done = campaigns["completed"] = _campaign(
+        "completed", "پایان‌یافته", vip,
+        db_rows={**rows, PHONES[3]: "unknown", PHONES[4]: "failed_retriable"},
+    )
+    _test_job(done, operator, approved=True)
+    finished = Job.objects.create(
+        campaign=done, kind=Job.Kind.SEND, state=Job.State.DONE, requested_by=operator,
+        settings_hash=services.settings_hash(done), started_at=now, finished_at=now,
+        result={"sent": 2, "failed_permanent": 1, "failed_retriable": 1, "unknown": 1, "cost": 6040,
+                "elapsed_sec": 95.0, "top_errors": [["[411] invalid receptor", 1]]},
+    )
+    finished.events.create(key="suppressed", text="1 recipient(s) are on the opt-out list", data={"n": 1})
+    finished.events.create(key="note", text="engine English, never shown")
+    draft_campaign = Campaign.objects.create(slug="draft-1", name="پیش‌نویس", settings={"segment": "vip"})
+    campaigns["draft"] = draft_campaign
 
     Suppression.objects.create(phone="09120000050", note="درخواست مشتری")
     record("campaign_created", user=operator, campaign="approved")

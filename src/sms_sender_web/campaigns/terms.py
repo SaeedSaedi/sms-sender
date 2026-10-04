@@ -9,7 +9,7 @@ from ..dashboard.templatetags.fa import fa_digits, fa_number
 
 STOP_REASONS = {
     "outside_window": _("It's outside the sending window ({start} to {end}, Tehran time); it's {now} now. Try again inside it."),
-    "window_closed": _("The sending window ({start} to {end}) ended. Resume inside the next one: it carries on from where it stopped."),
+    "window_closed": _("The sending window ({start} to {end}) ended. Sending continues by itself when it opens again, from where it stopped."),
     "not_enough_credit": _("Not enough credit: about {estimate} rials are needed for {recipients} SMS, and {credit} rials are left."),
     "no_credit": _("The Kavenegar account has no credit left ({credit} rials). Top it up before sending."),
     "debug_mode": _("The Kavenegar account is in debug mode, so no SMS would be delivered. Turn it off in the Kavenegar panel."),
@@ -143,4 +143,86 @@ SETTING_NAMES = {
     "send_window": _("sending window"),
     "rate": _("sending rate"),
     "workers": _("parallel sends"),
+}
+
+# ---------- the campaign's stage (lifecycle.py) ----------
+
+STAGES = {
+    "draft": _("Draft"),
+    "ready": _("Ready for a test"),
+    "testing": _("Testing"),
+    "awaiting": _("Awaiting approval"),
+    "approved": _("Ready to send"),
+    "scheduled": _("Scheduled"),
+    "sending": _("Sending"),
+    "paused": _("Paused"),
+    "stopped": _("Stopped with an error"),
+    "completed": _("Completed"),
+    "cancelled": _("Cancelled"),
+}
+# Campaigns the CLI made: the dashboard only has their records.
+CLI_CAMPAIGN = _("Made with the command line")
+
+STEPS = (
+    _("Message and list"),
+    _("Check and preview"),
+    _("Test SMS"),
+    _("Send"),
+    _("Results"),
+)
+
+NEXT_STEP = {
+    "draft": _("Choose the segment, the template and what fills its tokens."),
+    "ready": _("Check the list, then send a test SMS to yourself."),
+    "testing": _("The test SMS is on its way to your number."),
+    "awaiting": _("Check the test SMS on your phone, then approve it or reject it."),
+    "approved": _("Everything is ready. Start sending when you want."),
+    "scheduled": _("Sending starts at the set time."),
+    "sending": _("Sending. You can pause or cancel at any time."),
+    "paused": _("Paused. Resume when you're ready."),
+    "paused_by_window": _("Paused: the sending window closed. Sending continues by itself when it opens again."),
+    "stopped": _("Sending stopped on an error. Fix it, then continue: nobody gets the SMS twice."),
+    "completed": _("Sending finished. The results and what's left to do are below."),
+    "cancelled": _("Cancelled. Recipients who hadn't got the SMS won't get it."),
+}
+
+# ---------- what the engine noted during a job (JobEvent keys) ----------
+
+NOTES = {
+    "links_ready": _("Short links ready: {needed} ({created} made now)."),
+    "account": _("Kavenegar account credit: {credit} rials."),
+    "resend_failed_on": _("Kavenegar resends undelivered SMS once by itself (resend failed is on)."),
+    "cost_estimate": _("Estimated cost: {count} SMS × {per_sms} rials = {estimate} rials; credit {credit} rials."),
+    "test_tokens_from": _("The test SMS uses the tokens of {phone}."),
+    "test_sending": _("Sending the test SMS to {phone}."),
+    "test_sent": _("The test SMS was sent."),
+    "reconciled": _("Checked {checked} unknown outcomes with Kavenegar: {sent} had been sent, {requeued} had not, {needs_review} need review."),
+    "smoke_sending": _("Sending to one recipient first: {phone}."),
+    "smoke_passed": _("The first recipient's SMS was accepted; sending to the rest."),
+    "window_closed": _("The sending window closed."),
+    "window_resumed": _("The sending window opened; sending continues."),
+    "settings_changed": _("The campaign's settings changed: {changed}."),
+    "orphans": _("{n} recipients were mid-send when the last run stopped: they're marked unknown and not sent again."),
+    "suppressed": _("{n} recipients are on the suppression list and won't be sent."),
+    "not_in_input": _("{n} queued recipients aren't in the segment's file, so they were skipped."),
+    "missing_user_id": _("{n} recipients have no user ID: they're sent, and reported as missing user ID."),
+    "user_id_conflicts": _("{n} numbers came with two different user IDs and won't be sent."),
+}
+
+# ---------- what a job did (the history) ----------
+
+JOB_RESULTS = {
+    "reconcile": _("Found sent {sent} · Safe to send again {requeued} · Needs review {needs_review} · Not checked yet {deferred}"),
+    "delivery": _("Checked {checked} · New delivery statuses {updated}"),
+    "clicks": _("Links {links} · Clicks {clicks}"),
+}
+TOP_ERROR = _("Error {code}: {meaning}")
+TOP_ERROR_NO_CODE = _("An error Kavenegar didn't explain")
+
+# What's left to do after a send (the results step).
+FOLLOWUPS = {
+    "unknown": _("{n} recipients' outcome is unknown: they're checked with Kavenegar at the next run, or you can check now."),
+    "not_sent": _("{n} recipients weren't sent (for example, Kavenegar was busy). You can send to them again."),
+    "needs_review": _("{n} recipients need review: Kavenegar's records weren't clear, so an admin decides."),
+    "rejected": _("Kavenegar rejected {n} recipients; the most common reasons are above."),
 }

@@ -49,7 +49,7 @@ class RecordingReporter:
         self.ticks: list[int] = []
         self.finished = 0
 
-    def note(self, text):
+    def note(self, text, key="note", **fields):
         self.notes.append(text)
 
     def start(self, total):

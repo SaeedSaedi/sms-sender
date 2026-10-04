@@ -21,9 +21,11 @@ class JobReporter:
         self._links_started: float | None = None
         self.last_note: str | None = None  # e.g. why a run halted
 
-    def note(self, text: str) -> None:
+    def note(self, text: str, key: str = "note", **fields: object) -> None:
+        """The engine's English stays in `text` (logs, developers); the page
+        shows `key` and its `data` in Persian (campaigns/terms.NOTES)."""
         self.last_note = text
-        JobEvent.objects.create(job_id=self.job_id, key="note", text=text)
+        JobEvent.objects.create(job_id=self.job_id, key=key, text=text, data=fields)
 
     def links(self, done: int, total: int) -> None:
         """The link stage's progress, with a time left from the pace so far

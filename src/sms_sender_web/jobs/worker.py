@@ -34,9 +34,10 @@ from sms_sender.input_loader import InputError
 from sms_sender.locking import RunLock, RunLockError
 from sms_sender.reconcile import reconcile_unknown
 from sms_sender.state import CampaignMismatchError
+from sms_sender.window import DEFAULT_WINDOW, now_tehran, parse_window
 
 from .engine import Engine, campaign_db
-from .models import Campaign, Job, WorkerBeat
+from .models import Campaign, Job, JobEvent, WorkerBeat
 from .reporter import JobReporter
 from .services import ACTIVE
 
@@ -48,6 +49,9 @@ HEARTBEAT_SEC = 10.0
 # the job itself keeps killing the worker).
 MAX_ATTEMPTS = 5
 SCHEDULE_EVERY = timedelta(minutes=5)
+# Why a send waits for the sending window: it closed mid-run, or it was
+# never open when the send started.
+WINDOW_STOPS = ("window_closed", "outside_window")
 # The status page calls a worker alive if it was seen this recently.
 ALIVE_WITHIN = timedelta(seconds=60)
 DELIVERY_EVERY = timedelta(minutes=15)
@@ -164,6 +168,7 @@ class Worker:
             try:
                 self.beat()
                 self.schedule()
+                self.resume_when_window_opens()
                 if self.run_once() is None:
                     self.stop.wait(poll_sec)
             except Exception:  # noqa: BLE001 — keep the worker alive
@@ -242,13 +247,17 @@ class Worker:
             return Job.State.PAUSED, result, ""
         if reason.value in ("shutdown", "lost"):
             return Job.State.QUEUED, result, ""  # taken up again by the next worker
+        if not test and result.get("stop_reason") in WINDOW_STOPS:
+            # Outside the sending window: it waits, and goes on by itself when
+            # the window opens (resume_when_window_opens).
+            return Job.State.PAUSED, result, "outside the sending window; it continues when the window opens"
         if summary.halted:
             # A halt mid-send (e.g. credit ran out) leaves its reason in the
             # top errors; a failed pre-send check, in the last note.
             why = "; ".join(f"{message} (x{count})" for message, count in summary.top_errors)
             return Job.State.FAILED, result, why or reporter.last_note or "the run halted"
         if summary.stopped and not test:
-            return Job.State.PAUSED, result, "the sending window closed; resume inside it"
+            return Job.State.PAUSED, result, "the sending window closed; it continues when the window opens"
         return Job.State.DONE, result, ""
 
     def _reconcile(self, job: Job):
@@ -267,6 +276,32 @@ class Worker:
     def _clicks(self, job: Job):
         summary = sync_clicks(self.engine.state(job.campaign), self.engine.link_client(), job.campaign.slug)
         return Job.State.DONE, dataclasses.asdict(summary), ""
+
+    # ---------- the sending window ----------
+
+    def resume_when_window_opens(self) -> int:
+        """Sends the sending window paused go on by themselves once it opens
+        again (decided 2026-10-04). Never one an operator paused. Returns how
+        many were queued again."""
+        resumed = 0
+        now = now_tehran()
+        for job in Job.objects.filter(kind=Job.Kind.SEND, state=Job.State.PAUSED).select_related("campaign"):
+            if (job.result or {}).get("stop_reason") not in WINDOW_STOPS:
+                continue
+            try:
+                window = parse_window(job.campaign.settings.get("send_window", DEFAULT_WINDOW))
+            except ValueError:
+                continue
+            if window is not None and not window.contains(now):
+                continue
+            if Job.objects.filter(pk=job.pk, state=Job.State.PAUSED).update(
+                state=Job.State.QUEUED, control="", finished_at=None,
+            ):
+                JobEvent.objects.create(job=job, key="window_resumed",
+                                        text="the sending window opened; sending continues")
+                logger.info("job_resumed_by_window", extra={"job": job.pk})
+                resumed += 1
+        return resumed
 
     # ---------- periodic updates ----------
 

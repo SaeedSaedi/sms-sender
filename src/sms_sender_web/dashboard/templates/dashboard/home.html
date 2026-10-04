@@ -6,16 +6,43 @@
     <div class="page-actions"><a class="button" href="{% url 'campaign_new' %}">{% icon "plus" %}{% translate "New campaign" %}</a></div>
   {% endif %}
 </header>
+
+{% if not worker_alive %}
+  <div class="callout callout-error" role="alert">{% icon "circle-alert" %}<p>{% translate "Worker" %}: {% translate "Not running: jobs wait until it starts." %} <a href="{% url 'status' %}">{% translate "Service status" %}</a></p></div>
+{% endif %}
+
+{% if campaigns %}
+<dl class="figures overview">
+  {% for label, n, stage in tiles %}
+    <div class="tile-{{ stage }}"><dt>{{ label }}</dt><dd class="num">{{ n|fa_number }}</dd></div>
+  {% endfor %}
+</dl>
+{% endif %}
+
+{% if attention %}
+<section class="card step attention">
+  <h2>{% icon "triangle-alert" %}{% translate "Needs attention" %}</h2>
+  <ul class="attention-list">
+    {% for item in attention %}
+      <li>
+        <a href="{% url 'campaign_detail' item.campaign.slug %}"><bdi>{{ item.campaign.name }}</bdi></a>
+        <span class="pill pill-{{ item.life.tone }}">{{ item.stage }}</span>
+        {% for line in item.lines %}<p>{{ line }}</p>{% endfor %}
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 {% if campaigns %}
 <div class="table-wrap">
   <table class="table-stack">
     <thead>
       <tr>
         <th scope="col">{% translate "Campaign" %}</th>
-        <th scope="col">{% translate "Template" %}</th>
+        <th scope="col">{% translate "Stage" %}</th>
         <th scope="col">{% translate "Recipients" %}</th>
         <th scope="col">{% translate "Statuses" %}</th>
-        <th scope="col">{% translate "Short links" %}</th>
         <th scope="col">{% translate "Last run" %}</th>
         <th scope="col"><span class="visually-hidden">{% translate "Report" %}</span></th>
       </tr>
@@ -23,8 +50,17 @@
     <tbody>
     {% for row in campaigns %}{% with c=row.summary %}
       <tr>
-        <th scope="row">{% if row.campaign %}<a href="{% url 'campaign_detail' c.slug %}"><bdi>{{ row.campaign.name }}</bdi></a>{% else %}{{ c.name|ltr }}{% endif %}</th>
-        <td data-label="{% translate "Template" %}">{% if c.template %}{{ c.template|ltr }}{% elif row.campaign.settings.template %}{{ row.campaign.settings.template|ltr }}{% else %}—{% endif %}</td>
+        <th scope="row">
+          {% if row.campaign %}<a href="{% url 'campaign_detail' c.slug %}"><bdi>{{ row.campaign.name }}</bdi></a>{% else %}{{ c.name|ltr }}{% endif %}
+          <span class="cell-sub">{% if c.template %}{{ c.template|ltr }}{% elif row.campaign.settings.template %}{{ row.campaign.settings.template|ltr }}{% endif %}</span>
+        </th>
+        <td data-label="{% translate "Stage" %}">
+          <span class="pill pill-{{ row.tone }}">{{ row.stage }}</span>
+          {% if row.progress %}
+            <progress class="mini" max="{{ row.progress.total }}" value="{{ row.progress.done }}" aria-label="{{ row.stage }}"></progress>
+            <span class="cell-sub num">{{ row.progress.done|fa_number }} / {{ row.progress.total|fa_number }}</span>
+          {% endif %}
+        </td>
         <td data-label="{% translate "Recipients" %}" class="num">{{ c.recipients|fa_number }}</td>
         <td data-label="{% translate "Statuses" %}">
           <ul class="badges">
@@ -33,7 +69,6 @@
           {% endif %}{% endwith %}{% endfor %}
           </ul>
         </td>
-        <td data-label="{% translate "Short links" %}" class="num">{% if c.links %}{{ c.links|get:"ready"|fa_number }}{% else %}—{% endif %}</td>
         <td data-label="{% translate "Last run" %}">{% if c.last_run_at %}{{ c.last_run_at|jalali }}{% else %}—{% endif %}</td>
         <td>{% if c.counts %}<a href="{% url 'report' c.slug %}">{% translate "Report" %}</a>{% endif %}</td>
       </tr>

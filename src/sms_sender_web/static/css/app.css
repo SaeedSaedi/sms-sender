@@ -765,3 +765,73 @@ button.copy:hover { border-color: var(--primary); background: var(--surface); co
 .callout + .callout { margin-block-start: var(--s-2); }
 .callout + .figures, .figures + .callout { margin-block-start: var(--s-4); }
 .field-errors > p.error { margin-block: var(--s-1) 0; }
+
+/* ---------- a campaign's stage and steps (plan 05, P2) ---------- */
+
+.pill-neutral { border-color: var(--border-strong); background: var(--surface-2); color: var(--text-2); }
+
+.stage-banner { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); margin-block-end: var(--s-4); }
+.stage-banner > p { margin: 0; color: var(--text-2); }
+.stage-banner .pill { font-size: var(--fs-md); padding: .2rem .8rem; }
+
+.stepper {
+  display: flex;
+  gap: var(--s-2);
+  margin: 0 0 var(--s-5);
+  padding: 0;
+  list-style: none;
+}
+.stepper li {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-inline-size: 0;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+.stepper-n {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border: 2px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  font-weight: 750;
+}
+.stepper-n .icon { inline-size: 1rem; block-size: 1rem; }
+.stepper .is-done { color: var(--text-2); }
+.stepper .is-done .stepper-n { border-color: var(--success); background: var(--success); color: var(--surface); }
+.stepper .is-current { border-color: var(--primary); background: var(--primary-soft); color: var(--text); font-weight: 700; }
+.stepper .is-current .stepper-n { border-color: var(--primary); color: var(--primary); }
+.stepper-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 900px) {
+  .stepper li:not(.is-current) { flex: none; }
+  .stepper li:not(.is-current) .stepper-label {
+    position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%);
+  }
+}
+
+.current-step { border-color: var(--primary-soft-2); box-shadow: var(--shadow-2); }
+.job-notes { margin-block-start: var(--s-2); font-size: var(--fs-sm); }
+.job-notes > summary { cursor: pointer; color: var(--primary); }
+
+/* ---------- the campaigns overview ---------- */
+
+.overview { margin-block-end: var(--s-5); }
+.overview > div { background: var(--surface); }
+.overview .tile-stopped dd { color: var(--danger); }
+.overview .tile-awaiting dd { color: var(--warning); }
+.attention-list { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s-3); }
+.attention-list li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-3); padding-block-end: var(--s-3); border-block-end: 1px solid var(--border); }
+.attention-list li:last-child { padding-block-end: 0; border-block-end: 0; }
+.attention-list li > a { font-weight: 700; }
+.attention-list li > p { flex-basis: 100%; margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
+.cell-sub { display: block; color: var(--muted); font-size: var(--fs-xs); font-weight: 400; }
+progress.mini { display: block; inline-size: 8rem; block-size: .4rem; margin-block-start: var(--s-1); }
