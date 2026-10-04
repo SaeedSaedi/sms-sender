@@ -3,17 +3,31 @@
 A row is `unknown` when its request may have reached Kavenegar without a
 clear answer (read timeout, dropped connection, crash mid-send). Resending
 it blindly could deliver a second SMS, so instead we look the phone up with
-`sms/statusbyreceptor` around the time of the attempt:
+`sms/statusbyreceptor`.
 
-- exactly one message we don't already know → it was ours: `sent`
-- none → it never went out: `failed_retriable`, the next run sends it —
-  but only with `requeue_not_found` (see REQUEUE_NOT_FOUND); until then
-  `needs_review`
+How that lookup behaves (checked against the live API on 2026-10-04): it
+answers per calendar day, not per second — any window inside a day returns
+that whole day's messages to the phone, and other days return nothing. A
+fresh message is listed within a minute, and the entries carry no time.
+`sms/select`, which has each message's time and text, needs our IP on an
+allowlist (error 407), so it isn't used.
+
+So the candidates are the phone's messages on the day(s) of the attempt,
+minus every message ID already recorded — in this campaign's DB (sent rows,
+the approval test) and in the other campaign DBs next to it, since another
+campaign may have reached the same person that day. Then:
+
+- exactly one left → it was ours: `sent`
+- none, for an attempt under a day old → it never went out:
+  `failed_retriable`, the next run sends it (see REQUEUE_NOT_FOUND)
+- none, for an older attempt → `needs_review`: a 5-day-old message wasn't
+  listed (2026-10-04), so "not found" proves nothing that late
 - several → can't tell which is ours: `needs_review`, an operator decides
 
-Message IDs this DB already accounts for (sent rows, the approval test)
-never count. The campaign account carries no OTP traffic, so "several" only
-happens if two campaigns reach the same phone within minutes.
+A message sent from the campaign account outside sms-sender (e.g. from
+Kavenegar's panel) on the same day isn't recorded anywhere and could be
+taken for ours: the row then counts as `sent` without an SMS of its own.
+That errs on the side of never sending twice.
 
 Rows younger than `min_age_sec` wait: Kavenegar records a send within a
 second, and the margin covers clock skew and a request still settling.
@@ -24,23 +38,25 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Callable
 
-from .sender import HaltError, SendError, Sender
+from .sender import HaltError, ProviderMessage, SendError, Sender
 from .state import StateStore
+from .window import TEHRAN
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MIN_AGE_SEC = 300.0
 
-# Is "Kavenegar has no message for this phone" proof that the SMS never left?
-# Only if sms/statusbyreceptor lists verify/lookup messages. That isn't
-# confirmed against the live API yet: a 5-day-old lookup message wasn't found
-# (2026-10-04), which may just be how far back it keeps. Until a fresh message
-# is found, a not-found row goes to review instead of being sent again.
-REQUEUE_NOT_FOUND = False
-# Lookup window around a row's last claim: our clock vs Kavenegar's before
-# it, the claim's whole retry sequence after it (Kavenegar allows ≤ 1 day).
+# "Nothing at Kavenegar" means "never sent": confirmed for a fresh message on
+# 2026-10-04 (found within a minute), so a not-found row is sent again — but
+# only while Kavenegar still lists the attempt's day.
+REQUEUE_NOT_FOUND = True
+TRUST_NOT_FOUND_SEC = 24 * 3600
+# Window around a row's last claim: our clock vs Kavenegar's before it, the
+# claim's whole retry sequence after it. Kavenegar only looks at the days it
+# touches.
 WINDOW_BEFORE_SEC = 120
 WINDOW_AFTER_SEC = 900
 
@@ -49,12 +65,32 @@ WINDOW_AFTER_SEC = 900
 class ReconcileSummary:
     sent: int = 0          # found at Kavenegar → `sent`
     requeued: int = 0      # not found → `failed_retriable`, safe to send again
-    needs_review: int = 0  # several candidates → `needs_review`
+    needs_review: int = 0  # several candidates, or too old to trust → `needs_review`
     deferred: int = 0      # too recent, or Kavenegar couldn't be asked: still `unknown`
 
     @property
     def checked(self) -> int:
         return self.sent + self.requeued + self.needs_review
+
+
+def _spans(start: float, end: float) -> list[tuple[float, float]]:
+    """The lookups to make. Kavenegar answers per day; when the window
+    crosses midnight — in Tehran or in UTC, it isn't documented which it
+    uses — each day is also asked on its own."""
+    spans = [(start, end)]
+    for tz in (TEHRAN, timezone.utc):
+        if datetime.fromtimestamp(start, tz).date() != datetime.fromtimestamp(end, tz).date():
+            spans += [(start, start + 1), (end - 1, end)]
+            break
+    return spans
+
+
+def _lookup(sender: Sender, phone: str, start: float, end: float) -> list[ProviderMessage]:
+    found: dict[int, ProviderMessage] = {}
+    for a, b in _spans(start, end):
+        for message in sender.find_messages(phone, a, b):
+            found.setdefault(message.message_id, message)
+    return list(found.values())
 
 
 def reconcile_unknown(
@@ -69,15 +105,18 @@ def reconcile_unknown(
     `unknown`; a failed lookup for one phone just defers that row.
     """
     sent = requeued = needs_review = deferred = 0
-    known = state.known_message_ids()
-    for phone, attempted_at in state.list_unknown():
+    rows = state.list_unknown()
+    if not rows:
+        return ReconcileSummary()
+    known = state.known_message_ids() | state.neighbour_message_ids()
+    for phone, attempted_at in rows:
         started = now()
         if attempted_at is None or started - attempted_at < min_age_sec:
             deferred += 1
             continue
         try:
-            messages = sender.find_messages(
-                phone,
+            messages = _lookup(
+                sender, phone,
                 attempted_at - WINDOW_BEFORE_SEC,
                 min(attempted_at + WINDOW_AFTER_SEC, started),
             )
@@ -90,6 +129,7 @@ def reconcile_unknown(
 
         candidates = [m for m in messages if m.message_id not in known]
         message_id = None
+        fresh = started - attempted_at < TRUST_NOT_FOUND_SEC
         if len(candidates) == 1:
             message_id = candidates[0].message_id
             changed = state.settle_unknown_sent(phone, message_id)
@@ -99,22 +139,24 @@ def reconcile_unknown(
             if changed:
                 known.add(message_id)
                 sent += 1
-        elif not candidates and requeue_not_found:
-            outcome, detail = "reconciled_not_sent", "no message at kavenegar around the attempt"
+        elif not candidates and requeue_not_found and fresh:
+            outcome, detail = "reconciled_not_sent", "no message at kavenegar on the attempt's day"
             changed = state.settle_unknown_not_sent(phone, detail)
             if changed:
                 requeued += 1
         elif not candidates:
             outcome, detail = "needs_review", (
-                "no message at kavenegar around the attempt — not yet trusted as "
-                "proof it wasn't sent, so check before resending"
+                "no message at kavenegar on the attempt's day, but the attempt is "
+                "more than a day old, so that's no proof it wasn't sent; check first"
+                if requeue_not_found else
+                "no message at kavenegar on the attempt's day (requeue switched off)"
             )
             changed = state.settle_unknown_for_review(phone, detail)
             if changed:
                 needs_review += 1
         else:
             outcome, detail = "needs_review", (
-                f"{len(candidates)} messages to this phone around the attempt: "
+                f"{len(candidates)} messages to this phone on the attempt's day: "
                 + ", ".join(str(m.message_id) for m in candidates)
             )
             changed = state.settle_unknown_for_review(phone, detail)

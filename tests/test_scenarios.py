@@ -276,10 +276,10 @@ def test_unknown_from_this_run_is_settled_at_the_end(tmp_path):
         input_path=inp, state=state, sender=sender, workers=1, reconcile_min_age_sec=0,
     ).run()
     assert sender.calls == ["09120000001"]  # exactly once in this run
-    # Kavenegar has nothing for it; by default that's not yet trusted as
-    # "never sent", so an operator reviews it instead of a blind resend.
-    assert (summary.unknown, summary.needs_review) == (0, 1)
-    assert state.counts() == {NEEDS_REVIEW: 1}
+    # Kavenegar has nothing for it on the day of a fresh attempt: it never
+    # went out, so it's queued again — for the next run, not resent here.
+    assert (summary.unknown, summary.needs_review) == (0, 0)
+    assert state.counts() == {"failed_retriable": 1}
 
 
 def test_failed_reconciliation_never_blocks_or_resends(tmp_path):

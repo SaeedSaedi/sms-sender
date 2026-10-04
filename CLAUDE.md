@@ -135,7 +135,28 @@ Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_perm
 
 ### Reconciliation ([reconcile.py](src/sms_sender/reconcile.py))
 
-`unknown` rows are settled by asking Kavenegar what it actually sent, never by resending. `reconcile_unknown` looks each phone up with `sms/statusbyreceptor` (`Sender.find_messages`) in a window around its last claim (−120 s … +900 s; Kavenegar allows ≤ 1 day). Message IDs the DB already accounts for (`known_message_ids`: sent rows plus recorded calls, e.g. the approval test) never count. Exactly one other message → `sent`; several → `needs_review`, which only `reset --status needs_review` (with confirmation) makes claimable. None → `needs_review` too, by default (`reconcile.REQUEUE_NOT_FOUND = False`): a live lookup on 2026-10-04 didn't find a 5-day-old lookup message, so "not found" isn't yet trusted as "never sent". With `requeue_not_found` (CLI `--requeue-not-found`, `Runner(reconcile_requeue_not_found=True)`) it becomes `failed_retriable`, claimable again; flip the default once a fresh lookup message is confirmed findable. Kavenegar reports an empty lookup as error 449, which `find_messages` turns into `[]`. Rows younger than the min age (300 s) wait. The settle methods only change rows that are still `unknown`, and each decision is an `attempts` row of kind `reconcile`.
+`unknown` rows are settled by asking Kavenegar what it actually sent, never by resending. `reconcile_unknown` looks each phone up with `sms/statusbyreceptor` (`Sender.find_messages`).
+
+**How Kavenegar's lookup actually behaves** (checked live on 2026-10-04):
+- It answers **per calendar day**. Any window inside a day returns that whole day's messages to the phone; other days return nothing.
+- A fresh message is listed within a minute. Entries have no time field.
+- `sms/select`, which has each message's time and text, answers 407 without an IP allowlist, so it isn't used.
+- When the window around the claim (−120 s … +900 s) crosses midnight in Tehran or UTC, each day is also asked on its own (`reconcile._spans`).
+
+**Which messages count:** the candidates are the day's messages minus every known message ID. That means this DB's (`known_message_ids`: sent rows plus recorded calls such as the approval test) and every other campaign DB's in the same folder (`StateStore.neighbour_message_ids`, read-only), because another campaign may have texted the same person that day.
+
+**Outcomes:**
+- Exactly one candidate → `sent`.
+- Several → `needs_review`. Only `reset --status needs_review` (with confirmation) makes it claimable.
+- None:
+  - attempt under `TRUST_NOT_FOUND_SEC` (24 h) old → `failed_retriable` (`REQUEUE_NOT_FOUND = True`; CLI `--review-not-found` turns it off);
+  - older → `needs_review`, since a 5-day-old message wasn't listed.
+
+**Other rules:**
+- A message sent from the campaign account outside sms-sender on the same day could be taken for ours. The row then counts as `sent`: the error goes toward never sending twice.
+- Kavenegar reports an empty lookup as error 449, which `find_messages` turns into `[]`.
+- Rows younger than the min age (300 s) wait.
+- The settle methods only change rows that are still `unknown`, and each decision is an `attempts` row of kind `reconcile`.
 
 The runner reconciles at the start of every run (so rows Kavenegar never got go out with everyone else) and at the end (long runs). It's best-effort: if the lookup fails — even a `HaltError` — the rows just stay `unknown`. `sms-sender reconcile` does the same standalone under the run lock; exit 1 while rows remain `unknown` / `needs_review`, 2 if Kavenegar refuses the lookup.
 

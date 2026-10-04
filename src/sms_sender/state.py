@@ -556,6 +556,40 @@ class StateStore:
         ).fetchall()
         return {r[0] for r in rows}
 
+    def neighbour_message_ids(self) -> set[int]:
+        """Message IDs recorded by the other campaign DBs in this DB's folder.
+        Kavenegar's lookup lists a phone's messages for the whole day, so
+        another campaign's SMS to the same person must not be taken for
+        ours. Never writes to them (query_only) or upgrades them; files
+        that aren't readable databases are skipped."""
+        if self.db_path == ":memory:":
+            return set()
+        me = Path(self.db_path).resolve()
+        ids: set[int] = set()
+        for other in sorted(me.parent.glob("*.db")):
+            if other.resolve() == me:
+                continue
+            try:
+                # Not `mode=ro`: SQLite can't open a WAL database read-only once
+                # its -shm file is gone (any DB nobody has open). query_only
+                # makes this connection unable to write instead.
+                conn = sqlite3.connect(str(other), timeout=5)
+                try:
+                    conn.execute("PRAGMA query_only = ON")
+                    tables = {r[0] for r in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )}
+                    for table in ("recipients", "attempts"):
+                        if table in tables:
+                            ids.update(r[0] for r in conn.execute(
+                                f"SELECT message_id FROM {table} WHERE message_id IS NOT NULL"
+                            ))
+                finally:
+                    conn.close()
+            except sqlite3.Error:
+                continue
+        return ids
+
     def settle_unknown_sent(self, phone: str, message_id: int) -> bool:
         """Kavenegar has the message, so it was sent. Only an `unknown` row
         changes; returns whether one did."""

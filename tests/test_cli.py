@@ -545,15 +545,15 @@ def test_reconcile_command_settles_unknown_rows(tmp_path, monkeypatch):
     args = ["reconcile", "--state", str(db), "--min-age", "0",
             "--log-file", str(tmp_path / "test.log")]
 
-    # Default: "not found" isn't trusted yet → review, exit 1.
+    # Found → sent; nothing on the day of a fresh attempt → never sent, queued again.
     result = CliRunner().invoke(cli, args)
-    assert result.exit_code == 1, result.output
+    assert result.exit_code == 0, result.output
     assert "sent (found at Kavenegar)      1" in result.output
-    assert "needs review                   1" in result.output
-    assert StateStore(db).counts() == {SENT: 1, "needs_review": 1}
+    assert "not sent (safe to send again)  1" in result.output
+    assert StateStore(db).counts() == {SENT: 1, FAILED_RETRIABLE: 1}
 
 
-def test_reconcile_command_can_requeue_not_found(tmp_path, monkeypatch):
+def test_reconcile_command_can_send_not_found_to_review(tmp_path, monkeypatch):
     from sms_sender.sender import Sender
 
     monkeypatch.setenv("KAVENEGAR_API_KEY", "TEST_KEY")
@@ -561,12 +561,12 @@ def test_reconcile_command_can_requeue_not_found(tmp_path, monkeypatch):
     monkeypatch.setattr(Sender, "find_messages", lambda self, phone, start, end: [])
     result = CliRunner().invoke(
         cli,
-        ["reconcile", "--state", str(db), "--min-age", "0", "--requeue-not-found",
+        ["reconcile", "--state", str(db), "--min-age", "0", "--review-not-found",
          "--log-file", str(tmp_path / "test.log")],
     )
-    assert result.exit_code == 0, result.output
-    assert "not sent (safe to send again)  2" in result.output
-    assert StateStore(db).counts() == {FAILED_RETRIABLE: 2}
+    assert result.exit_code == 1, result.output
+    assert "needs review                   2" in result.output
+    assert StateStore(db).counts() == {"needs_review": 2}
 
 
 def test_reconcile_command_leaves_recent_rows_and_exits_1(tmp_path, monkeypatch):
