@@ -347,6 +347,16 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - The campaign page includes `campaigns/stage/_<stage>.html` as its current step. `present.py` turns jobs into Persian: `result_line`, `notes`, `top_errors`, `send_summary`.
   - The overview (`dashboard/views.home`) counts stages into tiles and lists what needs attention: tests to approve, stopped sends with their reason, and leftovers after a send.
   - **Sending window:** a send the window stops (`stop_reason` `window_closed` or `outside_window`) is `paused`, and `Worker.resume_when_window_opens` (every loop) queues it again once the window is open. An operator's pause is never resumed for them.
+- **Settings page, templates, preview (plan 05 P2):**
+  - The page's split controls (window from/until, rate number + unit, link-format choice + pattern, translation rows `vm_column`/`vm_source`/`vm_target`) are turned back into the form's combined fields by `forms.combined()` before validation. The CLI-shaped fields still work, so the validation is unchanged.
+  - Persian digits are accepted.
+  - UTM values go into `links` (part of the approved settings).
+  - `max_attempts`, `timeout`, `backoff_max` and `link_rate` are top-level settings. Only an admin (`manage_settings`) can change them; the form ignores them from anyone else.
+  - A campaign's `timeout` also applies to its follow-up jobs (`Engine.sender(campaign)`, `link_client(campaign)`).
+  - **Template library** (`campaigns.MessageTemplate`, `/templates/`): a copy of each Kavenegar template's text, used only to preview.
+  - `campaigns/message.py` fills `%token…` placeholders (longest first), counts length like the networks (GSM-7 160/153, UCS-2 70/67) and finds placeholders nothing fills or tokens the text doesn't use. `preview.py` fills them with the first valid row (after translations) and a sample link (`SAMPLE_CODE`).
+  - The settings page previews live: HTMX posts the unsaved form to `settings/preview/`, which saves nothing.
+  - `{% translate %}` doubles a `%` before the lookup, so a template string with `%` always shows in English. `test_catalog` refuses one; put such text in Python, or reword it.
 - **Jobs and the worker** (`jobs/`, spec 4.6 / 4.8). `Campaign` holds a campaign's send settings, in the CLI's terms; its `slug` names `data/db/<slug>.db`. `Job` kinds: send, reconcile, delivery, clicks. `JobEvent` holds the engine's notes.
   - **Claiming:** `Worker.claim` takes the oldest queued job, or a running one whose lease expired, with an atomic UPDATE. A heartbeat thread renews the lease every 10 s and reads `Job.control`.
   - **Stopping:** pause, cancel and SIGTERM all end in `Runner.cancel()`. Afterwards, a paused job waits, a cancelled one runs `StateStore.cancel_remaining()` (claimable → `cancelled`), and an interrupted one goes back to queued.

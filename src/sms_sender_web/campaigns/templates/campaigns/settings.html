@@ -10,9 +10,10 @@
 {% block content %}
 <header class="page-header">
   <h1>{% translate "Campaign settings" %}: <bdi>{{ campaign.name }}</bdi></h1>
-  <div class="page-actions"><a class="button secondary" href="{% url 'campaign_detail' campaign.slug %}">{% translate "Back to the campaign" %}</a></div>
 </header>
-<form method="post" class="settings">
+
+<div class="split settings-layout">
+<form method="post" class="settings split-main" id="settings-form" data-guard data-settings novalidate>
   {% csrf_token %}
   {% if form.errors %}
     <div class="callout callout-error error-summary" role="alert" tabindex="-1" data-autofocus>
@@ -24,105 +25,186 @@
     </div>
   {% endif %}
 
-  <fieldset class="card">
+  <fieldset>
     <legend>{% translate "Message" %}</legend>
     <label for="id_segment">{% translate "Segment" %}</label>
     <select id="id_segment" name="segment" required data-cli="send --input"{% aria form.segment %}>
       {% for segment in segments %}
-        <option value="{{ segment.slug }}"{% if form.segment.value == segment.slug %} selected{% endif %}>{{ segment.name }} ({{ segment.slug }})</option>
+        <option value="{{ segment.slug }}"{% if form.segment.value == segment.slug %} selected{% endif %}>{{ segment.name }} ({{ segment.slug }}) · {{ segment.summary.valid|default:0|fa_number }} {% translate "numbers" %}</option>
       {% endfor %}
     </select>
     {% field_errors form.segment alert=False %}
+
     <label for="id_template">{% translate "Template" %}</label>
-    <input id="id_template" name="template" type="text" dir="ltr" maxlength="100" required data-cli="send --template" value="{{ form.template.value|default:'' }}"{% aria form.template %}>
+    <input id="id_template" name="template" type="text" dir="ltr" maxlength="100" required list="template-names" data-cli="send --template" value="{{ form.template.value|default:'' }}"{% aria form.template hint=True %}>
+    <datalist id="template-names">{% for t in templates %}<option value="{{ t.name }}">{% endfor %}</datalist>
+    <p class="hint" id="id_template_hint">{% translate "The template's name exactly as in the Kavenegar panel." %} <a href="{% url 'template_list' %}">{% translate "Templates" %}</a></p>
     {% field_errors form.template alert=False %}
 
     <h2 id="tokens-heading">{% translate "Tokens" %}</h2>
     <p class="hint">{% translate "What fills each token of the template: the same value for everyone, a column of the segment, or the short link. Kavenegar needs the first token." %}</p>
-    <div class="table-wrap" tabindex="0" role="region" aria-labelledby="tokens-heading">
-      <table>
-        <thead>
+    {% for t in tokens %}
+      <fieldset class="token-row" data-token="{{ t.name }}">
+        <legend><code dir="ltr">{{ t.name }}</code></legend>
+        <div class="segmented" role="radiogroup" aria-label="{% translate "Filled with" %}: {{ t.name }}">
+          {% for value, label in t.source.field.choices %}
+            <label class="segment-option"><input type="radio" name="{{ t.name }}_source" value="{{ value }}"{% if t.source.value|default:'' == value %} checked{% endif %}{% if value == "link" %} data-cli="send --link-token"{% endif %}>{{ label }}</label>
+          {% endfor %}
+        </div>
+        {% field_errors t.source alert=False %}
+        <div data-when="value">
+          <input name="{{ t.name }}_value" type="text" data-cli="send --{{ t.name }}" value="{{ t.value.value|default:'' }}" aria-label="{% translate "Fixed value" %}: {{ t.name }}"{% aria t.value %}>
+          {% field_errors t.value alert=False %}
+        </div>
+        <div data-when="column">
+          <select name="{{ t.name }}_column" data-cli="send --token-column" aria-label="{% translate "Column" %}: {{ t.name }}"{% aria t.column %}>
+            <option value="">—</option>
+            {% for column in columns %}<option value="{{ column }}"{% if t.column.value == column %} selected{% endif %}>{{ column }}</option>{% endfor %}
+          </select>
+          {% field_errors t.column alert=False %}
+        </div>
+      </fieldset>
+    {% endfor %}
+  </fieldset>
+
+  <fieldset data-needs-column>
+    <legend>{% translate "Value translations (optional)" %}</legend>
+    <p class="hint" id="id_value_maps_hint">{% translate "Change a column's value before it's sent, e.g. Buy → خرید. A row whose value has no translation isn't sent." %}</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="{% translate "Value translations (optional)" %}">
+      <table class="value-maps" data-cli="send --value-map">
+        <thead><tr>
+          <th scope="col">{% translate "Column" %}</th>
+          <th scope="col">{% translate "Value in the file" %}</th>
+          <th scope="col">{% translate "Sent as" %}</th>
+          <th scope="col"><span class="visually-hidden">{% translate "Remove" %}</span></th>
+        </tr></thead>
+        <tbody id="value-map-rows">
+        {% for row in value_map_rows %}
           <tr>
-            <th scope="col">{% translate "Token" %}</th>
-            <th scope="col">{% translate "Filled with" %}</th>
-            <th scope="col">{% translate "Fixed value" %}</th>
-            <th scope="col">{% translate "Column" %}</th>
-          </tr>
-        </thead>
-        <tbody>
-        {% for t in tokens %}
-          <tr>
-            <th scope="row"><code dir="ltr">{{ t.name }}</code></th>
-            <td>
-              <select name="{{ t.name }}_source" data-cli="send --link-token" aria-label="{% translate "Filled with" %}: {{ t.name }}"{% aria t.source %}>
-                {% for value, label in t.source.field.choices %}
-                  <option value="{{ value }}"{% if t.source.value|default:'' == value %} selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-              </select>
-              {% field_errors t.source alert=False %}
-            </td>
-            <td>
-              <input name="{{ t.name }}_value" type="text" data-cli="send --{{ t.name }}" value="{{ t.value.value|default:'' }}" aria-label="{% translate "Fixed value" %}: {{ t.name }}"{% aria t.value %}>
-              {% field_errors t.value alert=False %}
-            </td>
-            <td>
-              <select name="{{ t.name }}_column" data-cli="send --token-column" aria-label="{% translate "Column" %}: {{ t.name }}"{% aria t.column %}>
-                <option value="">—</option>
-                {% for column in columns %}
-                  <option value="{{ column }}"{% if t.column.value == column %} selected{% endif %}>{{ column }}</option>
-                {% endfor %}
-              </select>
-              {% field_errors t.column alert=False %}
-            </td>
+            <td><select name="vm_column" aria-label="{% translate "Column" %}">
+              <option value="">—</option>
+              {% for column in columns %}<option value="{{ column }}"{% if row.column == column %} selected{% endif %}>{{ column }}</option>{% endfor %}
+            </select></td>
+            <td><input name="vm_source" type="text" dir="auto" value="{{ row.source }}" aria-label="{% translate "Value in the file" %}"></td>
+            <td><input name="vm_target" type="text" dir="auto" value="{{ row.target }}" aria-label="{% translate "Sent as" %}"></td>
+            <td><button type="button" class="icon-button" data-remove-row aria-label="{% translate "Remove" %}">{% icon "trash-2" %}</button></td>
           </tr>
         {% endfor %}
         </tbody>
       </table>
     </div>
-    <label for="id_value_maps">{% translate "Value translations (optional)" %}</label>
-    <textarea id="id_value_maps" name="value_maps" rows="3" dir="ltr" data-cli="send --value-map"{% aria form.value_maps hint=True %}>{{ form.value_maps.value|default:'' }}</textarea>
-    <p class="hint" id="id_value_maps_hint">{% translate "One per line, column:value=translation, e.g. side:Buy=خرید. A row whose value has no translation isn't sent." %}</p>
+    <button type="button" class="small secondary" data-add-row="value-map-rows">{% icon "plus" %}{% translate "Add a translation" %}</button>
     {% field_errors form.value_maps alert=False %}
   </fieldset>
 
-  <fieldset class="card">
+  <fieldset data-needs-link>
     <legend>{% translate "Short link" %}</legend>
     <p class="hint">{% translate "Used only if a token is filled with the short link." %}</p>
     <label for="id_link_destination">{% translate "The address it opens" %}</label>
-    <input id="id_link_destination" name="link_destination" type="text" dir="ltr" data-cli="send --link-url" value="{{ form.link_destination.value|default:'' }}" placeholder="https://kifpool.me/…"{% aria form.link_destination %}>
+    <input id="id_link_destination" name="link_destination" type="text" dir="ltr" inputmode="url" data-cli="send --link-url" value="{{ form.link_destination.value|default:'' }}" placeholder="https://kifpool.me/…"{% aria form.link_destination %}>
     {% field_errors form.link_destination alert=False %}
-    <label for="id_link_format">{% translate "What the token holds" %}</label>
-    <input id="id_link_format" name="link_format" type="text" dir="ltr" data-cli="send --link-format" value="{{ form.link_format.value|default:'url' }}"{% aria form.link_format hint=True %}>
-    <p class="hint" id="id_link_format_hint">{% translate "url: the whole short link. code: only its code, when the template's text has the rest. Or a pattern such as u/{code}." %}</p>
+
+    <p class="label" id="link-format-label">{% translate "What the token holds" %}</p>
+    <div class="choices" role="radiogroup" aria-labelledby="link-format-label" data-cli="send --link-format">
+      <label class="choice"><input type="radio" name="link_format_kind" value="url"{% if ui.link_format_kind == "url" %} checked{% endif %}>
+        <span>{% translate "The whole short link" %} <code dir="ltr">https://kifpool.me/u/aB3dE</code></span></label>
+      <label class="choice"><input type="radio" name="link_format_kind" value="code"{% if ui.link_format_kind == "code" %} checked{% endif %}>
+        <span>{% translate "Only its code, when the template's text has the rest" %} <code dir="ltr">aB3dE</code></span></label>
+      <label class="choice"><input type="radio" name="link_format_kind" value="pattern"{% if ui.link_format_kind == "pattern" %} checked{% endif %}>
+        <span>{% translate "A pattern, when the text has part of the address" %} <code dir="ltr">u/{code}</code></span></label>
+    </div>
+    <div data-when-format="pattern">
+      <label for="id_link_pattern">{% translate "Pattern" %}</label>
+      <input id="id_link_pattern" name="link_pattern" type="text" dir="ltr" value="{{ ui.link_pattern|default:'' }}" placeholder="u/{code}">
+    </div>
     {% field_errors form.link_format alert=False %}
-    <label for="id_link_strategy">{% translate "One link per" %}</label>
-    <select id="id_link_strategy" name="link_strategy" data-cli="send --link-strategy">
-      <option value="recipient"{% if form.link_strategy.value == "recipient" %} selected{% endif %}>{% translate "Recipient (clicks per person)" %}</option>
-      <option value="segment"{% if form.link_strategy.value == "segment" %} selected{% endif %}>{% translate "Segment" %}</option>
-      <option value="campaign"{% if form.link_strategy.value == "campaign" %} selected{% endif %}>{% translate "Campaign" %}</option>
-    </select>
+
+    <p class="label" id="link-strategy-label">{% translate "One link per" %}</p>
+    <div class="choices" role="radiogroup" aria-labelledby="link-strategy-label" data-cli="send --link-strategy">
+      <label class="choice"><input type="radio" name="link_strategy" value="recipient"{% if form.link_strategy.value == "recipient" %} checked{% endif %}><span>{% translate "Recipient (clicks per person)" %}</span></label>
+      <label class="choice"><input type="radio" name="link_strategy" value="segment"{% if form.link_strategy.value == "segment" %} checked{% endif %}><span>{% translate "Segment" %}</span></label>
+      <label class="choice"><input type="radio" name="link_strategy" value="campaign"{% if form.link_strategy.value == "campaign" %} checked{% endif %}><span>{% translate "Campaign" %}</span></label>
+    </div>
+
     <label for="id_link_expiry_days">{% translate "Valid for (days)" %}</label>
     <input id="id_link_expiry_days" name="link_expiry_days" type="number" data-cli="send --link-expiry-days" min="1" max="365" value="{{ form.link_expiry_days.value|default:7 }}"{% aria form.link_expiry_days %}>
     {% field_errors form.link_expiry_days alert=False %}
+
+    <details class="subsection"{% if form.utm_source.errors or form.utm_medium.errors or form.utm_campaign.errors or form.utm_content.errors %} open{% endif %}>
+      <summary>{% translate "Tracking values (UTM)" %}</summary>
+      <p class="hint">{% translate "Added to the address the link opens, for Google Analytics. Empty: sms, sms, the campaign's short name and the segment's." %}</p>
+      <div class="field-grid">
+        <div><label for="id_utm_source">utm_source</label><input id="id_utm_source" name="utm_source" type="text" dir="ltr" placeholder="sms" data-cli="send --utm-source" value="{{ form.utm_source.value|default:'' }}"{% aria form.utm_source %}>{% field_errors form.utm_source alert=False %}</div>
+        <div><label for="id_utm_medium">utm_medium</label><input id="id_utm_medium" name="utm_medium" type="text" dir="ltr" placeholder="sms" data-cli="send --utm-medium" value="{{ form.utm_medium.value|default:'' }}"{% aria form.utm_medium %}>{% field_errors form.utm_medium alert=False %}</div>
+        <div><label for="id_utm_campaign">utm_campaign</label><input id="id_utm_campaign" name="utm_campaign" type="text" dir="ltr" placeholder="{{ campaign.slug }}" data-cli="send --utm-campaign" value="{{ form.utm_campaign.value|default:'' }}"{% aria form.utm_campaign %}>{% field_errors form.utm_campaign alert=False %}</div>
+        <div><label for="id_utm_content">utm_content</label><input id="id_utm_content" name="utm_content" type="text" dir="ltr" data-cli="send --utm-content" value="{{ form.utm_content.value|default:'' }}"{% aria form.utm_content %}>{% field_errors form.utm_content alert=False %}</div>
+      </div>
+    </details>
   </fieldset>
 
-  <fieldset class="card">
+  <fieldset>
     <legend>{% translate "Send" %}</legend>
-    <label for="id_send_window">{% translate "Sending window (Tehran time)" %}</label>
-    <input id="id_send_window" name="send_window" type="text" dir="ltr" data-cli="send --send-window" value="{{ form.send_window.value|default:'08:00-21:00' }}"{% aria form.send_window %}>
+    <p class="label" id="window-label">{% translate "Sending window (Tehran time)" %}</p>
+    <div class="field-grid" role="group" aria-labelledby="window-label" data-cli="send --send-window">
+      <div><label for="id_window_start">{% translate "From" %}</label><input id="id_window_start" name="window_start" type="text" dir="ltr" inputmode="numeric" maxlength="5" placeholder="08:00" value="{{ ui.window_start|default:'08:00' }}"{% if form.send_window.errors %} aria-invalid="true" aria-describedby="id_send_window_error"{% endif %}></div>
+      <div><label for="id_window_end">{% translate "Until" %}</label><input id="id_window_end" name="window_end" type="text" dir="ltr" inputmode="numeric" maxlength="5" placeholder="21:00" value="{{ ui.window_end|default:'21:00' }}"{% if form.send_window.errors %} aria-invalid="true" aria-describedby="id_send_window_error"{% endif %}></div>
+    </div>
     {% field_errors form.send_window alert=False %}
-    <label for="id_rate">{% translate "Rate limit (optional)" %}</label>
-    <input id="id_rate" name="rate" type="text" dir="ltr" data-cli="send --rate" value="{{ form.rate.value|default:'' }}" placeholder="10/s"{% aria form.rate %}>
+
+    <p class="label" id="rate-label">{% translate "Rate limit (optional)" %}</p>
+    <div class="field-grid" role="group" aria-labelledby="rate-label" data-cli="send --rate">
+      <div><label for="id_rate_value">{% translate "SMS" %}</label><input id="id_rate_value" name="rate_value" type="number" min="1" inputmode="numeric" value="{{ ui.rate_value|default:'' }}"{% if form.rate.errors %} aria-invalid="true" aria-describedby="id_rate_error"{% endif %}></div>
+      <div><label for="id_rate_unit">{% translate "Per" %}</label>
+        <select id="id_rate_unit" name="rate_unit">
+          <option value="s"{% if ui.rate_unit == "s" %} selected{% endif %}>{% translate "second" %}</option>
+          <option value="m"{% if ui.rate_unit == "m" %} selected{% endif %}>{% translate "minute" %}</option>
+          <option value="h"{% if ui.rate_unit == "h" %} selected{% endif %}>{% translate "hour" %}</option>
+        </select></div>
+    </div>
+    <p class="hint">{% translate "Empty: as fast as the parallel sends allow." %}</p>
     {% field_errors form.rate alert=False %}
+
     <label for="id_workers">{% translate "Parallel sends" %}</label>
     <input id="id_workers" name="workers" type="number" data-cli="send --workers" min="1" max="20" value="{{ form.workers.value|default:5 }}"{% aria form.workers %}>
     {% field_errors form.workers alert=False %}
   </fieldset>
 
+  {% if advanced %}
+  <details class="card subsection advanced"{% if form.max_attempts.errors or form.timeout.errors or form.backoff_max.errors or form.link_rate.errors %} open{% endif %}>
+    <summary>{% icon "sliders-horizontal" %}{% translate "Advanced settings" %}</summary>
+    <p class="hint">{% translate "Only admins see these. Empty: the defaults (5 attempts, 15 seconds, at most 30 seconds between attempts, 10 links a second)." %}</p>
+    <div class="field-grid">
+      <div><label for="id_max_attempts">{% translate "Attempts per SMS" %}</label><input id="id_max_attempts" name="max_attempts" type="number" min="1" max="10" data-cli="send --max-attempts" value="{{ form.max_attempts.value|default:'' }}"{% aria form.max_attempts %}>{% field_errors form.max_attempts alert=False %}</div>
+      <div><label for="id_timeout">{% translate "Wait for an answer (seconds)" %}</label><input id="id_timeout" name="timeout" type="number" min="5" max="120" step="any" data-cli="send --timeout, * --timeout" value="{{ form.timeout.value|default:'' }}"{% aria form.timeout %}>{% field_errors form.timeout alert=False %}</div>
+      <div><label for="id_backoff_max">{% translate "Longest pause between attempts (seconds)" %}</label><input id="id_backoff_max" name="backoff_max" type="number" min="1" max="300" step="any" data-cli="send --backoff-max" value="{{ form.backoff_max.value|default:'' }}"{% aria form.backoff_max %}>{% field_errors form.backoff_max alert=False %}</div>
+      <div><label for="id_link_rate">{% translate "Short links made per second" %}</label><input id="id_link_rate" name="link_rate" type="text" dir="ltr" placeholder="10/s" data-cli="send --link-rate" value="{{ form.link_rate.value|default:'' }}"{% aria form.link_rate %}>{% field_errors form.link_rate alert=False %}</div>
+    </div>
+  </details>
+  {% endif %}
+
   <div class="callout">
     {% icon "info" %}
     <p>{% translate "Changing the message, its tokens, the link or the segment needs a new test SMS before sending." %}</p>
   </div>
-  <button type="submit">{% icon "check" %}{% translate "Save" %}</button>
+  <div class="form-actions sticky-actions">
+    <button type="submit">{% icon "check" %}{% translate "Save" %}</button>
+    <a class="button secondary" href="{% url 'campaign_detail' campaign.slug %}">{% translate "Back to the campaign" %}</a>
+  </div>
 </form>
+
+<aside class="card split-side preview-panel" id="preview" aria-live="polite"
+       hx-post="{% url 'campaign_settings_preview' campaign.slug %}" hx-include="#settings-form"
+       hx-trigger="input delay:600ms from:#settings-form, change from:#settings-form" hx-swap="innerHTML">
+  {% include "campaigns/_preview.html" %}
+</aside>
+</div>
+
+<template id="value-map-row">
+  <tr>
+    <td><select name="vm_column" aria-label="{% translate "Column" %}"><option value="">—</option>{% for column in columns %}<option value="{{ column }}">{{ column }}</option>{% endfor %}</select></td>
+    <td><input name="vm_source" type="text" dir="auto" aria-label="{% translate "Value in the file" %}"></td>
+    <td><input name="vm_target" type="text" dir="auto" aria-label="{% translate "Sent as" %}"></td>
+    <td><button type="button" class="icon-button" data-remove-row aria-label="{% translate "Remove" %}">{% icon "trash-2" %}</button></td>
+  </tr>
+</template>
 {% endblock %}

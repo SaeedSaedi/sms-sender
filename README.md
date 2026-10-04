@@ -439,6 +439,15 @@ internal, multi-user tool built with Django and HTMX. So far it has:
 
   Changing the message (template, tokens, link, segment) needs a new test
   SMS. Once sending has started, a campaign's settings are fixed.
+
+  A campaign always shows its stage and the next step. When a send ends, its
+  results and what's left (unknown, not sent, rejected) sit together, each
+  with its action. A send the sending window stopped goes on by itself
+  when the window opens.
+- a template library («قالب‌ها»): a copy of each Kavenegar template's text.
+  The settings page then previews the message with the first recipient's
+  values, its length in SMS parts, and any token the text uses but nothing
+  fills.
 - the campaign list: the CLI's campaigns and the dashboard's;
 - a report per campaign:
   - submission and delivery statuses, cost, and clicks per segment (bots and

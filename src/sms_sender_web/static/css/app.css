@@ -617,6 +617,7 @@ details.card > summary, .summary-card > summary { cursor: pointer; font-weight: 
 /* ---------- tables ---------- */
 
 .table-wrap {
+  position: relative;  /* contains visually hidden labels, so they scroll with the table */
   overflow-x: auto;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -835,3 +836,67 @@ button.copy:hover { border-color: var(--primary); background: var(--surface); co
 .attention-list li > p { flex-basis: 100%; margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
 .cell-sub { display: block; color: var(--muted); font-size: var(--fs-xs); font-weight: 400; }
 progress.mini { display: block; inline-size: 8rem; block-size: .4rem; margin-block-start: var(--s-1); }
+
+/* ---------- the campaign settings form (plan 05, P2) ---------- */
+
+.settings-layout { align-items: start; }
+@media (min-width: 1024px) { .settings-layout { grid-template-columns: minmax(0, 1fr) 24rem; } }
+.preview-panel { position: sticky; inset-block-start: var(--s-4); }
+.preview-panel h2 { display: flex; align-items: center; gap: var(--s-2); }
+.sms-bubble {
+  margin-block-end: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--radius-lg);
+  border-end-start-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sms-length { margin-block-end: var(--s-2); color: var(--text-2); font-size: var(--fs-sm); }
+
+p.label { margin-block: var(--s-4) var(--s-1); color: var(--text); font-size: var(--fs-sm); font-weight: 650; }
+.field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0 var(--s-4); }
+.field-grid label { margin-block-start: var(--s-2); }
+
+fieldset.token-row { margin-block: var(--s-3) 0; padding: var(--s-3) var(--s-4) var(--s-4); box-shadow: none; background: var(--surface-2); }
+fieldset.token-row legend { font-size: var(--fs-sm); }
+.token-row > [data-when] { margin-block-start: var(--s-2); }
+
+.segmented { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.segment-option, .choice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: 0;
+  padding: .4rem .8rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-weight: 550;
+  cursor: pointer;
+}
+.segment-option:has(input:checked), .choice:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); color: var(--text); }
+.segment-option:has(input:focus-visible), .choice:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
+.choices { display: grid; gap: var(--s-2); }
+.choice { display: flex; }
+.choice > span { min-inline-size: 0; }
+.choice code { margin-inline-start: var(--s-2); color: var(--muted); overflow-wrap: anywhere; }
+
+details.subsection { margin-block-start: var(--s-4); }
+details.subsection > summary { cursor: pointer; font-weight: 700; }
+details.subsection > summary .icon { margin-inline-end: var(--s-1); }
+details.advanced { margin-block-end: var(--s-5); }
+
+table.value-maps td { padding: var(--s-2); }
+table.value-maps select, table.value-maps input { min-inline-size: 7rem; }
+
+.sticky-actions {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 5;
+  padding: var(--s-3) 0;
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
+}
+.token-buttons { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-block-end: var(--s-2); }
+.token-buttons button { margin: 0; }

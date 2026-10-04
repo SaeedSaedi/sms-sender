@@ -1,0 +1,42 @@
+{% extends "base.html" %}{% load i18n fa roles ui %}
+{% block title %}{% if template %}{{ template.name }}{% else %}{% translate "Add a template" %}{% endif %} · {% translate "Templates" %}{% endblock %}
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="{% translate "Breadcrumb" %}"><ol>
+  <li><a href="{% url 'template_list' %}">{% translate "Templates" %}</a></li>
+  <li aria-current="page">{% if template %}{{ template.name|ltr }}{% else %}{% translate "Add a template" %}{% endif %}</li>
+</ol></nav>
+{% endblock %}
+{% block content %}
+<section class="card medium">
+  <h1>{% if template %}{{ template.name|ltr }}{% else %}{% translate "Add a template" %}{% endif %}</h1>
+  <form method="post" data-guard>
+    {% csrf_token %}
+    <label for="id_name">{% translate "Template name" %}</label>
+    <input id="id_name" name="name" type="text" dir="ltr" maxlength="100" required value="{{ form.name.value|default:'' }}"{% aria form.name hint=True %}>
+    <p class="hint" id="id_name_hint">{% translate "The template's name exactly as in the Kavenegar panel." %}</p>
+    {% field_errors form.name %}
+    <label for="id_text">{% translate "Text" %}</label>
+    <div class="token-buttons" role="group" aria-label="{% translate "Insert a token" %}">
+      {% for name in token_names %}<button type="button" class="small secondary" data-insert="%{{ name }}" data-into="id_text"><code dir="ltr">%{{ name }}</code></button>{% endfor %}
+    </div>
+    <textarea id="id_text" name="text" rows="6" dir="auto" required data-sms-length="sms-length"{% aria form.text hint=True %}>{{ form.text.value|default:'' }}</textarea>
+    <p class="hint" id="id_text_hint">{% translate "Copy it from the Kavenegar panel, tokens included: the buttons above add one where the cursor is." %}</p>
+    <p class="sms-length num" id="sms-length" aria-live="polite" data-template="{{ length_template }}">{{ length }}</p>
+    {% field_errors form.text %}
+    <label for="id_note">{% translate "Note" %}</label>
+    <input id="id_note" name="note" type="text" maxlength="200" value="{{ form.note.value|default:'' }}"{% aria form.note %}>
+    {% field_errors form.note %}
+    <div class="form-actions">
+      <button type="submit">{% icon "check" %}{% translate "Save" %}</button>
+      <a class="button secondary" href="{% url 'template_list' %}">{% translate "Back" %}</a>
+    </div>
+  </form>
+  {% if template %}
+    <form method="post" action="{% url 'template_delete' template.pk %}" class="danger-zone"
+          data-confirm="{% translate "Remove this template from the library? Campaigns keep sending with it; only the preview goes." %}">
+      {% csrf_token %}
+      <button type="submit" class="danger">{% icon "trash-2" %}{% translate "Remove from the library" %}</button>
+    </form>
+  {% endif %}
+</section>
+{% endblock %}

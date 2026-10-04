@@ -31,6 +31,8 @@ ACTION_LABELS = {
     "test_number_changed": _("Test SMS number changed"),
     "campaign_created": _("Campaign created"),
     "campaign_changed": _("Campaign settings changed"),
+    "template_saved": _("Template saved"),
+    "template_deleted": _("Template removed from the library"),
     "test_requested": _("Test SMS requested"),
     "test_approved": _("Test SMS approved"),
     "test_rejected": _("Test SMS rejected"),
@@ -73,6 +75,8 @@ def describe(event) -> str:
         return _who(target)
     if event.action in ("segment_uploaded", "segment_deleted"):
         return _who(d.get("segment", ""))
+    if event.action in ("template_saved", "template_deleted"):
+        return _who(d.get("name", ""))
     if event.action == "segment_mapped":
         return format_html(
             gettext_now("{segment}: {valid} valid numbers, {invalid} invalid rows"),

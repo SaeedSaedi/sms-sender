@@ -38,10 +38,10 @@ class FakeEngine(Engine):
         self.fake = sender or FakeKavenegar()
         self.runners = []
 
-    def sender(self):
+    def sender(self, campaign=None):
         return self.fake
 
-    def link_client(self):
+    def link_client(self, campaign=None):
         raise AssertionError("no links in these tests")
 
     def runner(self, campaign, reporter, *, test_number=None, cost_per_sms=None):

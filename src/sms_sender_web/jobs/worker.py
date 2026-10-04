@@ -263,18 +263,18 @@ class Worker:
     def _reconcile(self, job: Job):
         try:
             with RunLock(campaign_db(job.campaign)):
-                summary = reconcile_unknown(self.engine.state(job.campaign), self.engine.sender())
+                summary = reconcile_unknown(self.engine.state(job.campaign), self.engine.sender(job.campaign))
         except RunLockError as e:
             return Job.State.FAILED, {}, f"the campaign is busy: {e}"
         return Job.State.DONE, dataclasses.asdict(summary), ""
 
     def _delivery(self, job: Job):
         # No run lock: it only writes the delivery columns (safe during a send).
-        summary = sync_delivery(self.engine.state(job.campaign), self.engine.sender())
+        summary = sync_delivery(self.engine.state(job.campaign), self.engine.sender(job.campaign))
         return Job.State.DONE, dataclasses.asdict(summary), ""
 
     def _clicks(self, job: Job):
-        summary = sync_clicks(self.engine.state(job.campaign), self.engine.link_client(), job.campaign.slug)
+        summary = sync_clicks(self.engine.state(job.campaign), self.engine.link_client(job.campaign), job.campaign.slug)
         return Job.State.DONE, dataclasses.asdict(summary), ""
 
     # ---------- the sending window ----------

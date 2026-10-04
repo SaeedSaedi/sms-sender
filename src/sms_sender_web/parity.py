@@ -56,7 +56,7 @@ PHASES = ("P2", "P3", "P4", "P5")
 ALIASES = {"retry-failed": "send", "dry-run": "send", "preview": "send"}
 
 _LOGS = Excluded("Logs are for DevOps (docker logs); the dashboard shows each job's result.")
-_ADVANCED = Planned("P2", "advanced settings (admin)")
+_ADVANCED = Control("campaign.settings", ADMIN, note="advanced settings")
 
 PARITY: dict[str, tuple[Part, ...]] = {
     # ---------- commands ----------
@@ -116,10 +116,10 @@ PARITY: dict[str, tuple[Part, ...]] = {
     "send --link-strategy": (Control("campaign.settings"),),
     "send --link-expiry-days": (Control("campaign.settings"),),
     "send --link-rate": (_ADVANCED,),
-    "send --utm-source": (Planned("P2", "tracking (UTM) values"),),
-    "send --utm-medium": (Planned("P2", "tracking (UTM) values"),),
-    "send --utm-campaign": (Planned("P2", "tracking (UTM) values"),),
-    "send --utm-content": (Planned("P2", "tracking (UTM) values"),),
+    "send --utm-source": (Control("campaign.settings"),),
+    "send --utm-medium": (Control("campaign.settings"),),
+    "send --utm-campaign": (Control("campaign.settings"),),
+    "send --utm-content": (Control("campaign.settings"),),
 
     # ---------- options of their own ----------
     "retry-failed --include-permanent": (Planned("P3", "requeue rejected"),),
@@ -140,7 +140,9 @@ PARITY: dict[str, tuple[Part, ...]] = {
     "* --campaign": (Implied("Every page and action belongs to one campaign."),),
     "* --state": (Implied("Each campaign has its own records, named by its short name."),),
     "* --log-file": (_LOGS,),
-    "* --timeout": (Planned("P2", "advanced settings (admin); follow-up jobs use the campaign's timeout"),),
+    "* --timeout": (
+        Control("campaign.settings", ADMIN, note="the campaign's timeout; its follow-up jobs use it too"),
+    ),
     "* --out": (Implied("The browser saves the download."),),
     "* --yes": (Implied("A confirmation dialog takes its place."),),
 

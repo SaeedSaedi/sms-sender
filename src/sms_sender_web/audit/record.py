@@ -12,7 +12,7 @@ ACTIONS = (
     "segment_uploaded", "segment_mapped", "segment_deleted",
     "suppression_added", "suppression_removed",
     "test_number_changed",
-    "campaign_created", "campaign_changed",
+    "campaign_created", "campaign_changed", "template_saved", "template_deleted",
     "test_requested", "test_approved", "test_rejected", "send_started",
     "job_requested", "job_paused", "job_resumed", "job_cancelled",
     "phone_revealed", "report_downloaded",

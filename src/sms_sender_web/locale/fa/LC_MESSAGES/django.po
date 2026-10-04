@@ -918,9 +918,6 @@ msgstr "استفاده نمی‌شود"
 msgid "One link per"
 msgstr "یک لینک برای هر"
 
-msgid "One per line, column:value=translation, e.g. side:Buy=خرید. A row whose value has no translation isn't sent."
-msgstr "هر سطر یک ترجمه به شکل ستون:مقدار=ترجمه؛ برای نمونه side:Buy=خرید. به ردیفی که مقدارش ترجمه ندارد پیامک ارسال نمی‌شود."
-
 msgid "Only one token can carry the short link."
 msgstr "فقط یک متغیر می‌تواند لینک کوتاه را در خود داشته باشد."
 
@@ -1154,9 +1151,6 @@ msgstr "به"
 msgid "To send"
 msgstr "در انتظار ارسال"
 
-msgid "Token"
-msgstr "متغیر"
-
 msgid "Tokens"
 msgstr "متغیرهای قالب"
 
@@ -1171,10 +1165,6 @@ msgstr "به‌روزرسانی وضعیت تحویل"
 
 msgid "Update requested"
 msgstr "درخواست به‌روزرسانی"
-
-#, python-brace-format
-msgid "url: the whole short link. code: only its code, when the template's text has the rest. Or a pattern such as u/{code}."
-msgstr "url: کل لینک کوتاه. code: فقط کد آن، وقتی بقیه نشانی در متن قالب است. یا الگویی مانند u/{code}."
 
 msgid "Used only if a token is filled with the short link."
 msgstr "فقط وقتی به کار می‌رود که مقدار یکی از متغیرها لینک کوتاه باشد."
@@ -1722,3 +1712,164 @@ msgstr "نیازمند توجه"
 
 msgid "Stage"
 msgstr "مرحله"
+
+# Plan 05 · P2: settings, template library, message preview
+
+msgid "A copy of each Kavenegar template's text, to preview campaigns: the message with its tokens filled in, its length and SMS parts."
+msgstr "رونوشتی از متن هر قالب پیامک کاوه‌نگار، برای پیش‌نمایش کمپین‌ها: پیام با مقدار متغیرهایش، طول آن و تعداد پیامک‌ها."
+
+msgid "A pattern, when the text has part of the address"
+msgstr "یک الگو، وقتی بخشی از نشانی در متن قالب آمده است"
+
+msgid "Add a template"
+msgstr "افزودن قالب"
+
+msgid "Add a template's text, exactly as in the Kavenegar panel, to see each campaign's message before its test SMS."
+msgstr "متن قالب را دقیقاً مانند پنل کاوه‌نگار وارد کنید تا پیام هر کمپین را پیش از پیامک آزمایشی ببینید."
+
+msgid "Add a translation"
+msgstr "افزودن ترجمه"
+
+msgid "Added to the address the link opens, for Google Analytics. Empty: sms, sms, the campaign's short name and the segment's."
+msgstr "به نشانی مقصد لینک افزوده می‌شوند، برای گوگل آنالیتیکس. اگر خالی بمانند: sms، sms، نام کوتاه کمپین و نام کوتاه گروه مخاطبان."
+
+msgid "Advanced settings"
+msgstr "تنظیمات پیشرفته"
+
+msgid "Attempts per SMS"
+msgstr "دفعات تلاش برای هر پیامک"
+
+msgid "Back"
+msgstr "بازگشت"
+
+msgid "Change a column's value before it's sent, e.g. Buy → خرید. A row whose value has no translation isn't sent."
+msgstr "مقدار یک ستون را پیش از ارسال تغییر دهید، برای نمونه Buy ← خرید. به ردیفی که مقدارش ترجمه ندارد پیامک ارسال نمی‌شود."
+
+msgid "Choose a template to see the message."
+msgstr "برای دیدن پیام، قالب پیامک را انتخاب کنید."
+
+msgid "Empty: as fast as the parallel sends allow."
+msgstr "اگر خالی بماند: با بیشترین سرعتی که ارسال هم‌زمان اجازه می‌دهد."
+
+msgid "From"
+msgstr "از"
+
+msgid "Insert a token"
+msgstr "افزودن متغیر"
+
+msgid "Length"
+msgstr "طول"
+
+msgid "Lengths are without token values; each campaign's preview shows the real ones."
+msgstr "طول‌ها بدون مقدار متغیرهاست؛ پیش‌نمایش هر کمپین طول واقعی را نشان می‌دهد."
+
+msgid "Longest pause between attempts (seconds)"
+msgstr "بیشترین مکث میان تلاش‌ها (ثانیه)"
+
+msgid "Message preview"
+msgstr "پیش‌نمایش پیام"
+
+msgid "No templates yet"
+msgstr "هنوز قالبی افزوده نشده است"
+
+msgid "Only admins see these. Empty: the defaults (5 attempts, 15 seconds, at most 30 seconds between attempts, 10 links a second)."
+msgstr "این تنظیمات را فقط مدیر سامانه می‌بیند. اگر خالی بمانند، پیش‌فرض‌ها به کار می‌روند: پنج تلاش، پانزده ثانیه انتظار برای پاسخ، حداکثر سی ثانیه مکث میان تلاش‌ها و ساخت ده لینک در ثانیه."
+
+msgid "Only its code, when the template's text has the rest"
+msgstr "فقط کد آن، وقتی بقیه نشانی در متن قالب آمده است"
+
+msgid "Pattern"
+msgstr "الگو"
+
+msgid "Per"
+msgstr "در هر"
+
+msgid "Remove from the library"
+msgstr "حذف از کتابخانه قالب‌ها"
+
+msgid "Remove this template from the library? Campaigns keep sending with it; only the preview goes."
+msgstr "این قالب از کتابخانه حذف شود؟ کمپین‌ها همچنان با آن ارسال می‌کنند؛ فقط پیش‌نمایش از دست می‌رود."
+
+msgid "SMS"
+msgstr "پیامک"
+
+msgid "Sent as"
+msgstr "ارسال به صورت"
+
+msgid "Short links made per second"
+msgstr "لینک کوتاه ساخته‌شده در هر ثانیه"
+
+msgid "Template name"
+msgstr "نام قالب"
+
+msgid "Template removed from the library"
+msgstr "حذف قالب از کتابخانه"
+
+msgid "Template saved"
+msgstr "ذخیره قالب"
+
+msgid "Templates"
+msgstr "قالب‌ها"
+
+msgid "Text"
+msgstr "متن"
+
+msgid "The link's code here is an example."
+msgstr "کد لینک در این پیش‌نمایش نمونه است."
+
+msgid "The template was removed from the library. Kavenegar's own template isn't affected."
+msgstr "قالب از کتابخانه حذف شد. قالب خود کاوه‌نگار دست نخورده است."
+
+msgid "The template was saved."
+msgstr "قالب ذخیره شد."
+
+msgid "The text uses {token}, but nothing fills it: Kavenegar would refuse the SMS."
+msgstr "متن از {token} استفاده می‌کند، اما چیزی مقدار آن را پر نمی‌کند: کاوه‌نگار این پیامک را نمی‌پذیرد."
+
+msgid "The whole short link"
+msgstr "کل لینک کوتاه"
+
+msgid "This template's text isn't in the library yet. Add it to see the message here."
+msgstr "متن این قالب هنوز در کتابخانه نیست. آن را بیفزایید تا پیام اینجا نمایش داده شود."
+
+msgid "Tracking values (UTM)"
+msgstr "مقادیر ردیابی (UTM)"
+
+msgid "Until"
+msgstr "تا"
+
+msgid "Updated"
+msgstr "به‌روزرسانی"
+
+msgid "Value in the file"
+msgstr "مقدار در فایل"
+
+msgid "Wait for an answer (seconds)"
+msgstr "انتظار برای پاسخ (ثانیه)"
+
+msgid "With the values of"
+msgstr "با مقدارهای"
+
+msgid "Write the template's text, as in the Kavenegar panel."
+msgstr "متن قالب را مانند پنل کاوه‌نگار بنویسید."
+
+msgid "advanced settings"
+msgstr "تنظیمات پیشرفته"
+
+msgid "hour"
+msgstr "ساعت"
+
+msgid "minute"
+msgstr "دقیقه"
+
+msgid "second"
+msgstr "ثانیه"
+
+msgid "{chars} characters · {parts} SMS"
+msgstr "{chars} نویسه · {parts} پیامک"
+
+msgid "{token} is filled, but the template's text doesn't use it."
+msgstr "{token} مقدار دارد، اما متن قالب از آن استفاده نمی‌کند."
+
+msgid "Copy it from the Kavenegar panel, tokens included: the buttons above add one where the cursor is."
+msgstr "آن را همراه با متغیرهایش از پنل کاوه‌نگار رونوشت کنید: دکمه‌های بالا هر متغیر را همان‌جا که مکان‌نما است می‌افزایند."

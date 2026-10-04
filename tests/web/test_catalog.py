@@ -60,6 +60,14 @@ def used_msgids() -> set[str]:
     return ids
 
 
+def test_template_strings_have_no_percent_sign():
+    """{% translate %} doubles a "%" before looking the text up, so a
+    template string with one is never found, and shows in English."""
+    for template in ROOT.rglob("*.html"):
+        for msgid in re.findall(r'{%\s*translate\s+"([^"]+)"', template.read_text(encoding="utf-8")):
+            assert "%" not in msgid, f"{template.name}: {msgid!r}"
+
+
 def test_every_string_the_dashboard_uses_is_translated():
     entries, _, fuzzy = parse_po(PO.read_text(encoding="utf-8"))
     used = used_msgids()

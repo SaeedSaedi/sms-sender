@@ -1,0 +1,48 @@
+{% extends "base.html" %}{% load i18n fa roles ui %}
+{% block title %}{% translate "Templates" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{% translate "Templates" %}</h1>
+    <p class="page-meta">{% translate "A copy of each Kavenegar template's text, to preview campaigns: the message with its tokens filled in, its length and SMS parts." %}</p>
+  </div>
+  {% if rows and user|can:"edit_campaigns" %}
+    <div class="page-actions"><a class="button" href="{% url 'template_new' %}">{% icon "plus" %}{% translate "Add a template" %}</a></div>
+  {% endif %}
+</header>
+{% if rows %}
+<div class="table-wrap">
+  <table class="table-stack">
+    <thead>
+      <tr>
+        <th scope="col">{% translate "Template" %}</th>
+        <th scope="col">{% translate "Text" %}</th>
+        <th scope="col">{% translate "Length" %}</th>
+        <th scope="col">{% translate "Campaigns" %}</th>
+        <th scope="col">{% translate "Updated" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in rows %}{% with t=row.template %}
+      <tr>
+        <th scope="row">{% if user|can:"edit_campaigns" %}<a href="{% url 'template_edit' t.pk %}">{{ t.name|ltr }}</a>{% else %}{{ t.name|ltr }}{% endif %}
+          {% if t.note %}<span class="cell-sub"><bdi>{{ t.note }}</bdi></span>{% endif %}</th>
+        <td data-label="{% translate "Text" %}"><bdi class="template-text">{{ t.text|truncatechars:90 }}</bdi></td>
+        <td data-label="{% translate "Length" %}" class="num">{{ row.length }}</td>
+        <td data-label="{% translate "Campaigns" %}" class="num">{{ row.used|fa_number }}</td>
+        <td data-label="{% translate "Updated" %}">{{ t.updated_at|jalali }}{% if t.updated_by %} · {{ t.updated_by.username|ltr }}{% endif %}</td>
+      </tr>
+    {% endwith %}{% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="hint">{% translate "Lengths are without token values; each campaign's preview shows the real ones." %}</p>
+{% else %}
+<div class="empty-state">
+  {% icon "file-text" %}
+  <h2>{% translate "No templates yet" %}</h2>
+  <p>{% translate "Add a template's text, exactly as in the Kavenegar panel, to see each campaign's message before its test SMS." %}</p>
+  {% if user|can:"edit_campaigns" %}<a class="button" href="{% url 'template_new' %}">{% icon "plus" %}{% translate "Add a template" %}</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}
