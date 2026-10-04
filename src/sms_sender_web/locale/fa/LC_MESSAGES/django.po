@@ -816,9 +816,6 @@ msgstr "تغییر تنظیمات کمپین"
 msgid "Cancel the campaign"
 msgstr "لغو کمپین"
 
-msgid "Cancel the campaign? Everyone not sent yet is cancelled. SMS that Kavenegar already accepted can't be recalled."
-msgstr "کمپین لغو شود؟ ارسال به همه گیرندگانی که هنوز پیامک نگرفته‌اند لغو می‌شود. پیامک‌هایی که کاوه‌نگار پذیرفته است قابل بازگشت نیستند."
-
 msgid "Cancelled. SMS that Kavenegar already accepted can't be recalled."
 msgstr "لغو شد. پیامک‌هایی که کاوه‌نگار پذیرفته است قابل بازگشت نیستند."
 
@@ -892,18 +889,6 @@ msgstr "کارها"
 
 msgid "Kavenegar needs the first token (token) in every SMS."
 msgstr "کاوه‌نگار در هر پیامک به متغیر اول (token) نیاز دارد."
-
-#, python-brace-format
-msgid "Kavenegar refused the account check (code {code})."
-msgstr "کاوه‌نگار بررسی حساب را نپذیرفت (کد {code})."
-
-#, python-brace-format
-msgid "Kavenegar refused the test SMS because of an account problem (code {code})."
-msgstr "کاوه‌نگار پیامک آزمایشی را به‌دلیل خطای حساب نپذیرفت (کد {code})."
-
-#, python-brace-format
-msgid "Kavenegar stopped the sending because of an account problem (code {code})."
-msgstr "توقف به‌دلیل خطای حساب: کاوه‌نگار ارسال را متوقف کرد (کد {code})."
 
 msgid "Lowercase English letters, digits and dashes, e.g. coin-price-7. It names the campaign's records and tags its links, and can't change later."
 msgstr "حروف کوچک انگلیسی، رقم و خط تیره؛ برای نمونه coin-price-7. سوابق کمپین و برچسب لینک‌های آن با این نام ثبت می‌شود و بعداً تغییر نمی‌کند."
@@ -1154,10 +1139,6 @@ msgid "The test SMS takes its token values from a recipient, and there's none to
 msgstr "پیامک آزمایشی مقدار متغیرها را از یکی از گیرندگان می‌گیرد، و گیرنده‌ای برای ارسال نیست."
 
 #, python-brace-format
-msgid "The test SMS wasn't sent (code {code}). Check the template and its tokens."
-msgstr "پیامک آزمایشی ارسال نشد (کد {code}). قالب و متغیرهای آن را بررسی کنید."
-
-#, python-brace-format
 msgid "The worker stopped during this job {attempts} times, so it was given up."
 msgstr "اجراکننده {attempts} بار در میانه این کار متوقف شد، بنابراین کار رها شد."
 
@@ -1292,9 +1273,6 @@ msgstr "کلیک‌های لینک مشترک کمپین"
 msgid "Clicks updated"
 msgstr "آخرین به‌روزرسانی کلیک‌ها"
 
-msgid "code"
-msgstr "کد"
-
 msgid "Debug mode is off."
 msgstr "حالت آزمایشی (debug) خاموش است."
 
@@ -1321,9 +1299,6 @@ msgstr "حساب کاوه‌نگار"
 
 msgid "Kavenegar didn't answer. Try again in a moment."
 msgstr "کاوه‌نگار پاسخ نداد. کمی بعد دوباره بررسی کنید."
-
-msgid "Kavenegar refused the key or the account"
-msgstr "کاوه‌نگار کلید یا حساب را نپذیرفت"
 
 msgid "Kavenegar reports delivery only for 48 hours after sending."
 msgstr "کاوه‌نگار وضعیت تحویل را فقط تا ۴۸ ساعت پس از ارسال اعلام می‌کند."
@@ -1431,3 +1406,79 @@ msgstr "فعال"
 
 msgid "Sandbox: Kavenegar and the short-link service are simulated, and nothing is sent."
 msgstr "محیط شبیه‌سازی: پاسخ کاوه‌نگار و سرویس لینک کوتاه ساختگی است و هیچ پیامکی ارسال نمی‌شود."
+
+# --- Kavenegar's codes, copy buttons, confirmations with numbers (spec 4.11) ---
+
+msgid "A token has a space, “_” or a line break that Kavenegar doesn't accept."
+msgstr "یکی از متغیرها فاصله، «_» یا شکستن سطری دارد که کاوه‌نگار نمی‌پذیرد."
+
+#, python-format
+msgid "Cancel the campaign? %(n)s recipients who haven't got the SMS yet are cancelled. SMS that Kavenegar already accepted can't be recalled."
+msgstr "کمپین لغو شود؟ ارسال به %(n)s گیرنده‌ای که هنوز پیامک نگرفته‌اند لغو می‌شود. پیامک‌هایی که کاوه‌نگار پذیرفته است قابل بازگشت نیستند."
+
+msgid "Copied"
+msgstr "کپی شد"
+
+msgid "Copy"
+msgstr "کپی"
+
+msgid "Kavenegar didn't say more."
+msgstr "کاوه‌نگار توضیح بیشتری نداد."
+
+#, python-brace-format
+msgid "Kavenegar returned error {code} for the test SMS: {meaning}"
+msgstr "کاوه‌نگار برای پیامک آزمایشی خطای {code} برگرداند: {meaning}"
+
+#, python-brace-format
+msgid "Kavenegar returned error {code} on the account check: {meaning}"
+msgstr "کاوه‌نگار در بررسی حساب خطای {code} برگرداند: {meaning}"
+
+#, python-brace-format
+msgid "Kavenegar returned error {code}: {meaning} Sending stopped."
+msgstr "کاوه‌نگار خطای {code} برگرداند: {meaning} ارسال متوقف شد."
+
+msgid "Links in the SMS text are blocked for this account."
+msgstr "ارسال لینک در متن پیامک برای این حساب مسدود است."
+
+#, python-format
+msgid "Start sending to %(n)s recipients now?"
+msgstr "ارسال به %(n)s گیرنده همین حالا آغاز شود؟"
+
+msgid "The account's credit isn't enough."
+msgstr "اعتبار حساب کافی نیست."
+
+msgid "The Kavenegar account is disabled."
+msgstr "حساب کاوه‌نگار غیرفعال است."
+
+msgid "The Kavenegar API key isn't valid."
+msgstr "کلید API کاوه‌نگار نامعتبر است."
+
+msgid "The recipient's number isn't valid."
+msgstr "شماره گیرنده نامعتبر است."
+
+msgid "The sender line needs a higher access level."
+msgstr "خط ارسال‌کننده به سطح دسترسی بالاتری نیاز دارد."
+
+msgid "The server's IP isn't allowed for this account."
+msgstr "نشانی IP سرور برای این حساب مجاز نیست."
+
+msgid "The template wasn't found, or isn't approved yet."
+msgstr "قالب پیامک پیدا نشد یا هنوز تأیید نشده است."
+
+msgid "The template's text has no code."
+msgstr "متن قالب، کد ندارد."
+
+msgid "The text has characters Kavenegar doesn't accept."
+msgstr "متن نویسه‌هایی دارد که کاوه‌نگار نمی‌پذیرد."
+
+msgid "The text is empty or too long."
+msgstr "متن پیامک خالی است یا از حد مجاز بلندتر است."
+
+msgid "This account can't use this Kavenegar service (for example, the server's IP isn't on the allowed list)."
+msgstr "این حساب به این سرویس کاوه‌نگار دسترسی ندارد (برای نمونه، نشانی IP سرور در فهرست مجاز نیست)."
+
+msgid "This account may only send test SMS to its owner's number."
+msgstr "این حساب فقط می‌تواند به شماره صاحب حساب پیامک آزمایشی بفرستد."
+
+msgid "This needs Kavenegar's advanced service."
+msgstr "این کار به سرویس پیشرفته کاوه‌نگار نیاز دارد."

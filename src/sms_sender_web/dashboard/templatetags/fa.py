@@ -61,6 +61,22 @@ def ltr(value):
 
 
 @register.filter
+def copyable(value):
+    """An identifier with a copy button (spec 4.11). A purely numeric one is
+    a number, shown in Persian digits; anything else keeps its characters.
+    The button always copies the stored value exactly."""
+    from django.utils.translation import gettext
+
+    text = str(value)
+    shown = fa_digits(text) if text.isdigit() else text
+    return format_html(
+        '<bdi dir="ltr">{}</bdi><button type="button" class="copy" data-copy="{}" '
+        'data-copied="{}" title="{}" aria-label="{}: {}">⧉</button>',
+        shown, text, gettext("Copied"), gettext("Copy"), gettext("Copy"), text,
+    )
+
+
+@register.filter
 def mask_phone(value) -> str:
     """'09120001234' → '0912*****34' (spec 4.12: pages show numbers masked)."""
     return _mask_phone(str(value))

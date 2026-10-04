@@ -20,7 +20,7 @@
   {% elif kavenegar.problem == "no_key" %}
     <p class="error">{% translate "The Kavenegar key isn't set on the server." %}</p>
   {% elif kavenegar.problem == "refused" %}
-    <p class="error">{% translate "Kavenegar refused the key or the account" %} ({% translate "code" %} {{ kavenegar.code|fa_digits }}).</p>
+    <p class="error">{{ kavenegar.text }}</p>
   {% else %}
     <p class="error">{% translate "Kavenegar didn't answer. Try again in a moment." %}</p>
   {% endif %}

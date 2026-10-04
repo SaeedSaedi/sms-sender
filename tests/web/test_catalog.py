@@ -70,6 +70,24 @@ def test_every_string_the_dashboard_uses_is_translated():
     assert fuzzy == set()
 
 
+# Django's own messages the catalog rewords (its Persian mixes «رمز عبور»
+# with «گذرواژه»); they're used by Django, not by our code.
+DJANGO_OWN = {
+    "The password is too similar to the %(verbose_name)s.",
+    "The two password fields didn’t match.",
+    "This password is entirely numeric.",
+    "This password is too common.",
+    "This password is too short. It must contain at least %d character.",
+    "Your old password was entered incorrectly. Please enter it again.",
+}
+
+
+def test_no_entry_is_stale():
+    """The specialist reviews only text the dashboard shows."""
+    entries, _, _ = parse_po(PO.read_text(encoding="utf-8"))
+    assert sorted(set(entries) - used_msgids() - DJANGO_OWN) == []
+
+
 def test_the_compiled_catalog_matches_the_source():
     entries, plurals, _ = parse_po(PO.read_text(encoding="utf-8"))
     with MO.open("rb") as f:

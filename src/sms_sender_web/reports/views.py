@@ -36,6 +36,7 @@ from sms_sender.state import StateStore
 
 from ..accounts.decorators import requires
 from ..audit.record import record
+from ..campaigns.terms import stop_reason
 from ..dashboard.terms import DELIVERY_STATUS, STATUS_ORDER
 from ..jobs.engine import Engine
 from ..jobs.models import Campaign, Job
@@ -200,7 +201,7 @@ def status(request):
     except RuntimeError:
         kavenegar = {"problem": "no_key"}
     except HaltError as e:
-        kavenegar = {"problem": "refused", "code": e.status_code}
+        kavenegar = {"problem": "refused", "text": stop_reason("account_refused", {"code": e.status_code})}
     except SendError as e:
         kavenegar = {"problem": "unreachable", "code": e.status_code}
 

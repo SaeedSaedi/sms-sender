@@ -15,6 +15,7 @@ from ..accounts.models import test_phone_of
 from ..accounts.roles import can
 from ..audit.record import record
 from ..dashboard.campaigns import read_campaign
+from ..dashboard.templatetags.fa import fa_number
 from ..dashboard.terms import STATUS_ORDER
 from ..jobs import services
 from ..jobs.engine import campaign_db
@@ -111,7 +112,17 @@ def _live(request, campaign: Campaign) -> dict:
     test = services.latest_test(campaign)
     db = campaign_db(campaign)
     summary = read_campaign(db) if db.exists() else None
+    counts = summary.counts if summary else {}
+    waiting = counts.get("pending", 0) + counts.get("failed_retriable", 0)
     return {
+        "cancel_confirm": _(
+            "Cancel the campaign? %(n)s recipients who haven't got the SMS yet are cancelled. "
+            "SMS that Kavenegar already accepted can't be recalled."
+        ) % {"n": fa_number(waiting)},
+        "send_confirm": (
+            _("Start sending to %(n)s recipients now?") % {"n": fa_number(waiting)}
+            if waiting else _("Start sending this campaign now?")
+        ),
         "campaign": campaign,
         "jobs": [(job, stop_reason(job.result.get("stop_reason"), job.result.get("stop_fields"))) for job in jobs],
         "active": bool(active),

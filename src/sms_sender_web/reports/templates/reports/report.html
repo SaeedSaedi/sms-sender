@@ -8,7 +8,7 @@
     <a href="{% url 'home' %}">{% translate "All campaigns" %}</a>
   </div>
 </div>
-<p class="muted">{{ slug|ltr }}{% if template %} · {% translate "Template" %}: {{ template|ltr }}{% endif %}{% if last_run_at %} · {% translate "Last run" %}: {{ last_run_at|jalali }}{% endif %}</p>
+<p class="muted">{{ slug|copyable }}{% if template %} · {% translate "Template" %}: {{ template|copyable }}{% endif %}{% if last_run_at %} · {% translate "Last run" %}: {{ last_run_at|jalali }}{% endif %}</p>
 
 <dl class="figures">
   <div><dt>{% translate "Recipients" %}</dt><dd class="num">{{ total|fa_number }}</dd></div>
@@ -124,7 +124,7 @@
           <td>{% if r.phone|slice:":8" == "INVALID:" %}{{ "invalid"|status_label }}{% else %}{{ r.status|status_label }}{% endif %}</td>
           <td>{% if r.status == "sent" %}{{ r.delivery_status|delivery_label }}{% else %}—{% endif %}</td>
           <td>{% if r.segment %}{{ r.segment|ltr }}{% else %}—{% endif %}</td>
-          <td>{% if r.user_id %}<bdi>{{ r.user_id }}</bdi>{% elif r.status == "sent" %}<span class="muted">{% translate "Missing user ID" %}</span>{% else %}—{% endif %}</td>
+          <td>{% if r.user_id %}{{ r.user_id|copyable }}{% elif r.status == "sent" %}<span class="muted">{% translate "Missing user ID" %}</span>{% else %}—{% endif %}</td>
           <td class="num">{% if r.clicks is not None %}{{ r.clicks|fa_number }}{% else %}—{% endif %}</td>
           <td>{% if r.sent_at %}{{ r.sent_at|jalali }}{% else %}—{% endif %}</td>
         </tr>

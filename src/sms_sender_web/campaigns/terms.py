@@ -13,13 +13,14 @@ STOP_REASONS = {
     "not_enough_credit": _("Not enough credit: about {estimate} rials are needed for {recipients} SMS, and {credit} rials are left."),
     "no_credit": _("The Kavenegar account has no credit left ({credit} rials). Top it up before sending."),
     "debug_mode": _("The Kavenegar account is in debug mode, so no SMS would be delivered. Turn it off in the Kavenegar panel."),
-    "account_refused": _("Kavenegar refused the account check (code {code})."),
-    "provider_halt": _("Kavenegar stopped the sending because of an account problem (code {code})."),
+    "account_refused": _("Kavenegar returned error {code} on the account check: {meaning}"),
+    "provider_halt": _("Kavenegar returned error {code}: {meaning} Sending stopped."),
     "links_refused": _("The short-link service refused to make the links (code {status})."),
     "links_failed": _("Not every short link could be made. Try again."),
     "test_needs_recipient": _("The test SMS takes its token values from a recipient, and there's none to send to."),
-    "test_refused": _("Kavenegar refused the test SMS because of an account problem (code {code})."),
-    "test_failed": _("The test SMS wasn't sent (code {code}). Check the template and its tokens."),
+    "test_refused": _("Kavenegar returned error {code} for the test SMS: {meaning}"),
+    "test_failed": _("Kavenegar returned error {code} for the test SMS: {meaning}"),
+    "provider_unreachable": _("Kavenegar didn't answer. Try again in a moment."),
     "busy": _("Another process is sending this campaign right now."),
     "settings_mismatch": _("This campaign's settings don't match what it sent before."),
     "input_unreadable": _("The segment's file couldn't be read."),
@@ -27,6 +28,30 @@ STOP_REASONS = {
     "given_up": _("The worker stopped during this job {attempts} times, so it was given up."),
 }
 _GENERIC_STOP = _("A check before sending failed.")
+
+# What Kavenegar's codes mean (kavenegar.com/rest.html, checked 2026-10-03):
+# the account problems that stop a run, and the request problems a test SMS
+# can hit. Shown after the code, so the operator knows what to fix.
+KAVENEGAR_CODES = {
+    401: _("The Kavenegar account is disabled."),
+    403: _("The Kavenegar API key isn't valid."),
+    407: _("This account can't use this Kavenegar service (for example, the server's IP isn't on the allowed list)."),
+    410: _("The server's IP isn't allowed for this account."),
+    416: _("The server's IP isn't allowed for this account."),
+    429: _("The server's IP isn't allowed for this account."),
+    418: _("The account's credit isn't enough."),
+    420: _("Links in the SMS text are blocked for this account."),
+    426: _("This needs Kavenegar's advanced service."),
+    427: _("The sender line needs a higher access level."),
+    501: _("This account may only send test SMS to its owner's number."),
+    411: _("The recipient's number isn't valid."),
+    413: _("The text is empty or too long."),
+    422: _("The text has characters Kavenegar doesn't accept."),
+    424: _("The template wasn't found, or isn't approved yet."),
+    431: _("A token has a space, “_” or a line break that Kavenegar doesn't accept."),
+    432: _("The template's text has no code."),
+}
+_UNKNOWN_CODE = _("Kavenegar didn't say more.")
 
 CONFLICTS = {
     "busy": _("Another process is using this campaign right now. Try again in a moment."),
@@ -65,6 +90,8 @@ INVALID_ROWS = {
 
 def _show(name: str, value) -> str:
     """Numbers people read, in Persian digits; names (hosts, params) as they are."""
+    if name == "meaning":
+        return str(value)
     if isinstance(value, bool):
         return str(value)
     if isinstance(value, int):
@@ -81,10 +108,20 @@ def fill(template, fields: dict | None) -> str:
         return str(_GENERIC_STOP)
 
 
+def code_meaning(code) -> str:
+    return str(KAVENEGAR_CODES.get(code, _UNKNOWN_CODE))
+
+
 def stop_reason(key: str | None, fields: dict | None) -> str:
     """'' for no reason (a run that ended normally, or the operator stopped it)."""
     if not key:
         return ""
+    fields = dict(fields or {})
+    if "code" in fields:
+        if fields["code"] is None:  # no answer at all: there's no code to explain
+            key = "provider_unreachable"
+        else:
+            fields["meaning"] = code_meaning(fields["code"])
     return fill(STOP_REASONS.get(key, _GENERIC_STOP), fields)
 
 CHECK_PROBLEMS = {

@@ -18,6 +18,7 @@ from sms_sender.window import DEFAULT_WINDOW, parse_window
 from ..jobs.engine import campaign_db
 from ..jobs.models import Campaign
 from ..segments.models import Segment
+from ..text import persian_text
 from .terms import DESTINATION_ISSUES, TOKEN_ISSUES, fill
 
 TOKENS = tuple(TOKEN_MAX_SPACES)  # token, token2, token3, token10, token20
@@ -55,6 +56,9 @@ class NewCampaignForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.fields["segment"].queryset = _ready_segments()  # fresh on every form
         self.fields["segment"].error_messages["invalid_choice"] = _("Choose a segment whose columns are set.")
+
+    def clean_name(self) -> str:
+        return persian_text(self.cleaned_data["name"].strip())
 
     def clean_slug(self) -> str:
         slug = self.cleaned_data["slug"].strip()
@@ -156,7 +160,7 @@ class SettingsForm(forms.Form):
         for name in TOKENS:
             source = data.get(f"{name}_source") or ""
             if source == "value":
-                value = data.get(f"{name}_value") or ""
+                value = persian_text(data.get(f"{name}_value") or "")
                 if not value.strip():
                     self.add_error(f"{name}_value", _("Write the value, or choose “Not used”."))
                     continue
@@ -193,7 +197,7 @@ class SettingsForm(forms.Form):
                 continue
             column, sep, rest = line.partition(":")
             source, eq, target = rest.partition("=")
-            column, source, target = column.strip(), source.strip(), target.strip()
+            column, source, target = column.strip(), source.strip(), persian_text(target.strip())
             if not sep or not eq or not column or not source or not target:
                 self.add_error("value_maps", _("Write each translation as column:value=translation, e.g. side:Buy=خرید."))
                 return {}

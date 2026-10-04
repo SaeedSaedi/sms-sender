@@ -9,7 +9,7 @@
     <a href="{% url 'home' %}">{% translate "All campaigns" %}</a>
   </div>
 </div>
-<p class="muted">{{ campaign.slug|ltr }} · {% translate "Segment" %}: {% if segment %}<a href="{% url 'segment_detail' segment.slug %}"><bdi>{{ segment.name }}</bdi></a>{% else %}—{% endif %} · {% translate "Template" %}: {{ campaign.settings.template|default:"—"|ltr }}</p>
+<p class="muted">{{ campaign.slug|copyable }} · {% translate "Segment" %}: {% if segment %}<a href="{% url 'segment_detail' segment.slug %}"><bdi>{{ segment.name }}</bdi></a>{% else %}—{% endif %} · {% translate "Template" %}: {% if campaign.settings.template %}{{ campaign.settings.template|copyable }}{% else %}—{% endif %}</p>
 
 <details class="card summary-card">
   <summary>{% translate "What this campaign sends" %}</summary>
