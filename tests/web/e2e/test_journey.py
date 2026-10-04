@@ -15,12 +15,17 @@ from django_otp.oath import totp
 from sms_sender_web.dashboard.templatetags.fa import fa_number
 from sms_sender_web.jobs.models import Job
 
-from ..world import PASSWORD, TEST_PHONE, _user
+from ..world import PASSWORD, TEST_PHONE, _user, open_window
 from .conftest import fa
 
 pytestmark = pytest.mark.e2e
 
 ROWS = ["09120000001", "09120000002", "09120000003"]
+
+
+def _text(locator) -> str:
+    """What the element says, with whitespace as a reader would see it."""
+    return " ".join(locator.inner_text().split())
 
 
 def _wait_for(check, timeout: float = 60.0):
@@ -33,7 +38,6 @@ def _wait_for(check, timeout: float = 60.0):
 def test_an_operator_runs_a_campaign_from_a_list_to_its_report(sandbox, sandbox_worker, open_as, tmp_path):
     _user("operator1", "operator")
     page = open_as(None, "/login/")
-    page.on("dialog", lambda dialog: dialog.accept())  # the confirmations
 
     # First sign-in: the password, then linking an authenticator app.
     page.get_by_label(fa("Username"), exact=True).fill("operator1")
@@ -78,7 +82,7 @@ def test_an_operator_runs_a_campaign_from_a_list_to_its_report(sandbox, sandbox_
     page.get_by_label(f"{fa('Column')}: token10", exact=True).select_option("first_name")
     page.get_by_label(f"{fa('Filled with')}: token20", exact=True).select_option(label=fa("The short link"))
     page.get_by_label(fa("The address it opens"), exact=True).fill("https://kifpool.me/wallet")
-    page.get_by_label(fa("Sending window (Tehran time)"), exact=True).fill("00:00-23:59")
+    page.get_by_label(fa("Sending window (Tehran time)"), exact=True).fill(open_window())
     page.get_by_role("button", name=fa("Save"), exact=True).click()
 
     # The check, then a test SMS to my own number, which I approve.
@@ -91,11 +95,15 @@ def test_an_operator_runs_a_campaign_from_a_list_to_its_report(sandbox, sandbox_
 
     # The send.
     page.get_by_role("button", name=fa("Start sending"), exact=True).click()
+    # The confirmation names the action and how many it reaches.
+    dialog = page.get_by_role("dialog")
+    assert fa_number(len(ROWS)) in _text(dialog)
+    dialog.get_by_role("button", name=fa("Start sending"), exact=True).click()
     _wait_for(lambda: Job.objects.filter(kind=Job.Kind.SEND, state=Job.State.DONE).exists())
     page.reload()
     accepted = f"{fa('Accepted')} {fa_number(len(ROWS))}"
-    assert accepted in page.locator("#live").inner_text()
+    assert accepted in _text(page.locator("#recipients-step"))
 
     # The report.
     page.get_by_role("link", name=fa("Report"), exact=True).click()
-    assert accepted in page.locator("[data-cli=status]").inner_text()
+    assert accepted in _text(page.locator("[data-cli=status]"))

@@ -23,6 +23,8 @@ from sms_sender_web.jobs.sandbox import SandboxKavenegar, SandboxShlink, read_ou
 from sms_sender_web.jobs.worker import Worker  # noqa: E402
 from sms_sender_web.segments.models import Segment  # noqa: E402
 
+from .world import open_window  # noqa: E402
+
 pytestmark = pytest.mark.django_db(transaction=True)
 
 ROWS = ["09120000001", "09120000002", "09120001000", "09120001999"]  # …000 rejected, …999 unknown
@@ -59,7 +61,7 @@ def campaign(operator_client, tmp_path):
     operator_client.post("/campaigns/try-1/settings/", {
         "segment": "vip", "template": "coin-price", "token_source": "column", "token_column": "first_name",
         "token2_source": "link", "link_destination": "https://kifpool.me/wallet", "link_format": "url",
-        "link_strategy": "recipient", "link_expiry_days": "7", "send_window": "00:00-23:59", "workers": "2",
+        "link_strategy": "recipient", "link_expiry_days": "7", "send_window": open_window(), "workers": "2",
     })
     return Campaign.objects.get(slug="try-1")
 

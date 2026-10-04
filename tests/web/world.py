@@ -26,6 +26,19 @@ from sms_sender_web.segments.models import Segment
 from sms_sender_web.suppression.models import Suppression
 
 PASSWORD = "a-long-test-password-1"
+
+
+def open_window() -> str:
+    """A sending window that's open now and for hours either way. A fixed
+    00:00-23:59 is closed for the last minute of the day; this one never is
+    while a test runs. Windows may cross midnight."""
+    from datetime import timedelta
+
+    from sms_sender.window import now_tehran
+
+    now = now_tehran()
+    return f"{now - timedelta(hours=6):%H:%M}-{now + timedelta(hours=6):%H:%M}"
+
 TEST_PHONE = "09120000099"
 PHONES = [f"0912000{i:04d}" for i in range(1, 7)]
 
@@ -41,7 +54,7 @@ SETTINGS = {
         "strategy": "recipient", "expiry_days": 7,
         "utm_source": "sms", "utm_medium": "sms", "utm_campaign": None, "utm_content": None,
     },
-    "send_window": "00:00-23:59",
+    "send_window": "",  # set to an always-open window by _campaign()
     "rate": None,
     "workers": 2,
 }
@@ -94,7 +107,7 @@ def _user(name: str, role: str | None, test_phone: str = ""):
 
 def _campaign(slug: str, name: str, segment: Segment, *, db_rows: dict[str, str] | None = None) -> Campaign:
     campaign = Campaign.objects.create(
-        slug=slug, name=name, settings={**SETTINGS, "input": str(segment.path)},
+        slug=slug, name=name, settings={**SETTINGS, "input": str(segment.path), "send_window": open_window()},
     )
     if db_rows is not None:
         store = StateStore(campaign_db(campaign))

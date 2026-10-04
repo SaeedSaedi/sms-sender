@@ -1,0 +1,31 @@
+{% load i18n roles ui %}{% if not in_drawer %}<a class="brand" href="{% url 'home' %}">{% icon "message-square-text" %}<span>{% translate "SMS campaigns" %}</span></a>{% endif %}
+<ul class="nav-list">
+  {% if user|can:"view_campaigns" %}
+    <li><a href="{% url 'home' %}"{% if nav_section == "campaigns" %} aria-current="true"{% endif %}>{% icon "megaphone" %}<span>{% translate "Campaigns" %}</span></a></li>
+    <li><a href="{% url 'segment_list' %}"{% if nav_section == "segments" %} aria-current="true"{% endif %}>{% icon "users" %}<span>{% translate "Segments" %}</span></a></li>
+  {% endif %}
+  {% if user|can:"add_suppression" %}
+    <li><a href="{% url 'suppression' %}"{% if nav_section == "suppression" %} aria-current="true"{% endif %}>{% icon "ban" %}<span>{% translate "Suppression list" %}</span></a></li>
+  {% endif %}
+  {% if user|can:"view_campaigns" %}
+    <li><a href="{% url 'status' %}"{% if nav_section == "status" %} aria-current="true"{% endif %}>{% icon "activity" %}<span>{% translate "Service status" %}</span></a></li>
+  {% endif %}
+</ul>
+{% if user|can:"manage_users" or user|can:"view_audit_log" %}
+  <p class="nav-group">{% translate "Administration" %}</p>
+  <ul class="nav-list">
+    {% if user|can:"manage_users" %}
+      <li><a href="{% url 'users' %}"{% if nav_section == "users" %} aria-current="true"{% endif %}>{% icon "user-cog" %}<span>{% translate "Users" %}</span></a></li>
+    {% endif %}
+    {% if user|can:"view_audit_log" %}
+      <li><a href="{% url 'audit_log' %}"{% if nav_section == "activity" %} aria-current="true"{% endif %}>{% icon "history" %}<span>{% translate "Activity log" %}</span></a></li>
+    {% endif %}
+  </ul>
+{% endif %}
+<div class="nav-user">
+  <div class="who"><span class="avatar" aria-hidden="true">{{ user.get_username|slice:":1" }}</span><span><bdi dir="ltr">{{ user.get_username }}</bdi> · {{ user|role|role_label }}</span></div>
+  <div class="links">
+    <a href="{% url 'my_account' %}"{% if nav_section == "account" %} aria-current="true"{% endif %}>{% translate "My account" %}</a>
+    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="link">{% translate "Log out" %}</button></form>
+  </div>
+</div>

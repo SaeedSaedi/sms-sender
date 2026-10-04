@@ -61,4 +61,4 @@ def test_campaigns_are_listed_with_persian_numbers(signed_in, settings, tmp_path
 
 def test_no_campaigns_yet(signed_in, settings, tmp_path):
     settings.SMS_SENDER_DB_DIR = tmp_path / "nothing-here"
-    assert "هنوز کمپینی نیست" in signed_in.get("/").content.decode()
+    assert "هنوز کمپینی ساخته نشده است" in signed_in.get("/").content.decode()

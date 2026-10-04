@@ -1,15 +1,25 @@
-{% extends "base.html" %}{% load i18n fa roles %}
+{% extends "base.html" %}{% load i18n fa roles ui %}
 {% block title %}{{ segment.name }} · {% translate "Segments" %}{% endblock %}
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="{% translate "Breadcrumb" %}"><ol>
+  <li><a href="{% url 'segment_list' %}">{% translate "Segments" %}</a></li>
+  <li aria-current="page"><bdi>{{ segment.name }}</bdi></li>
+</ol></nav>
+{% endblock %}
 {% block content %}
-<div class="page-head">
-  <h1><bdi>{{ segment.name }}</bdi></h1>
-  <a href="{% url 'segment_list' %}">{% translate "All segments" %}</a>
-</div>
-<p class="muted">{{ segment.slug|copyable }} · {{ segment.original_name|ltr }} · {{ segment.uploaded_at|jalali }}{% if segment.uploaded_by %} · {{ segment.uploaded_by.username|ltr }}{% endif %}</p>
+<header class="page-header">
+  <div>
+    <h1><bdi>{{ segment.name }}</bdi></h1>
+    <p class="page-meta">{{ segment.slug|copyable }} · {{ segment.original_name|ltr }} · {{ segment.uploaded_at|jalali }}{% if segment.uploaded_by %} · {{ segment.uploaded_by.username|ltr }}{% endif %}</p>
+  </div>
+</header>
 
 {% if draft %}
-  <p class="warn">{% translate "The columns of this file haven't been chosen yet, so it can't be used." %}</p>
-  {% if user|can:"edit_campaigns" %}<p><a class="button" href="{% url 'segment_map' segment.slug %}">{% translate "Choose the columns" %}</a></p>{% endif %}
+  <div class="callout callout-warning">
+    {% icon "triangle-alert" %}
+    <p>{% translate "The columns of this file haven't been chosen yet, so it can't be used." %}</p>
+  </div>
+  {% if user|can:"edit_campaigns" %}<p class="form-actions"><a class="button" href="{% url 'segment_map' segment.slug %}">{% icon "list-checks" %}{% translate "Choose the columns" %}</a></p>{% endif %}
 {% else %}
   <dl class="figures">
     <div><dt>{% translate "Rows" %}</dt><dd class="num">{{ summary.rows|fa_number }}</dd></div>
@@ -24,16 +34,22 @@
   </dl>
   <p class="hint">{% translate "Repeated numbers are sent once. The suppression count is from the upload; each send checks the list again." %}</p>
 
-  <h2>{% translate "Columns" %}</h2>
-  <ul class="plain">
-    <li>{% translate "Mobile number" %}</li>
-    <li>{% translate "User ID" %}: {% if segment.user_id_column %}<bdi>{{ segment.user_id_column }}</bdi>{% else %}—{% endif %}</li>
-    <li>{% translate "For tokens" %}: {% for name in segment.token_columns %}<bdi class="sample">{{ name }}</bdi>{% empty %}—{% endfor %}</li>
-  </ul>
+  <section class="card step">
+    <h2>{% translate "Columns" %}</h2>
+    <ul class="plain">
+      <li>{% translate "Mobile number" %}</li>
+      <li>{% translate "User ID" %}: {% if segment.user_id_column %}<bdi>{{ segment.user_id_column }}</bdi>{% else %}—{% endif %}</li>
+      <li>{% translate "For tokens" %}: {% for name in segment.token_columns %}<bdi class="sample">{{ name }}</bdi>{% empty %}—{% endfor %}</li>
+    </ul>
+    {% if used_by %}
+      <p class="muted">{% translate "Used by" %}: {% for campaign in used_by %}<a href="{% url 'campaign_detail' campaign.slug %}">{{ campaign.slug|ltr }}</a>{% if not forloop.last %}، {% endif %}{% endfor %}</p>
+    {% endif %}
+  </section>
 
   {% if summary.invalid_sample %}
-    <h2>{% translate "Invalid rows" %}</h2>
-    <div class="table-wrap">
+  <section class="step">
+    <h2 id="invalid-rows">{% translate "Invalid rows" %}</h2>
+    <div class="table-wrap" tabindex="0" role="region" aria-labelledby="invalid-rows">
       <table>
         <thead><tr><th scope="col">{% translate "Value" %}</th><th scope="col">{% translate "Reason" %}</th></tr></thead>
         <tbody>
@@ -47,10 +63,7 @@
       </table>
     </div>
     {% if summary.invalid > summary.invalid_sample|length %}<p class="hint">{% translate "Only the first rows are shown." %}</p>{% endif %}
-  {% endif %}
-
-  {% if used_by %}
-    <p>{% translate "Used by" %}: {% for campaign in used_by %}{{ campaign.slug|ltr }}{% if not forloop.last %}، {% endif %}{% endfor %}</p>
+  </section>
   {% endif %}
 {% endif %}
 
@@ -58,7 +71,7 @@
   <form method="post" action="{% url 'segment_delete' segment.slug %}" class="danger-zone"
         data-confirm="{% translate "Delete this segment and its file? Campaigns that already sent keep their own records." %}">
     {% csrf_token %}
-    <button type="submit" class="danger">{% translate "Delete the segment" %}</button>
+    <button type="submit" class="danger">{% icon "trash-2" %}{% translate "Delete the segment" %}</button>
   </form>
 {% endif %}
 {% endblock %}

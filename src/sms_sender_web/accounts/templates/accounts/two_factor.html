@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% load i18n %}
+{% extends "base.html" %}{% load i18n ui %}
 {% block title %}{% translate "Two-step verification" %} · {% translate "SMS campaigns" %}{% endblock %}
 {% block content %}
 <section class="card narrow">
@@ -8,8 +8,8 @@
     {% csrf_token %}
     <label for="id_code">{% translate "Six-digit code" %}</label>
     <input id="id_code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
-           dir="ltr" maxlength="16" required autofocus>
-    {% for error in form.code.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+           dir="ltr" maxlength="16" required autofocus{% aria form.code %}>
+    {% field_errors form.code %}
     <input type="hidden" name="next" value="{{ next }}">
     <button type="submit">{% translate "Confirm" %}</button>
   </form>

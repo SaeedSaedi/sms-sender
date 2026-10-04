@@ -1,14 +1,20 @@
-{% extends "base.html" %}{% load i18n fa roles %}
+{% extends "base.html" %}{% load i18n fa roles ui %}
 {% block title %}{% translate "Report" %} · {{ name }}{% endblock %}
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="{% translate "Breadcrumb" %}"><ol>
+  <li><a href="{% url 'home' %}">{% translate "Campaigns" %}</a></li>
+  <li>{% if campaign %}<a href="{% url 'campaign_detail' slug %}"><bdi>{{ name }}</bdi></a>{% else %}<bdi>{{ name }}</bdi>{% endif %}</li>
+  <li aria-current="page">{% translate "Report" %}</li>
+</ol></nav>
+{% endblock %}
 {% block content %}
-<div class="page-head">
-  <h1>{% translate "Report" %}: <bdi>{{ name }}</bdi></h1>
-  <div class="head-actions">
-    {% if campaign %}<a href="{% url 'campaign_detail' slug %}">{% translate "Campaign page" %}</a>{% endif %}
-    <a href="{% url 'home' %}">{% translate "All campaigns" %}</a>
+<header class="page-header">
+  <div>
+    <h1>{% translate "Report" %}: <bdi>{{ name }}</bdi></h1>
+    <p class="page-meta">{{ slug|copyable }}{% if template %} · {% translate "Template" %}: {{ template|copyable }}{% endif %}{% if last_run_at %} · {% translate "Last run" %}: {{ last_run_at|jalali }}{% endif %}</p>
   </div>
-</div>
-<p class="muted">{{ slug|copyable }}{% if template %} · {% translate "Template" %}: {{ template|copyable }}{% endif %}{% if last_run_at %} · {% translate "Last run" %}: {{ last_run_at|jalali }}{% endif %}</p>
+  {% if campaign %}<div class="page-actions"><a class="button secondary" href="{% url 'campaign_detail' slug %}">{% translate "Campaign page" %}</a></div>{% endif %}
+</header>
 
 <dl class="figures">
   <div><dt>{% translate "Recipients" %}</dt><dd class="num">{{ total|fa_number }}</dd></div>
@@ -18,7 +24,7 @@
 </dl>
 
 <section class="card step" data-cli="status">
-  <h2>{% translate "Statuses" %}</h2>
+  <h2>{% icon "activity" %}{% translate "Statuses" %}</h2>
   <ul class="badges">
     {% for status in status_order %}{% with n=counts|get:status %}{% if n %}
       <li class="badge status-{{ status }}">{{ status|status_label }} <span class="num">{{ n|fa_number }}</span></li>
@@ -35,13 +41,13 @@
 
 {% if links %}
 <section class="card step">
-  <h2>{% translate "Short links and clicks" %}</h2>
+  <h2>{% icon "link" %}{% translate "Short links and clicks" %}</h2>
   <p class="muted">{% translate "Links" %}:
     {% for status, n in links.items %}{% if status == "ready" %}{% translate "ready" %}{% elif status == "pending" %}{% translate "waiting" %}{% else %}{% translate "refused" %}{% endif %} {{ n|fa_number }}{% if not forloop.last %} · {% endif %}{% endfor %}
     {% if last_click_sync %} · {% translate "Clicks updated" %}: {{ last_click_sync|jalali }}{% endif %}</p>
   {% if segments %}
   <div class="table-wrap">
-    <table>
+    <table class="table-stack">
       <thead>
         <tr>
           <th scope="col">{% translate "Segment" %}</th>
@@ -55,10 +61,10 @@
       {% for s in segments %}
         <tr>
           <th scope="row">{{ s.segment|ltr }}</th>
-          <td class="num">{{ s.sent|fa_number }}</td>
-          <td class="num">{{ s.clicks|fa_number }}</td>
-          <td class="num">{% if s.clicked is not None %}{{ s.clicked|fa_number }}{% else %}—{% endif %}</td>
-          <td class="num">{{ s.missing_user_id|fa_number }}{% if s.clicked_missing_user_id %} ({% translate "clicked" %} {{ s.clicked_missing_user_id|fa_number }}){% endif %}</td>
+          <td data-label="{% translate "Accepted" %}" class="num">{{ s.sent|fa_number }}</td>
+          <td data-label="{% translate "Clicks" %}" class="num">{{ s.clicks|fa_number }}</td>
+          <td data-label="{% translate "People who clicked" %}" class="num">{% if s.clicked is not None %}{{ s.clicked|fa_number }}{% else %}—{% endif %}</td>
+          <td data-label="{% translate "Missing user ID" %}" class="num">{{ s.missing_user_id|fa_number }}{% if s.clicked_missing_user_id %} ({% translate "clicked" %} {{ s.clicked_missing_user_id|fa_number }}){% endif %}</td>
         </tr>
       {% endfor %}
       </tbody>
@@ -71,12 +77,12 @@
 {% endif %}
 
 <section class="card step">
-  <h2>{% translate "Downloads" %}</h2>
+  <h2>{% icon "download" %}{% translate "Downloads" %}</h2>
   <div class="actions">
-    {% if user|can:"download_aggregates" %}<a class="button secondary" href="{% url 'report_summary_csv' slug %}">{% translate "Summary (CSV)" %}</a>{% endif %}
+    {% if user|can:"download_aggregates" %}<a class="button secondary" href="{% url 'report_summary_csv' slug %}">{% icon "download" %}{% translate "Summary (CSV)" %}</a>{% endif %}
     {% if user|can:"export_people" %}
-      <a class="button secondary" href="{% url 'report_attribution_csv' slug %}" data-cli="export-attribution">{% translate "Attribution, no phone numbers (CSV)" %}</a>
-      <a class="button secondary" href="{% url 'report_clickers_csv' slug %}" data-cli="export-clickers">{% translate "People who clicked, with phone numbers (CSV)" %}</a>
+      <a class="button secondary" href="{% url 'report_attribution_csv' slug %}" data-cli="export-attribution">{% icon "download" %}{% translate "Attribution, no phone numbers (CSV)" %}</a>
+      <a class="button secondary" href="{% url 'report_clickers_csv' slug %}" data-cli="export-clickers">{% icon "download" %}{% translate "People who clicked, with phone numbers (CSV)" %}</a>
     {% endif %}
   </div>
   <p class="hint">{% translate "Files use English column names and Latin digits, for other systems. Every download is recorded in the activity log." %}</p>
@@ -86,14 +92,14 @@
   <h2>{% translate "Recipients" %}</h2>
   <form method="get" class="inline search">
     <label for="id_q" class="visually-hidden">{% translate "Find a number" %}</label>
-    <input id="id_q" name="q" type="text" dir="ltr" inputmode="tel" value="{{ query }}" placeholder="{% translate "Find a number" %}">
-    <button type="submit" class="small secondary">{% translate "Find" %}</button>
+    <input id="id_q" name="q" type="search" dir="ltr" inputmode="tel" value="{{ query }}" placeholder="{% translate "Find a number" %}">
+    <button type="submit" class="small secondary">{% icon "search" %}{% translate "Find" %}</button>
     {% if query %}<a href="{% url 'report' slug %}">{% translate "Show all" %}</a>{% endif %}
   </form>
   {% if query_invalid %}<p class="error" role="alert">{% translate "That isn't a valid mobile number." %}</p>{% endif %}
   {% if rows %}
   <div class="table-wrap">
-    <table>
+    <table class="table-stack">
       <thead>
         <tr>
           <th scope="col">{% translate "Number" %}</th>
@@ -108,25 +114,25 @@
       <tbody>
       {% for r in rows %}
         <tr>
-          <td>
+          <th scope="row">
             {% if r.phone|slice:":8" == "INVALID:" %}{{ r.raw|mask_phone|fa_digits|ltr }}
             {% else %}
               <span>{{ r.phone|mask_phone|fa_digits|ltr }}</span>
               {% if user|can:"reveal_phone" %}
                 <form method="post" action="{% url 'report_reveal' slug %}" class="inline reveal"
-                      hx-post="{% url 'report_reveal' slug %}" hx-target="closest td" hx-swap="innerHTML">
+                      hx-post="{% url 'report_reveal' slug %}" hx-target="closest th" hx-swap="innerHTML">
                   {% csrf_token %}<input type="hidden" name="row" value="{{ r.id }}">
                   <button type="submit" class="link">{% translate "show" %}</button>
                 </form>
               {% endif %}
             {% endif %}
-          </td>
-          <td>{% if r.phone|slice:":8" == "INVALID:" %}{{ "invalid"|status_label }}{% else %}{{ r.status|status_label }}{% endif %}</td>
-          <td>{% if r.status == "sent" %}{{ r.delivery_status|delivery_label }}{% else %}—{% endif %}</td>
-          <td>{% if r.segment %}{{ r.segment|ltr }}{% else %}—{% endif %}</td>
-          <td>{% if r.user_id %}{{ r.user_id|copyable }}{% elif r.status == "sent" %}<span class="muted">{% translate "Missing user ID" %}</span>{% else %}—{% endif %}</td>
-          <td class="num">{% if r.clicks is not None %}{{ r.clicks|fa_number }}{% else %}—{% endif %}</td>
-          <td>{% if r.sent_at %}{{ r.sent_at|jalali }}{% else %}—{% endif %}</td>
+          </th>
+          <td data-label="{% translate "Status" %}">{% if r.phone|slice:":8" == "INVALID:" %}{{ "invalid"|status_label }}{% else %}{{ r.status|status_label }}{% endif %}</td>
+          <td data-label="{% translate "Delivery" %}">{% if r.status == "sent" %}{{ r.delivery_status|delivery_label }}{% else %}—{% endif %}</td>
+          <td data-label="{% translate "Segment" %}">{% if r.segment %}{{ r.segment|ltr }}{% else %}—{% endif %}</td>
+          <td data-label="{% translate "User ID" %}">{% if r.user_id %}{{ r.user_id|copyable }}{% elif r.status == "sent" %}<span class="muted">{% translate "Missing user ID" %}</span>{% else %}—{% endif %}</td>
+          <td data-label="{% translate "Clicks" %}" class="num">{% if r.clicks is not None %}{{ r.clicks|fa_number }}{% else %}—{% endif %}</td>
+          <td data-label="{% translate "Accepted at" %}">{% if r.sent_at %}{{ r.sent_at|jalali }}{% else %}—{% endif %}</td>
         </tr>
       {% endfor %}
       </tbody>

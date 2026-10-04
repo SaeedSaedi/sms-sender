@@ -95,7 +95,8 @@ def test_an_earlier_send_does_not_settle_a_later_claim(tmp_path):
     state.mark_unknown(PHONE, "outcome unknown: read timed out")
     provider = Provider([ProviderMessage(555, 10)])
     result = reconcile_unknown(state, provider, min_age_sec=0)
-    assert (result.sent, result.requeued, provider.lookups) == (0, 1, 1)
+    # Asked Kavenegar (near midnight the day is asked in parts), found nothing new.
+    assert (result.sent, result.requeued) == (0, 1) and provider.lookups >= 1
 
 
 def test_two_messages_to_one_phone_are_reported(tmp_path):

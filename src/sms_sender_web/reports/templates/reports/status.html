@@ -1,54 +1,56 @@
-{% extends "base.html" %}{% load i18n fa %}
+{% extends "base.html" %}{% load i18n fa ui %}
 {% block title %}{% translate "Service status" %} · {% translate "SMS campaigns" %}{% endblock %}
 {% block content %}
-<div class="page-head">
-  <h1>{% translate "Service status" %}</h1>
-  <a href="{% url 'status' %}">{% translate "Check again" %}</a>
-</div>
-<p class="muted">{% translate "Asked just now" %}: {{ checked_at|jalali:"%Y/%m/%d %H:%M:%S" }}</p>
+<header class="page-header">
+  <div>
+    <h1>{% translate "Service status" %}</h1>
+    <p class="page-meta">{% translate "Asked just now" %}: <span class="num">{{ checked_at|jalali:"%Y/%m/%d %H:%M:%S" }}</span></p>
+  </div>
+  <div class="page-actions"><a class="button secondary" href="{% url 'status' %}">{% icon "refresh-cw" %}{% translate "Check again" %}</a></div>
+</header>
 
 <section class="card step" data-cli="preview --check-account">
-  <h2>{% translate "Kavenegar account" %}</h2>
+  <h2>{% icon "message-square-text" %}{% translate "Kavenegar account" %}</h2>
   {% if kavenegar.ok %}
     <dl class="figures">
       <div><dt>{% translate "Account credit" %}</dt><dd class="num">{% if kavenegar.credit is not None %}{{ kavenegar.credit|fa_number }} {% translate "rials" %}{% else %}—{% endif %}</dd></div>
       <div><dt>{% translate "Valid until" %}</dt><dd class="num">{% if kavenegar.expires %}{{ kavenegar.expires|jalali:"%Y/%m/%d" }}{% else %}—{% endif %}</dd></div>
     </dl>
-    {% if kavenegar.debug_mode %}<p class="error">{% translate "Debug mode is on: no SMS is delivered. Turn it off in the Kavenegar panel." %}</p>
-    {% elif kavenegar.debug_mode is False %}<p class="ok">{% translate "Debug mode is off." %}</p>{% endif %}
+    {% if kavenegar.debug_mode %}<div class="callout callout-error" role="alert">{% icon "circle-alert" %}<p>{% translate "Debug mode is on: no SMS is delivered. Turn it off in the Kavenegar panel." %}</p></div>
+    {% elif kavenegar.debug_mode is False %}<p class="ok">{% icon "circle-check" %} {% translate "Debug mode is off." %}</p>{% endif %}
     {% if kavenegar.resend_failed %}<p class="hint">{% translate "Kavenegar resends undelivered SMS once by itself (resend failed is on)." %}</p>{% endif %}
   {% elif kavenegar.problem == "no_key" %}
-    <p class="error">{% translate "The Kavenegar key isn't set on the server." %}</p>
+    <div class="callout callout-error">{% icon "circle-alert" %}<p>{% translate "The Kavenegar key isn't set on the server." %}</p></div>
   {% elif kavenegar.problem == "refused" %}
-    <p class="error">{{ kavenegar.text }}</p>
+    <div class="callout callout-error">{% icon "circle-alert" %}<p>{{ kavenegar.text }}</p></div>
   {% else %}
-    <p class="error">{% translate "Kavenegar didn't answer. Try again in a moment." %}</p>
+    <div class="callout callout-warning">{% icon "wifi-off" %}<p>{% translate "Kavenegar didn't answer. Try again in a moment." %}</p></div>
   {% endif %}
 </section>
 
 <section class="card step">
-  <h2>{% translate "Short-link service" %}</h2>
-  {% if shlink.ok %}<p class="ok">{% translate "Working" %}{% if shlink.version %} · {% translate "version" %} {{ shlink.version|ltr }}{% endif %}</p>
-  {% elif shlink.problem == "no_key" %}<p class="error">{% translate "The short-link service isn't set up on the server." %}</p>
-  {% elif shlink.problem %}<p class="error">{% translate "The short-link service didn't answer. Try again in a moment." %}</p>
-  {% else %}<p class="error">{% translate "The short-link service reports a problem." %}</p>{% endif %}
+  <h2>{% icon "link" %}{% translate "Short-link service" %}</h2>
+  {% if shlink.ok %}<p class="ok">{% icon "circle-check" %} {% translate "Working" %}{% if shlink.version %} · {% translate "version" %} {{ shlink.version|ltr }}{% endif %}</p>
+  {% elif shlink.problem == "no_key" %}<div class="callout callout-error">{% icon "circle-alert" %}<p>{% translate "The short-link service isn't set up on the server." %}</p></div>
+  {% elif shlink.problem %}<div class="callout callout-warning">{% icon "wifi-off" %}<p>{% translate "The short-link service didn't answer. Try again in a moment." %}</p></div>
+  {% else %}<div class="callout callout-error">{% icon "circle-alert" %}<p>{% translate "The short-link service reports a problem." %}</p></div>{% endif %}
 </section>
 
 {% if sandbox %}
 <section class="card step">
-  <h2>{% translate "Simulated SMS" %}</h2>
+  <h2>{% icon "inbox" %}{% translate "Simulated SMS" %}</h2>
   <p>{% translate "What would have been sent, newest first. The sandbox sends nothing." %}
      <span class="muted">({{ outbox_count|fa_number }})</span></p>
   {% if outbox_latest %}
   <div class="table-wrap">
-    <table>
+    <table class="table-stack">
       <thead><tr><th scope="col">{% translate "Number" %}</th><th scope="col">{% translate "Template" %}</th><th scope="col">{% translate "Tokens" %}</th></tr></thead>
       <tbody>
       {% for sms in outbox_latest %}
         <tr>
-          <td>{{ sms.phone|mask_phone|fa_digits|ltr }}</td>
-          <td>{{ sms.template|ltr }}</td>
-          <td>{% for name, value in sms.tokens.items %}<code dir="ltr">{{ name }}</code> <bdi class="sample">{{ value }}</bdi> {% endfor %}</td>
+          <th scope="row">{{ sms.phone|mask_phone|fa_digits|ltr }}</th>
+          <td data-label="{% translate "Template" %}">{{ sms.template|ltr }}</td>
+          <td data-label="{% translate "Tokens" %}">{% for name, value in sms.tokens.items %}<code dir="ltr">{{ name }}</code> <bdi class="sample">{{ value }}</bdi> {% endfor %}</td>
         </tr>
       {% endfor %}
       </tbody>
@@ -59,9 +61,9 @@
 {% endif %}
 
 <section class="card step" data-cli="manage.py worker_status">
-  <h2>{% translate "Worker" %}</h2>
-  {% if worker_alive %}<p class="ok">{% translate "Running" %} · {% translate "last seen" %} {{ worker_seen|jalali:"%H:%M:%S" }}</p>
-  {% else %}<p class="error">{% translate "Not running: jobs wait until it starts." %}{% if worker_seen %} {% translate "Last seen" %}: {{ worker_seen|jalali }}{% endif %}</p>{% endif %}
-  <p class="muted">{% translate "Jobs waiting" %}: {{ queued|fa_number }} · {% translate "running" %}: {{ running|fa_number }}</p>
+  <h2>{% icon "settings" %}{% translate "Worker" %}</h2>
+  {% if worker_alive %}<p class="ok">{% icon "circle-check" %} {% translate "Running" %} · {% translate "last seen" %} {{ worker_seen|jalali:"%H:%M:%S" }}</p>
+  {% else %}<div class="callout callout-error">{% icon "circle-alert" %}<p>{% translate "Not running: jobs wait until it starts." %}{% if worker_seen %} {% translate "Last seen" %}: {{ worker_seen|jalali }}{% endif %}</p></div>{% endif %}
+  <p class="muted">{% translate "Jobs waiting" %}: <span class="num">{{ queued|fa_number }}</span> · {% translate "running" %}: <span class="num">{{ running|fa_number }}</span></p>
 </section>
 {% endblock %}

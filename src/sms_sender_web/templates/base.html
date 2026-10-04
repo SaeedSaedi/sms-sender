@@ -1,47 +1,66 @@
-{% load static i18n roles %}<!doctype html>
+{% load static i18n roles ui %}<!doctype html>
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>{% block title %}{% translate "SMS campaigns" %}{% endblock %}</title>
+  <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
   <script src="{% static 'vendor/htmx.min.js' %}" defer></script>
+  <script src="{% static 'vendor/idiomorph-ext.min.js' %}" defer></script>
   <script src="{% static 'js/app.js' %}" defer></script>
 </head>
-<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-  <header class="topbar">
-    <a class="brand" href="{% url 'home' %}">{% translate "SMS campaigns" %}</a>
-    {% if user|fully_signed_in %}
-      <nav class="nav" aria-label="{% translate "Main menu" %}">
-        {% if user|can:"view_campaigns" %}<a href="{% url 'home' %}">{% translate "Campaigns" %}</a>{% endif %}
-        {% if user|can:"view_campaigns" %}<a href="{% url 'segment_list' %}">{% translate "Segments" %}</a>{% endif %}
-        {% if user|can:"add_suppression" %}<a href="{% url 'suppression' %}">{% translate "Suppression list" %}</a>{% endif %}
-        {% if user|can:"view_campaigns" %}<a href="{% url 'status' %}">{% translate "Service status" %}</a>{% endif %}
-        {% if user|can:"manage_users" %}<a href="{% url 'users' %}">{% translate "Users" %}</a>{% endif %}
-        {% if user|can:"view_audit_log" %}<a href="{% url 'audit_log' %}">{% translate "Activity log" %}</a>{% endif %}
-      </nav>
-    {% endif %}
-    {% if user.is_authenticated %}
-      <form class="session" method="post" action="{% url 'logout' %}">
-        {% csrf_token %}
-        <span class="who"><bdi dir="ltr">{{ user.get_username }}</bdi> · {{ user|role|role_label }}</span>
-        {% if user|fully_signed_in %}<a href="{% url 'my_account' %}">{% translate "My account" %}</a>{% endif %}
-        <button type="submit" class="link">{% translate "Log out" %}</button>
-      </form>
-    {% endif %}
-  </header>
-  {% if sandbox %}
-    <div class="sandbox-banner" role="note">{% translate "Sandbox: Kavenegar and the short-link service are simulated, and nothing is sent." %}</div>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}' hx-ext="morph"{% if user|fully_signed_in %} class="has-nav"{% endif %}>
+  <a class="skip-link" href="#main">{% translate "Skip to the main content" %}</a>
+  {% if user|fully_signed_in %}
+    <nav class="sidebar" aria-label="{% translate "Main menu" %}">{% include "ui/nav.html" %}</nav>
+    <dialog class="drawer" id="drawer" aria-label="{% translate "Main menu" %}">
+      <div class="drawer-head">
+        <a class="brand" href="{% url 'home' %}">{% icon "message-square-text" %}<span>{% translate "SMS campaigns" %}</span></a>
+        <button type="button" class="icon-button" data-close-drawer aria-label="{% translate "Close the menu" %}">{% icon "x" %}</button>
+      </div>
+      <nav aria-label="{% translate "Main menu" %}">{% include "ui/nav.html" with in_drawer=True %}</nav>
+    </dialog>
   {% endif %}
-  <main class="page">
-    {% if messages %}
-      <ul class="messages">
-        {% for message in messages %}
-          <li class="message {{ message.tags }}" role="{% if message.level_tag == 'error' %}alert{% else %}status{% endif %}">{{ message }}</li>
-        {% endfor %}
-      </ul>
+  <div class="shell">
+    <header class="topbar">
+      {% if user|fully_signed_in %}
+        <button type="button" class="icon-button" data-open-drawer aria-controls="drawer" aria-expanded="false"
+                aria-label="{% translate "Open the menu" %}">{% icon "menu" %}</button>
+      {% endif %}
+      <a class="brand" href="{% url 'home' %}">{% icon "message-square-text" %}<span>{% translate "SMS campaigns" %}</span></a>
+      {% if user.is_authenticated and not user|fully_signed_in %}
+        <form class="session actions" method="post" action="{% url 'logout' %}">
+          {% csrf_token %}
+          <span class="muted"><bdi dir="ltr">{{ user.get_username }}</bdi> · {{ user|role|role_label }}</span>
+          <button type="submit" class="link">{% translate "Log out" %}</button>
+        </form>
+      {% endif %}
+    </header>
+    {% if sandbox %}
+      <div class="sandbox-banner" role="region" aria-label="{% translate "Sandbox" %}">{% icon "info" %}<span>{% translate "Sandbox: Kavenegar and the short-link service are simulated, and nothing is sent." %}</span></div>
     {% endif %}
-    {% block content %}{% endblock %}
-  </main>
+    <main id="main" class="page" tabindex="-1">
+      {% block breadcrumbs %}{% endblock %}
+      {% include "ui/messages.html" %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  <div class="callout callout-warning connection-banner" id="connection" role="status" hidden>
+    {% icon "wifi-off" %}
+    <p data-when="offline">{% translate "The connection to the server was lost. Trying again…" %}</p>
+    <p data-when="stale" hidden>{% translate "This page is out of date." %} <button type="button" class="link" data-reload>{% translate "Reload it" %}</button></p>
+  </div>
+  <dialog class="dialog" id="confirm-dialog" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-text">
+    <form method="dialog" class="dialog-body">
+      <h2 class="dialog-title" id="confirm-dialog-title" data-confirm-title></h2>
+      <p id="confirm-dialog-text" data-confirm-text></p>
+      <div class="dialog-actions">
+        <button type="submit" value="confirm" data-confirm-ok></button>
+        <button type="submit" value="cancel" class="secondary" autofocus>{% translate "Never mind" %}</button>
+      </div>
+    </form>
+  </dialog>
 </body>
 </html>

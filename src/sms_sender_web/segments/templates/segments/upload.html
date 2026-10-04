@@ -1,5 +1,11 @@
-{% extends "base.html" %}{% load i18n %}
+{% extends "base.html" %}{% load i18n ui %}
 {% block title %}{% translate "Upload a segment" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="{% translate "Breadcrumb" %}"><ol>
+  <li><a href="{% url 'segment_list' %}">{% translate "Segments" %}</a></li>
+  <li aria-current="page">{% translate "Upload a segment" %}</li>
+</ol></nav>
+{% endblock %}
 {% block content %}
 <section class="card medium">
   <h1>{% translate "Upload a segment" %}</h1>
@@ -7,16 +13,20 @@
   <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
     <label for="id_file">{% translate "File" %}</label>
-    <input id="id_file" name="file" type="file" data-cli="send --input" accept=".csv,.txt,text/csv,text/plain" required>
-    {% for error in form.file.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+    <div class="file-field">
+      <input id="id_file" name="file" type="file" class="file-input" accept=".csv,.txt,text/csv,text/plain" required data-cli="send --input"{% aria form.file %}>
+      <label for="id_file" class="button secondary file-button" aria-hidden="true">{% icon "file-up" %}{% translate "Choose a file" %}</label>
+      <span class="file-name" aria-live="polite" data-empty="{% translate "No file chosen" %}">{% translate "No file chosen" %}</span>
+    </div>
+    {% field_errors form.file %}
     <label for="id_name">{% translate "Name" %}</label>
-    <input id="id_name" name="name" type="text" maxlength="200" value="{{ form.name.value|default:'' }}">
-    <p class="hint">{% translate "Any name that helps you recognise it, in Persian or English." %}</p>
+    <input id="id_name" name="name" type="text" maxlength="200" value="{{ form.name.value|default:'' }}"{% aria form.name hint=True %}>
+    <p class="hint" id="id_name_hint">{% translate "Any name that helps you recognise it, in Persian or English." %}</p>
     <label for="id_slug">{% translate "Short name" %}</label>
-    <input id="id_slug" name="slug" type="text" dir="ltr" maxlength="64" data-cli="send --segment" value="{{ form.slug.value|default:'' }}">
-    <p class="hint">{% translate "Lowercase English letters, digits and dashes. It's recorded with each recipient and appears in the links' UTM values. Empty: taken from the file's name." %}</p>
-    {% for error in form.slug.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
-    <button type="submit">{% translate "Upload" %}</button>
+    <input id="id_slug" name="slug" type="text" dir="ltr" maxlength="64" value="{{ form.slug.value|default:'' }}" data-cli="send --segment"{% aria form.slug hint=True %}>
+    <p class="hint" id="id_slug_hint">{% translate "Lowercase English letters, digits and dashes. It's recorded with each recipient and appears in the links' UTM values. Empty: taken from the file's name." %}</p>
+    {% field_errors form.slug %}
+    <button type="submit">{% icon "upload" %}{% translate "Upload" %}</button>
   </form>
 </section>
 {% endblock %}

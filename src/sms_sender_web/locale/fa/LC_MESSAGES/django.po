@@ -56,9 +56,6 @@ msgstr "لینک‌های کوتاه"
 msgid "Last run"
 msgstr "آخرین اجرا"
 
-msgid "No campaigns yet. A campaign appears here after its first run."
-msgstr "هنوز کمپینی نیست. هر کمپین پس از نخستین اجرا در اینجا نمایش داده می‌شود."
-
 # --- Submission status (glossary: «وضعیت ارسال») ---
 
 msgid "Queued"
@@ -471,9 +468,6 @@ msgstr "فهرست عدم ارسال"
 
 msgid "Upload a segment"
 msgstr "بارگذاری گروه مخاطبان"
-
-msgid "All segments"
-msgstr "همه گروه‌های مخاطبان"
 
 msgid "No segments yet."
 msgstr "هنوز گروه مخاطبانی بارگذاری نشده است."
@@ -1501,3 +1495,58 @@ msgstr "پیامک‌های شبیه‌سازی‌شده"
 
 msgid "What would have been sent, newest first. The sandbox sends nothing."
 msgstr "آنچه ارسال می‌شد، از جدیدترین. در محیط شبیه‌سازی هیچ پیامکی ارسال نمی‌شود."
+
+# Plan 05 · P1: the app shell
+
+msgid "Skip to the main content"
+msgstr "رفتن به محتوای اصلی"
+
+msgid "Open the menu"
+msgstr "باز کردن منو"
+
+msgid "Close the menu"
+msgstr "بستن منو"
+
+msgid "Administration"
+msgstr "مدیریت"
+
+msgid "Close"
+msgstr "بستن"
+
+msgid "Never mind"
+msgstr "انصراف"
+
+msgid "Sandbox"
+msgstr "محیط شبیه‌سازی"
+
+msgid "The connection to the server was lost. Trying again…"
+msgstr "ارتباط با سرور قطع شد. دوباره تلاش می‌کنیم…"
+
+msgid "This page is out of date."
+msgstr "این صفحه به‌روز نیست."
+
+msgid "Reload it"
+msgstr "بارگذاری دوباره"
+
+# Plan 05 · P1: pages
+
+msgid "Breadcrumb"
+msgstr "مسیر صفحه"
+
+msgid "No campaigns yet"
+msgstr "هنوز کمپینی ساخته نشده است"
+
+msgid "A campaign sends one message to a segment: set its text, send a test SMS to yourself, then send."
+msgstr "هر کمپین یک پیام را به یک گروه مخاطبان ارسال می‌کند: متن آن را تنظیم کنید، یک پیامک آزمایشی برای خودتان بفرستید و سپس ارسال را آغاز کنید."
+
+msgid "A segment is a list of recipients: a CSV or TXT file with a mobile number on each row."
+msgstr "گروه مخاطبان فهرستی از گیرندگان است: یک فایل CSV یا TXT که در هر سطر آن یک شماره موبایل آمده است."
+
+msgid "Choose a file"
+msgstr "انتخاب فایل"
+
+msgid "No file chosen"
+msgstr "فایلی انتخاب نشده است"
+
+msgid "Some settings need fixing; each one is marked below."
+msgstr "برخی تنظیمات نیاز به اصلاح دارند؛ هر کدام در ادامه مشخص شده است."

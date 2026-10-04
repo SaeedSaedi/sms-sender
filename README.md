@@ -451,6 +451,9 @@ internal, multi-user tool built with Django and HTMX. So far it has:
 - a status page («وضعیت سرویس‌ها»): Kavenegar credit and account settings,
   the short-link service, and whether the worker is running.
 
+It works on phones (the menu moves into a drawer, tables become cards), by
+keyboard and with screen readers. It follows the system's dark mode.
+
 The campaign pages hand their work to the worker (`docker compose up`
 starts it next to the web app), and the pages follow it as it runs.
 

@@ -18,3 +18,19 @@ def healthz(request):
 def sandbox(request) -> dict:
     """Every page knows whether this is the sandbox, for its banner."""
     return {"sandbox": settings.SANDBOX}
+
+
+# Which menu entry a page belongs to, by its URL name.
+_SECTIONS = {
+    "home": "campaigns", "campaign_new": "campaigns", "campaign_detail": "campaigns",
+    "campaign_settings": "campaigns", "campaign_check": "campaigns", "report": "campaigns",
+    "segment_list": "segments", "segment_upload": "segments", "segment_detail": "segments",
+    "segment_map": "segments", "suppression": "suppression", "status": "status",
+    "users": "users", "audit_log": "activity", "my_account": "account", "password_change": "account",
+}
+
+
+def navigation(request) -> dict:
+    """The menu marks the section of the page you're on."""
+    match = getattr(request, "resolver_match", None)
+    return {"nav_section": _SECTIONS.get(match.url_name if match else None, "")}

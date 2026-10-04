@@ -1,13 +1,15 @@
-{% extends "base.html" %}{% load i18n fa roles %}
+{% extends "base.html" %}{% load i18n fa roles ui %}
 {% block title %}{% translate "Segments" %} · {% translate "SMS campaigns" %}{% endblock %}
 {% block content %}
-<div class="page-head">
+<header class="page-header">
   <h1>{% translate "Segments" %}</h1>
-  {% if user|can:"edit_campaigns" %}<a class="button" href="{% url 'segment_upload' %}">{% translate "Upload a segment" %}</a>{% endif %}
-</div>
+  {% if segments and user|can:"edit_campaigns" %}
+    <div class="page-actions"><a class="button" href="{% url 'segment_upload' %}">{% icon "upload" %}{% translate "Upload a segment" %}</a></div>
+  {% endif %}
+</header>
 {% if segments %}
 <div class="table-wrap">
-  <table>
+  <table class="table-stack">
     <thead>
       <tr>
         <th scope="col">{% translate "Segment" %}</th>
@@ -22,21 +24,26 @@
     {% for segment in segments %}
       <tr>
         <th scope="row"><a href="{% url 'segment_detail' segment.slug %}"><bdi>{{ segment.name }}</bdi></a></th>
-        <td>{{ segment.slug|ltr }}</td>
+        <td data-label="{% translate "Short name" %}">{{ segment.slug|ltr }}</td>
         {% if segment.status == "ready" %}
-          <td class="num">{{ segment.summary.valid|fa_number }}</td>
-          <td class="num">{{ segment.summary.invalid|fa_number }}</td>
-          <td class="num">{% if segment.user_id_column %}{{ segment.summary.missing_user_id|fa_number }}{% else %}—{% endif %}</td>
+          <td data-label="{% translate "Valid numbers" %}" class="num">{{ segment.summary.valid|fa_number }}</td>
+          <td data-label="{% translate "Invalid rows" %}" class="num">{{ segment.summary.invalid|fa_number }}</td>
+          <td data-label="{% translate "Missing user ID" %}" class="num">{% if segment.user_id_column %}{{ segment.summary.missing_user_id|fa_number }}{% else %}—{% endif %}</td>
         {% else %}
-          <td colspan="3"><span class="warn">{{ segment.get_status_display }}</span></td>
+          <td colspan="3"><span class="badge pill-warning">{{ segment.get_status_display }}</span></td>
         {% endif %}
-        <td>{{ segment.uploaded_at|jalali }}{% if segment.uploaded_by %} · {{ segment.uploaded_by.username|ltr }}{% endif %}</td>
+        <td data-label="{% translate "Uploaded" %}">{{ segment.uploaded_at|jalali }}{% if segment.uploaded_by %} · {{ segment.uploaded_by.username|ltr }}{% endif %}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
 </div>
 {% else %}
-<p class="empty">{% translate "No segments yet." %}</p>
+<div class="empty-state">
+  {% icon "users" %}
+  <h2>{% translate "No segments yet." %}</h2>
+  <p>{% translate "A segment is a list of recipients: a CSV or TXT file with a mobile number on each row." %}</p>
+  {% if user|can:"edit_campaigns" %}<a class="button" href="{% url 'segment_upload' %}">{% icon "upload" %}{% translate "Upload a segment" %}</a>{% endif %}
+</div>
 {% endif %}
 {% endblock %}
