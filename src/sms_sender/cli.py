@@ -802,9 +802,9 @@ def purge(db_path: str, yes: bool, campaign: str | None) -> None:
 )
 @click.option(
     "--requeue-not-found/--review-not-found", default=REQUEUE_NOT_FOUND, show_default=True,
-    help="What 'Kavenegar has no message for this phone' means: requeue (it was "
-         "never sent) or needs_review. Review until Kavenegar's lookup is "
-         "confirmed to list verify/lookup messages.",
+    help="What 'Kavenegar has no message for this phone on the attempt's day' "
+         "means: requeue (it was never sent; only for attempts under a day old, "
+         "older ones always go to review) or needs_review.",
 )
 @click.option("--timeout", default=15.0, show_default=True, type=float)
 @click.option(
@@ -819,8 +819,9 @@ def reconcile(
     """Ask Kavenegar what happened to `unknown` rows. Never sends anything.
 
     Found at Kavenegar → `sent`. Several candidate messages → `needs_review`.
-    Not found → `needs_review`, or `failed_retriable` with --requeue-not-found
-    so the next `send` delivers it.
+    Not found on the attempt's day → `failed_retriable`, so the next `send`
+    delivers it (attempts over a day old, or with --review-not-found:
+    `needs_review`).
     """
     logging_config.setup(log_file=log_file, console_level=logging.WARNING)
     db_path = _resolve_db_path(db_path, campaign)
