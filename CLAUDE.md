@@ -29,6 +29,14 @@ sms-sender dry-run --input … # parse + normalize, no API calls
 sms-sender reset --status failed_permanent   # promote rows back to pending
 sms-sender reconcile --state data/db/x.db    # ask Kavenegar about `unknown` rows (never sends)
 sms-sender delivery --campaign coin-price-7   # delivery reports for the last 48 h (never sends)
+sms-sender send --campaign coin-price-7 --input vip-2.csv --template … \
+    --link-url https://kifpool.me/offer --link-token token3 \
+    --user-id-column user_id                  # a short link per recipient, made before any SMS
+sms-sender dry-run --input vip-2.csv --campaign coin-price-7 \
+    --link-url https://kifpool.me/offer --link-token token3   # show a link's long URL, no Shlink call
+sms-sender clicks --campaign coin-price-7     # click counts from Shlink, per segment (never sends)
+sms-sender export-attribution --campaign coin-price-7   # ref → user ID for the backend, no phones
+sms-sender export-clickers --campaign coin-price-7      # who clicked, with phones
 sms-sender purge -y          # delete state DB (no undo)
 
 # Tests
@@ -40,7 +48,7 @@ pytest -k "claim or in_flight"           # by name pattern
 
 CI (`.github/workflows/tests.yml`) runs `pytest` on Python 3.10 (the `requires-python` floor) and 3.14 for pushes to `main` and every PR. Code must keep working on 3.10.
 
-`KAVENEGAR_API_KEY` must be set (env or `.env` in cwd) for `send`. Other commands work without it. `SMS_SENDER_TEST_NUMBER` (optional) provides the default phone for `--approval-test`; the `--test-number` flag overrides it.
+`KAVENEGAR_API_KEY` must be set (env or `.env` in cwd) for `send`. Other commands work without it. `SMS_SENDER_TEST_NUMBER` (optional) provides the default phone for `--approval-test`; the `--test-number` flag overrides it. Short links need `SHLINK_API_KEY` (`send --link-url`, `clicks`); `SHLINK_BASE_URL` defaults to `https://kifpool.me/u` and `SMS_SENDER_LINK_DOMAINS` (allowed destinations) to `kifpool.me`. The CLI loads `.env` from the current directory first thing (`cli` group callback), before any option or setting is read; it never overrides a variable that's already set. `tests/conftest.py` blanks every variable named in the real `.env` (it reads names only, never values) and sets a dummy Shlink key with an `.invalid` host. So no test can load a real key or test number, or reach the real Shlink. Keep it that way.
 
 ## Architecture
 
@@ -113,7 +121,9 @@ The approval test runs *before* the smoke test on purpose: the operator gets a c
 
 ### State machine (owned by `state.py`)
 
-Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_permanent`, `failed_retriable` (= definitely not sent), `unknown` (= may have been sent), `needs_review` (= reconciliation couldn't decide), `suppressed` (= on the opt-out list). `CLAIMABLE = (pending, failed_retriable)`. `--opt-out FILE` (repeatable) → `Runner(opt_out=…)` → `StateStore.suppress` turns matching claimable rows into `suppressed` right after seeding; rows already `sent` stay `sent`. The details that matter:
+Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_permanent`, `failed_retriable` (= definitely not sent), `unknown` (= may have been sent), `needs_review` (= reconciliation couldn't decide), `suppressed` (= on the opt-out list), `invalid` (= the input says don't send: two user IDs for one phone; only an explicit `reset --status invalid` undoes it). `CLAIMABLE = (pending, failed_retriable)`.
+
+`--opt-out FILE` (repeatable) → `Runner(opt_out=…)` → `StateStore.suppress` turns matching claimable rows into `suppressed`. Rows already `sent` stay `sent`. Exclusions (opt-outs, user-ID conflicts) run in `_prepare` **after** orphan recovery and the start-of-run reconciliation, right before the queue is read. Otherwise a row that reconciliation requeues could slip past them in the same run. The details that matter:
 
 - **`claim()` is the dedup gate.** It runs `UPDATE … WHERE phone=? AND status IN CLAIMABLE`; if `rowcount == 0` the worker silently skips. Two workers racing on the same phone — one wins the UPDATE, the other gets `None`. `sent` and `failed_permanent` rows can never be claimed.
 - **Connection-per-thread.** SQLite connections aren't shareable; `StateStore` keeps one per thread via `threading.local`. WAL mode + `BEGIN IMMEDIATE` keep concurrent writers from blocking each other badly.
@@ -132,6 +142,35 @@ The runner reconciles at the start of every run (so rows Kavenegar never got go 
 ### Delivery reports ([delivery.py](src/sms_sender/delivery.py))
 
 `sent` means Kavenegar *accepted* an SMS. `sync_delivery` asks `sms/status` (`Sender.delivery_statuses`: ≤ 500 message IDs per call) about sent rows from the last 48 h whose delivery status isn't final, and stores it in `recipients.delivery_status` / `delivery_checked_at` (schema v4). Final: 6, 10 (delivered), 13, 14, 100; 11 (undelivered) is re-checked because it can still turn into 10. Kavenegar only answers for 48 h, so `sms-sender delivery` has to run inside that window (the dashboard will schedule it). It doesn't take the run lock — it only writes the delivery columns — so it's safe during a send. `status` prints the breakdown (`delivery.describe`).
+
+### Short links ([links.py](src/sms_sender/links.py), [shortlink.py](src/sms_sender/shortlink.py))
+
+`--link-url` (needs `--campaign` and `--link-token`) turns on the link stage, `Runner._links_stage`, which runs after the account check and before the approval test. Invariants:
+
+- **Every link before any SMS.** `LinkStage.run` returns tokens only when every link the run needs is `ready`; otherwise `LinkError` → `PreflightError` (exit 2), and nothing is sent. `ShlinkHaltError` (bad key, 401/403, a short URL that isn't `<base>/<code>`) stops it at once. A cancel during the stage ends the run `stopped`, not `halted`.
+- **Rows before calls.** Each link is a `links` row (schema v6). The row holds the exact request — long URL, title, tags, `validUntil` — and is written before Shlink is called. A row that still matches the current settings is kept, so retries and resumed runs repeat the request byte for byte. That makes creation idempotent: Shlink's `findIfExists` (`ShortUrlRepository::findOneMatching`) matches longUrl **and** validUntil **and** the exact tag set, then returns the existing link. To give a link more time, `ShlinkClient.extend` PATCHes `validUntil` (done when it would expire within 24 h of sending); never create a new link for that.
+- **Plans and keys.** `links.link_plan` fingerprints what shapes a link: destination, token, format, strategy, UTM values and campaign, but not expiry. Every row stores the fingerprint it was planned with (`plan`). Keys:
+  - personal: the phone;
+  - approval test: `test:<phone>`;
+  - shared: `segment:<name>:<plan>` and `campaign:<plan>`.
+
+  A personal or test row whose plan is stale is planned again (`StateStore.replan_links`). That's safe because only recipients still in the queue are asked for, so nobody has received the old link. Shared keys embed the plan, so a change creates new rows and the old ones stay for whoever got them.
+- **`recipients.link_key`** records the link each recipient was claimed with (`StateStore.claim(phone, link_key=…)`). Reports and exports join on it, never on the phone, so they follow what each person actually received.
+- **Retries are safe here, unlike SMS.** `ShlinkClient` retries network errors, read timeouts, 429 and 5xx with backoff, because a repeat is harmless. 4xx is `ShlinkPermanentError`: the link becomes `failed` and is asked again next run.
+- **No personal data reaches Shlink.** A recipient's long URL carries the UTM parameters and `r`, a random 10-character reference from `secrets`. It is never derived from the phone or user ID: a hashed phone number can be reversed by trying every number. Titles and tags name the campaign and segment only. The `r` → phone/user ID mapping lives only in the campaign DB.
+- **The link token is set before the claim.** `Runner._send_one` builds a recipient's tokens (CSV columns + link) before `state.claim`. A phone without its link is skipped, never claimed and never sent without it. The CLI rejects a link token that's also set statically or by a token column.
+- **The approval test SMS gets its own link** (`test:<phone>`, tag `campaign-<slug>-test`, `utm_content=test`), so the operator's click never counts for a recipient or in the campaign's tag.
+- **Campaign settings include the link settings** (`LinkSettings.as_settings`, but not expiry). Changing the destination, token, format, strategy or UTM values after a send is refused like any other settings change.
+
+Destinations must be https on `SMS_SENDER_LINK_DOMAINS` (subdomains included), must not be a short link themselves, and must not already carry `utm_*` or `r` (`links.destination_problem`). Strategies: `recipient` (default; per-person clicks), `segment`, `campaign`. `--link-format code` puts only the short code in the token, for templates whose text already has `https://kifpool.me/u/`. `--link-rate` (default 10/s) and 4 worker threads cap creation until Shlink's real speed is measured.
+
+### User IDs and segments ([input_loader.py](src/sms_sender/input_loader.py), schema v5)
+
+`--user-id-column COLUMN` reads a header CSV (first column = phone). A blank ID is still sent and reported as "missing user ID" (`LoadResult.missing_user_id`, `RunSummary`, `status`, exports). A phone with two different non-blank IDs is in `LoadResult.conflicts`: every one of its rows is invalid and it isn't sent. `Runner._apply_user_ids` also checks against IDs stored by earlier imports (`StateStore.assign_user_ids`) and takes conflicting phones out of the queue (`StateStore.exclude` → `failed_permanent`). Rows already `sent` are never touched. `--segment` (default: slug of the file name) is stored on each recipient (`upsert_pending(segment=…)`); it feeds `utm_content`, segment links and reports.
+
+### Clicks ([clicks.py](src/sms_sender/clicks.py))
+
+`sms-sender clicks` polls Shlink (`visits_by_tag("campaign-<slug>")`; Shlink has had no webhooks since 4.0) and stores each link's `nonBots` count on its row. Updates go by an indexed `short_code`, in chunks of 500: `clicks` doesn't take the run lock, so it must never hold the write lock long enough to stall a send. Reports go per segment and join on `recipients.link_key`. Shared segment/campaign links count for the segment or campaign, never for a person. `export-attribution` (ref, user ID / "missing user ID", segment, link, ISO-8601 UTC time, delivery, clicks) has **no phone numbers**: it's for the backend. `export-clickers` has phones. Both write to `data/exports/` by default.
 
 ### Error taxonomy (split across `sender.py` + `classifier.py`)
 
@@ -163,10 +202,10 @@ Canonical form is `09XXXXXXXXX`. The normalizer accepts `+98…`, `0098…`, `98
 |---|---|
 | 0 | every recipient sent |
 | 1 | run finished with some `failed_permanent`, `failed_retriable`, `unknown` or `needs_review`; or it stopped early (`RunSummary.stopped`: Ctrl-C / SIGTERM / `Runner.cancel()`, or the sending window closed) |
-| 2 | `HaltError`, preflight failure, or declined approval-test aborted the run; another process holds the state DB; or the DB belongs to another campaign / was sent with other settings |
+| 2 | `HaltError`, preflight failure (incl. a link that couldn't be made, or Shlink refusing the key), or declined approval-test aborted the run; another process holds the state DB; or the DB belongs to another campaign / was sent with other settings |
 
 ## Conventions
 
 - **Recipient phone lists and state DBs are PII.** Keep state DBs in `data/db/` and segment / user-id lists in `data/segments/`; `data/` is gitignored as a whole, and so are root-level `*.csv` / `*.txt` / `*.xls*` (which catches `export-failed`'s default `./failed.csv`) and `*-numbers.*` / `*_numbers.*` anywhere. Never commit one — stage files by name, not with `git add -A` / `git add .`. When moving a DB, update every `state = …` in `sms-sender.toml` too: a path that no longer exists silently opens a fresh, empty DB, and that run re-sends to everyone already sent.
-- Logs go to `logs/sms-sender.log` (rotating, 5 MB × 5) and are formatted as `key=value` pairs by `KeyValueFormatter`. Pass structured fields via `logger.info("event_name", extra={...})`, not f-strings, so they stay greppable.
+- Logs go to `logs/sms-sender.log` (rotating, 5 MB × 5) and are formatted as `key=value` pairs by `KeyValueFormatter`. Pass structured fields via `logger.info("event_name", extra={...})`, not f-strings, so they stay greppable. An `extra` key must not be a `LogRecord` attribute (`created`, `name`, `msg`, `args`, `module`, …): logging raises `KeyError` mid-run. `tests/test_logging_fields.py` checks every call.
 - Adding a new Kavenegar status code: extend the relevant frozenset in `classifier.py`. Don't add per-code branching elsewhere.

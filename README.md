@@ -33,7 +33,7 @@ pip install -e ".[dev]"
 
 ```bash
 cp .env.example .env
-# edit .env and set KAVENEGAR_API_KEY
+# edit .env and set KAVENEGAR_API_KEY (and SHLINK_API_KEY for short links)
 ```
 
 ## Input format
@@ -221,6 +221,104 @@ Kavenegar only reports delivery for **48 hours** after sending, so run
 `delivery` a few times inside that window (e.g. after 10 minutes, an hour, a
 day). It never sends anything and is safe to run during a send.
 
+### Short links
+
+Give a campaign a destination and the token that carries the link, and
+every recipient gets their own short link, `https://kifpool.me/u/<code>`.
+The link goes in the template token you name:
+
+```bash
+sms-sender send --campaign coin-price-7 --input data/segments/vip-2.csv \
+    --template coin-price --link-url https://kifpool.me/offer --link-token token3
+```
+
+All the links are made at Shlink **before the first SMS**. If even one
+can't be made, nothing is sent and the run exits with code 2. Re-running the
+same command retries the missing links and reuses the ones that exist, so
+no recipient ever gets two different links.
+
+If the link settings change before someone is sent (say the destination
+was wrong and you declined the approval test), they get a new link with
+the new settings; the old one is never used. Recipients who were already
+sent keep the link they got. Two more checks run before sending:
+- A link that would expire within a day of its SMS gets more time first.
+- With `--approval-test`, the test SMS gets its own link, so your click
+  doesn't count for a recipient.
+
+- **What's in a link:** the destination plus `utm_source=sms`,
+  `utm_medium=sms`, `utm_campaign=<campaign>`, `utm_content=<segment>` and
+  `r`, a random reference.
+  - Change the UTM values with `--utm-*`.
+  - No phone number or user ID ever appears in a link or reaches Shlink.
+  - `r` maps back to the recipient only in the campaign's DB (see
+    `export-attribution`).
+- **Template formats:**
+  - `--link-format url` (the default) puts the whole link in the token.
+  - `--link-format code` puts only `<code>`, for templates whose text already
+    contains `https://kifpool.me/u/`.
+- **Strategies:**
+  - `--link-strategy recipient`: the default, one link per person.
+  - `segment`: one link per segment.
+  - `campaign`: one link for everyone.
+  - Only personal links tell you who clicked.
+- **Expiry:** links work for 7 days (`--link-expiry-days`).
+- **Creation speed:** links are made at up to 10 per second by default,
+  until Shlink's real speed is measured; `--link-rate` changes it.
+- **Allowed destinations:** https on kifpool.me or its subdomains by default.
+  `SMS_SENDER_LINK_DOMAINS=kifpool.me,example.org` allows more.
+- **Checking first:** `dry-run --campaign … --link-url … --link-token …`
+  prints the long URL, title and tags a link would get, without calling
+  Shlink. `preview --link-token token3` shows where the link goes in the
+  request.
+
+Shlink's key goes in `.env` as `SHLINK_API_KEY`; `SHLINK_BASE_URL` is
+`https://kifpool.me/u` unless set.
+
+### User IDs and segments
+
+Map a CSV column to each recipient's user ID, and record which segment
+the file is:
+
+```bash
+sms-sender send --campaign coin-price-7 --input data/segments/vip-2.csv \
+    --template coin-price --user-id-column user_id --segment vip-2 …
+```
+
+- **Blank user ID:** the recipient is still sent, and is reported as
+  **missing user ID**.
+- **Two different user IDs for one phone:** that phone can't be attributed,
+  so every row with it is invalid and it isn't sent. This applies within one
+  file, and against an earlier import into the same campaign.
+  - The phone gets the status `invalid`, which no retry undoes.
+  - After fixing the IDs at the source, `reset --status invalid` puts it back
+    in the queue (it asks first).
+- **Segment:** defaults to the file's name (`vip-2.csv` → `vip-2`). Reports
+  and links use it.
+
+`dry-run --user-id-column user_id` shows both counts before anything is sent.
+
+### Clicks and exports
+
+```bash
+sms-sender clicks --campaign coin-price-7              # fetch counts from Shlink, per segment
+sms-sender export-attribution --campaign coin-price-7  # ref → user ID, for the backend
+sms-sender export-clickers --campaign coin-price-7     # who clicked, with phone numbers
+```
+
+`clicks` stores each link's visit count. Bots and link-preview fetchers are
+excluded. It shows, per segment, how many were sent, the clicks, and how
+many recipients clicked their own link; recipients without a user ID are
+counted separately. Shared segment and campaign links count for the segment
+or the campaign, never for a person. It never sends anything.
+
+The exports write to `data/exports/` (gitignored) unless `--out` is given:
+- **`export-attribution`** has no phone numbers. Each row has `ref`, the
+  user ID (or `missing user ID`), segment, link, accepted time (ISO 8601,
+  UTC), delivery status and clicks. That's what the backend needs to join
+  `r` from its own logs to users.
+- **`export-clickers`** contains phone numbers. Treat it like the
+  recipient lists.
+
 ### Throughput control
 
 `--workers` controls parallelism; `--rate` caps total requests per second on
@@ -295,7 +393,7 @@ sms-sender dry-run --input ./numbers.csv          # parse + normalize only, no A
 |---|---|
 | 0 | All recipients sent successfully. |
 | 1 | Some rows failed (permanent or retriable) or are `unknown` / `needs_review`; or the run stopped early (Ctrl-C, or the sending window closed) and the same command continues it. |
-| 2 | Run halted on an account-level error (no credit, bad API key, plan), outside the sending window, another `sms-sender` is already using the same state DB, or the DB belongs to another campaign / was sent with other settings. Fix and re-run. |
+| 2 | Nothing more was sent, because of one of these. Fix it and re-run:<br>• an account-level error (no credit, bad API key, plan);<br>• outside the sending window;<br>• a short link couldn't be made, or Shlink refused the key;<br>• another `sms-sender` is already using the same state DB;<br>• the DB belongs to another campaign, or was sent with other settings. |
 
 ## Architecture
 
@@ -326,6 +424,7 @@ State machine per recipient:
 | `sent` | Kavenegar accepted it | never |
 | `failed_retriable` | definitely not sent: no credit, the request never reached Kavenegar, or retries ran out | yes, by the next `send` |
 | `failed_permanent` | Kavenegar rejected it: bad template, invalid number | only after `retry-failed --include-permanent` or `reset` |
+| `invalid` | the input says not to send it: the phone came with two different user IDs | only after `reset --status invalid` (with a confirmation), once the IDs are fixed |
 | `unknown` | may have been sent: a timeout after the request, a crash mid-send | never automatically; `reconcile` asks Kavenegar |
 | `needs_review` | `reconcile` couldn't decide | only after `reset --status needs_review` |
 | `suppressed` | on the opt-out list | only after `reset --status suppressed`, and only once it's off the list |
