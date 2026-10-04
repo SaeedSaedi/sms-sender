@@ -22,8 +22,14 @@ def _list(name: str, default: str = "") -> list[str]:
 
 
 BASE_DIR = Path(__file__).resolve().parent
+# Sandbox mode (step 3.7): Kavenegar and Shlink are simulated and nothing is
+# sent. Everything, the app DB included, lives in data/sandbox/, so sandbox
+# runs never mix with real campaigns. See jobs/sandbox.py.
+SANDBOX = _bool("SMS_SENDER_SANDBOX")
 # The app DB and the campaign DBs (data/db/<campaign>.db) live here.
 DATA_DIR = Path(os.environ.get("SMS_SENDER_DATA_DIR", "data")).resolve()
+if SANDBOX:
+    DATA_DIR = DATA_DIR / "sandbox"
 SMS_SENDER_DB_DIR = DATA_DIR / "db"
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
@@ -86,6 +92,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "sms_sender_web.views.sandbox",
             ],
         },
     },

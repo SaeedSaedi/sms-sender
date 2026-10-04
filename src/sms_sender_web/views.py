@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth.decorators import login_not_required
 from django.db import connection
 from django.http import JsonResponse
@@ -12,3 +13,8 @@ def healthz(request):
     with connection.cursor() as cursor:
         cursor.execute("SELECT 1")
     return JsonResponse({"status": "ok"})
+
+
+def sandbox(request) -> dict:
+    """Every page knows whether this is the sandbox, for its banner."""
+    return {"sandbox": settings.SANDBOX}

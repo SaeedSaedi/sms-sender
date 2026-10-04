@@ -30,6 +30,9 @@
       </form>
     {% endif %}
   </header>
+  {% if sandbox %}
+    <div class="sandbox-banner" role="note">{% translate "Sandbox: Kavenegar and the short-link service are simulated, and nothing is sent." %}</div>
+  {% endif %}
   <main class="page">
     {% if messages %}
       <ul class="messages">
