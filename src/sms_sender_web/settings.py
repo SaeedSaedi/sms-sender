@@ -44,6 +44,10 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
+    "sms_sender_web.accounts",
+    "sms_sender_web.audit",
     "sms_sender_web.dashboard",
     "sms_sender_web.jobs",
 ]
@@ -57,6 +61,10 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     # Every page needs a login, except the ones marked @login_not_required.
     "django.contrib.auth.middleware.LoginRequiredMiddleware",
+    # Operators and admins also confirm a code from their authenticator app
+    # (spec 4.12); until they do, every page leads to that step.
+    "django_otp.middleware.OTPMiddleware",
+    "sms_sender_web.accounts.middleware.TwoFactorMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -103,6 +111,8 @@ AUTH_PASSWORD_VALIDATORS = [
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "home"
 LOGOUT_REDIRECT_URL = "login"
+# Shown in the authenticator app next to the account.
+OTP_TOTP_ISSUER = "Kifpool SMS"
 
 # Entirely Persian (spec 4.11): one language, right to left, Tehran time.
 # Dates are shown in the Solar Hijri calendar by the `jalali` filter; they're

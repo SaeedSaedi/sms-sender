@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% load i18n roles %}
+{% block title %}{% translate "You don't have access to this page" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>{% translate "You don't have access to this page" %}</h1>
+  {% if no_role %}
+    <p>{% translate "Your account has no role yet. Ask a system admin to give you one." %}</p>
+  {% else %}
+    <p>{% translate "Your role doesn't allow this page. If you need it, ask a system admin." %}</p>
+    {% if user|can:"view_campaigns" %}<p><a href="{% url 'home' %}">{% translate "Back to campaigns" %}</a></p>{% endif %}
+  {% endif %}
+</section>
+{% endblock %}

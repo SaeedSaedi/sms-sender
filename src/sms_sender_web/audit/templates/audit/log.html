@@ -1,0 +1,42 @@
+{% extends "base.html" %}{% load i18n fa %}
+{% block title %}{% translate "Activity log" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<h1>{% translate "Activity log" %}</h1>
+{% if rows %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">{% translate "Time" %}</th>
+        <th scope="col">{% translate "User" %}</th>
+        <th scope="col">{% translate "Action" %}</th>
+        <th scope="col">{% translate "Details" %}</th>
+        <th scope="col">{% translate "Campaign" %}</th>
+        <th scope="col">{% translate "IP address" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for event, label, detail in rows %}
+      <tr>
+        <td class="num">{{ event.at|jalali:"%Y/%m/%d %H:%M:%S" }}</td>
+        <td>{% if event.username %}{{ event.username|ltr }}{% else %}—{% endif %}</td>
+        <td>{{ label }}</td>
+        <td>{{ detail|default:"—" }}</td>
+        <td>{% if event.campaign %}{{ event.campaign|ltr }}{% else %}—{% endif %}</td>
+        <td>{% if event.ip %}{{ event.ip|ltr }}{% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if page.has_other_pages %}
+<nav class="pager" aria-label="{% translate "Pages" %}">
+  {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">{% translate "Newer" %}</a>{% endif %}
+  <span class="num">{{ page.number|fa_number }} / {{ page.paginator.num_pages|fa_number }}</span>
+  {% if page.has_next %}<a href="?page={{ page.next_page_number }}">{% translate "Older" %}</a>{% endif %}
+</nav>
+{% endif %}
+{% else %}
+<p class="empty">{% translate "Nothing recorded yet." %}</p>
+{% endif %}
+{% endblock %}

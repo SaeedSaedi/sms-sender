@@ -1,0 +1,18 @@
+{% load static i18n %}<!doctype html>
+{# Rendered without a request or a database, so it extends nothing. #}
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% translate "Something went wrong" %} · {% translate "SMS campaigns" %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+  <main class="page">
+    <section class="card narrow">
+      <h1>{% translate "Something went wrong" %}</h1>
+      <p>{% translate "Try again in a few minutes. If it happens again, tell a system admin." %}</p>
+    </section>
+  </main>
+</body>
+</html>

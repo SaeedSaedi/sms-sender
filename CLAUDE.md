@@ -227,13 +227,45 @@ Canonical form is `09XXXXXXXXX`. The normalizer accepts `+98…`, `0098…`, `98
 
 ### Dashboard (`sms_sender_web`, Phase 3, in progress)
 
-The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI doesn't depend on it. `pip install -e ".[dev,web]"` installs it and its tests (pytest-django). Without the extra, `tests/web/test_fa.py` and `test_pages.py` skip themselves.
+The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI doesn't depend on it. `pip install -e ".[dev,web]"` installs it and its tests (pytest-django). Without the extra, the Django tests in `tests/web/` skip themselves. Fixtures (`tests/web/conftest.py`):
+- `make_user(name, role)`;
+- `viewer`;
+- `signed_in` (a viewer, so it needs no second step);
+- `verified(client, user)`: signed in and through the second step, with a linked app. It returns the TOTP device; get codes with `django_otp.oath.totp`.
 
 - **Settings come from the environment** (`settings.py`): `DJANGO_SECRET_KEY` is required, plus `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `SMS_SENDER_DATA_DIR` and `DJANGO_SECURE_COOKIES`. `.env` is loaded by `manage.py` and `wsgi.py`, **never by settings**, so the test session can't pick up real values. Tests run with `settings_test.py`: a dummy key and a temporary data dir.
 - **Data:** the app DB is `data/app.db` (SQLite, WAL, IMMEDIATE transactions, because the worker will write to it too). Campaign DBs are read through `StateStore` from `data/db/`, the same files as the CLI. Opening one upgrades its schema in place, as the CLI does.
 - **Login on every page:** `LoginRequiredMiddleware`. Only views marked `@login_not_required` are open; for now that's `/healthz` and the login page.
+- **Roles ([accounts/roles.py](src/sms_sender_web/accounts/roles.py)):**
+  - A role is the Django group `viewer`, `operator` or `admin`; migration `accounts/0001_roles` creates them.
+  - Each role adds capabilities to the one before it (`_ADDS`, the spec's permission matrix). Superusers are admins.
+  - Gate views with `@requires("capability")`. It renders the Persian `403.html`, which also says when the user has no role yet.
+  - In templates, use `user|can:"capability"`.
+  - `role_of` caches the role on the user object, and `set_role` clears it.
+  - Never check group names directly.
+- **Two-step verification (`django-otp`, TOTP):**
+  - `TwoFactorMiddleware` sends a signed-in operator or admin to `/2fa/` (or `/2fa/setup/` if they have no app yet) until this session has passed the code. Only the names in its `EXEMPT` are reachable before that.
+  - Setup works only while the user has no confirmed device. A linked app is replaced only by an admin's reset, never from a session that has just the password.
+  - A passed code cycles the session key.
+  - Throttling after wrong codes, and refusing a reused code, come from django-otp.
+  - Viewers never see these pages.
+- **Activity log (`audit` app):**
+  - Call `audit.record.record(action, request=…, campaign=…, **detail)` for anything a person does. `action` must be in `record.ACTIONS`. Give each action a Persian label in `audit/terms.py`, and a line in `describe()` if it has details.
+  - Pass `username=` instead of a user for someone who isn't signed in.
+  - Sign-in, sign-out and failed sign-in are recorded from Django's signals (`audit/apps.py`). The username tried is recorded, never the password.
+  - `ip` is `REMOTE_ADDR`, and no proxy header is trusted. Behind Docker Desktop it is Docker's gateway, not the person's own IP.
+  - Events are append-only. `/activity/` (`view_audit_log`) shows them, 100 to a page.
 - **Persian (spec 4.11):**
-  - Templates use `{% translate "English id" %}`, with the Persian in `locale/fa/LC_MESSAGES/django.po`. After any change to the `.po`, recompile with `msgfmt -o django.mo django.po`. `tests/web/test_catalog.py` fails on missing, empty, fuzzy or stale entries, on Arabic «ي»/«ك», and on a space where the glossary has a half-space.
+  - Templates use `{% translate "English id" %}`, with the Persian in `locale/fa/LC_MESSAGES/django.po`. After any change to the `.po`, recompile with `msgfmt -o django.mo django.po`.
+  - `tests/web/test_catalog.py` fails on:
+    - missing, empty, fuzzy or stale entries;
+    - Arabic «ي»/«ك»;
+    - a space or nothing where the glossary has a half-space, including after «می»/«نمی».
+
+    It extracts `{% translate "…" %}` and `_` / `gettext` / `gettext_lazy` calls (adjacent literals are joined). `{% blocktranslate %}` isn't extracted, so avoid it.
+  - The catalog also rewords Django's own messages that a page can show: password rules, and the password-change errors. Django's Persian mixes «رمز عبور» with «گذرواژه». It comes first because it's in `LOCALE_PATHS`. Django 5.2's short-password message id uses `%d`, and Django's own Persian catalog still has the old `%(min_length)d` id. Without our entry that message is English. When upgrading Django, check those ids still match.
+  - Error pages: `403.html`, `403_csrf.html`, `404.html` and `500.html`. `500.html` extends nothing, because it's rendered without a request.
+  - Form errors go through `|fa_digits` (Django fills in Latin digits, e.g. the minimum password length).
   - Status names live in `dashboard/terms.py`, worded as in the spec's glossary.
   - Show numbers with the `fa` filters: `fa_number`, `fa_digits`, `jalali` (Solar Hijri, Tehran time) and `ltr` (`<bdi dir="ltr">` for values with separators or Latin letters).
   - Never put Persian digits inside links or codes.
@@ -245,7 +277,8 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - **Engine:** `jobs/engine.Engine` builds the CLI's runner from `Campaign.settings` (`make_runner(reporter=JobReporter, install_signal_handlers=False)`); tests swap in fakes. The approval test isn't part of a send job; it becomes its own dashboard step.
   - **Scheduler:** `Worker.schedule` queues delivery updates while sent rows are under 48 h old, and click updates for 14 days.
   - **One worker only.** Test DBs are files, not shared-memory SQLite (`settings_test`), because the heartbeat thread writes concurrently.
-- **CSS:** logical properties only (`margin-inline-start`, `padding-block`, …), so the layout mirrors for RTL. HTMX and the Vazirmatn font (OFL) are vendored in `static/`; no CDNs.
+- **CSS:** logical properties only (`margin-inline-start`, `padding-block`, …), so the layout mirrors for RTL. HTMX and the Vazirmatn font (OFL) are vendored in `static/`; no CDNs. Ordered lists use `list-style-type: persian`. A form with `data-confirm="…"` asks before submitting (`static/js/app.js`). Don't write inline `onclick` / `onsubmit` handlers.
+- **Packaging:** the image installs the package, not the source tree, so each app's `templates/` must be listed in `[tool.setuptools.package-data]`.
 - **Docker:** `Dockerfile` + `compose.yaml` (service `web`, gunicorn, `/healthz`). The port is published on `${BIND_ADDR:-127.0.0.1}`, so it's shared over NetBird only on purpose.
 
 ## Conventions
