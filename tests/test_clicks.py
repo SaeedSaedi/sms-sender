@@ -1,0 +1,179 @@
+"""Clicks: counts from Shlink (bots excluded) stored per link, reports per
+segment with "missing user ID" kept apart, and the two exports — the
+backend's without phone numbers."""
+from __future__ import annotations
+
+import csv
+from pathlib import Path
+
+from click.testing import CliRunner
+
+from sms_sender.cli import cli
+from sms_sender.clicks import (
+    ATTRIBUTION_HEADER,
+    attribution_rows,
+    click_report,
+    clicker_rows,
+    describe,
+    sync_clicks,
+)
+from sms_sender.shortlink import LinkVisits, ShlinkClient, ShlinkHaltError
+from sms_sender.state import LinkRow, StateStore
+
+BASE = "https://kifpool.me/u"
+A, B, C, D = "09120000001", "09120000002", "09120000003", "09120000004"
+
+
+def link(key: str, ref: str | None) -> LinkRow:
+    return LinkRow(key=key, ref=ref, long_url=f"https://kifpool.me/o?r={ref}", title="t",
+                   tags=("campaign-coin-7",), valid_until="2026-10-11T08:00:00+00:00")
+
+
+def campaign_db(path: Path) -> StateStore:
+    """A, B (vip-2) and C (new-users) sent with links of their own; B has no
+    user ID; D was never sent."""
+    state = StateStore(path)
+    state.bind_campaign("coin-7", None)
+    state.upsert_pending([(A, A), (B, B)], segment="vip-2")
+    state.upsert_pending([(C, C), (D, D)], segment="new-users")
+    state.assign_user_ids({A: "u-1", C: "u-3", D: "u-4"})
+    for i, phone in enumerate([A, B, C, D], start=1):
+        state.add_links([link(phone, f"ref{i:07d}")])
+        state.mark_link_ready(phone, f"c{i}", f"{BASE}/c{i}")
+    for i, phone in enumerate([A, B, C], start=1):
+        state.claim(phone)
+        state.mark_sent(phone, message_id=i, status_code=200)
+    state.record_delivery({A: 10}, checked_at=0)
+    return state
+
+
+class Visits:
+    def __init__(self, counts: dict[str, int]):
+        self.counts = counts
+        self.tags: list[str] = []
+
+    def visits_by_tag(self, tag):
+        self.tags.append(tag)
+        return [LinkVisits(code, total=n + 5, non_bots=n) for code, n in self.counts.items()]
+
+
+def test_sync_stores_non_bot_clicks_per_link(tmp_path):
+    state = campaign_db(tmp_path / "s.db")
+    source = Visits({"c1": 2, "c2": 1, "c3": 0, "not-ours": 9})
+    result = sync_clicks(state, source, "coin-7", now=lambda: 1000.0)
+    assert source.tags == ["campaign-coin-7"]
+    assert (result.links, result.updated, result.clicks) == (4, 3, 12)
+    assert state.last_click_sync() == 1000.0
+
+
+def test_report_per_segment_keeps_missing_user_ids_apart(tmp_path):
+    state = campaign_db(tmp_path / "s.db")
+    sync_clicks(state, Visits({"c1": 2, "c2": 1, "c3": 0}), "coin-7")
+    segments, campaign_clicks = click_report(state)
+    by_name = {s.segment: s for s in segments}
+    vip = by_name["vip-2"]
+    assert (vip.sent, vip.clicks, vip.clicked) == (2, 3, 2)
+    assert (vip.missing_user_id, vip.clicked_missing_user_id) == (1, 1)
+    new = by_name["new-users"]
+    assert (new.sent, new.clicks, new.clicked, new.missing_user_id) == (1, 0, 0, 0)
+    assert campaign_clicks == 0
+    assert describe(segments, campaign_clicks) == [
+        "  new-users: sent 1, clicks 0, clicked 0 (0.0%)",
+        "  vip-2: sent 2, clicks 3, clicked 2 (100.0%); missing user ID: 1 (1 clicked)",
+    ]
+
+
+def test_shared_links_count_for_the_segment_not_for_people(tmp_path):
+    state = StateStore(tmp_path / "s.db")
+    state.upsert_pending([(A, A), (B, B)], segment="vip-2")
+    state.add_links([link("segment:vip-2", None), link("campaign", None)])
+    state.mark_link_ready("segment:vip-2", "s1", f"{BASE}/s1")
+    state.mark_link_ready("campaign", "k1", f"{BASE}/k1")
+    for i, phone in enumerate([A, B], start=1):
+        state.claim(phone)
+        state.mark_sent(phone, message_id=i, status_code=200)
+    sync_clicks(state, Visits({"s1": 7, "k1": 4}), "coin-7")
+    (vip,), campaign_clicks = click_report(state)
+    assert (vip.clicks, vip.clicked, vip.clicked_missing_user_id) == (7, None, None)
+    assert campaign_clicks == 4
+    assert list(clicker_rows(state)) == []  # nobody can be named from a shared link
+
+
+def test_attribution_has_no_phone_numbers(tmp_path):
+    state = campaign_db(tmp_path / "s.db")
+    sync_clicks(state, Visits({"c1": 2}), "coin-7")
+    rows = list(attribution_rows(state))
+    assert len(rows) == 3  # D wasn't sent
+    by_ref = {r[0]: dict(zip(ATTRIBUTION_HEADER, r)) for r in rows}
+    a = by_ref["ref0000001"]
+    assert (a["user_id"], a["user_id_status"], a["segment"]) == ("u-1", "ok", "vip-2")
+    assert (a["short_url"], a["delivery"], a["clicks"]) == (f"{BASE}/c1", "delivered", 2)
+    assert a["accepted_at"].endswith("+00:00")
+    b = by_ref["ref0000002"]
+    assert (b["user_id"], b["user_id_status"], b["delivery"]) == ("", "missing user ID", "not checked")
+    assert "0912" not in repr(rows)
+
+
+def test_clickers_are_named_most_clicks_first(tmp_path):
+    state = campaign_db(tmp_path / "s.db")
+    sync_clicks(state, Visits({"c1": 2, "c2": 5}), "coin-7")
+    assert list(clicker_rows(state)) == [
+        [B, "", "missing user ID", "vip-2", "ref0000002", 5],
+        [A, "u-1", "ok", "vip-2", "ref0000001", 2],
+    ]
+
+
+# ---------- CLI ----------
+
+def test_clicks_command_syncs_and_reports(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    Path("data/db").mkdir(parents=True)
+    campaign_db(Path("data/db/coin-7.db"))
+    seen = Visits({"c1": 2, "c2": 1})
+    monkeypatch.setattr(ShlinkClient, "visits_by_tag", lambda self, tag: seen.visits_by_tag(tag))
+    result = CliRunner().invoke(cli, ["clicks", "--campaign", "coin-7", "--log-file", "t.log"])
+    assert result.exit_code == 0, result.output
+    assert "2 link(s) at Shlink, 3 click(s) (bots excluded)" in result.output
+    assert "vip-2: sent 2, clicks 3, clicked 2 (100.0%); missing user ID: 1 (1 clicked)" in result.output
+
+    status = CliRunner().invoke(cli, ["status", "--campaign", "coin-7"])
+    assert "clicks     3 (bots excluded, synced" in status.output
+    assert "clicked 2 of 3 recipients" in status.output
+
+
+def test_clicks_command_stops_on_a_bad_key(tmp_path, monkeypatch):
+    db = tmp_path / "s.db"
+    campaign_db(db)
+
+    def refuse(self, tag):
+        raise ShlinkHaltError(401, "invalid-api-key", "no such key")
+    monkeypatch.setattr(ShlinkClient, "visits_by_tag", refuse)
+    result = CliRunner().invoke(cli, ["clicks", "--state", str(db), "--log-file", str(tmp_path / "t.log")])
+    assert result.exit_code == 2 and "Shlink didn't answer" in result.output
+
+
+def test_clicks_command_needs_a_db(tmp_path):
+    result = CliRunner().invoke(cli, ["clicks", "--state", str(tmp_path / "nope.db"),
+                                      "--log-file", str(tmp_path / "t.log")])
+    assert result.exit_code == 2 and "No state DB" in result.output
+    assert not (tmp_path / "nope.db").exists()
+
+
+def test_exports_land_in_data_exports(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    Path("data/db").mkdir(parents=True)
+    state = campaign_db(Path("data/db/coin-7.db"))
+    sync_clicks(state, Visits({"c1": 2}), "coin-7")
+
+    result = CliRunner().invoke(cli, ["export-attribution", "--campaign", "coin-7"])
+    assert result.exit_code == 0, result.output
+    path = Path("data/exports/coin-7-attribution.csv")
+    assert f"Wrote 3 rows to {path}" in result.output
+    text = path.read_text(encoding="utf-8")
+    assert text.splitlines()[0] == ",".join(ATTRIBUTION_HEADER)
+    assert "0912" not in text
+
+    result = CliRunner().invoke(cli, ["export-clickers", "--campaign", "coin-7"])
+    assert result.exit_code == 0, result.output
+    rows = list(csv.reader(Path("data/exports/coin-7-clickers.csv").open(encoding="utf-8")))
+    assert rows[1][:3] == [A, "u-1", "ok"] and len(rows) == 2

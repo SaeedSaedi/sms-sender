@@ -660,6 +660,66 @@ class StateStore:
         ).fetchall()
         return {r["status"]: r["n"] for r in rows}
 
+    # ---------- clicks (see clicks.py) ----------
+
+    def record_clicks(self, by_code: dict[str, int], synced_at: float) -> int:
+        """Store each link's (non-bot) visit count. Returns links updated."""
+        if not by_code:
+            return 0
+        with self._tx() as conn:
+            before = conn.total_changes
+            conn.executemany(
+                "UPDATE links SET clicks=?, clicks_synced_at=? WHERE short_code=?",
+                [(n, synced_at, code) for code, n in by_code.items()],
+            )
+            return conn.total_changes - before
+
+    def clicks_by_segment(self) -> list[sqlite3.Row]:
+        """Per segment, over sent recipients: how many, how many lack a user
+        ID, and — with a link of their own — who clicked and how often.
+        `own` is 0 when the segment's recipients had no personal links."""
+        return self._conn().execute(
+            "SELECT COALESCE(r.segment, '') AS segment, COUNT(*) AS sent, "
+            "SUM(r.user_id IS NULL) AS missing_user_id, "
+            "SUM(l.key IS NOT NULL) AS own, "
+            "SUM(COALESCE(l.clicks, 0) > 0) AS clicked, "
+            "SUM(COALESCE(l.clicks, 0) > 0 AND r.user_id IS NULL) AS clicked_missing_user_id, "
+            "SUM(COALESCE(l.clicks, 0)) AS clicks "
+            "FROM recipients r LEFT JOIN links l ON l.key = r.phone "
+            "WHERE r.status=? GROUP BY r.segment ORDER BY r.segment",
+            (SENT,),
+        ).fetchall()
+
+    def shared_link_clicks(self) -> dict[str, int]:
+        """Clicks on shared links: 'segment:<name>' and 'campaign' keys."""
+        rows = self._conn().execute(
+            "SELECT key, COALESCE(clicks, 0) AS clicks FROM links "
+            "WHERE key = 'campaign' OR key LIKE 'segment:%'"
+        ).fetchall()
+        return {r["key"]: r["clicks"] for r in rows}
+
+    def last_click_sync(self) -> float | None:
+        row = self._conn().execute("SELECT MAX(clicks_synced_at) FROM links").fetchone()
+        return row[0]
+
+    def iter_attribution(self) -> Iterator[sqlite3.Row]:
+        """Sent recipients with a link of their own — no phone numbers."""
+        yield from self._conn().execute(
+            "SELECT l.ref, r.user_id, r.segment, l.short_url, r.sent_at, "
+            "r.delivery_status, l.clicks "
+            "FROM recipients r JOIN links l ON l.key = r.phone "
+            "WHERE r.status=? ORDER BY r.sent_at, l.ref",
+            (SENT,),
+        )
+
+    def iter_clickers(self) -> Iterator[sqlite3.Row]:
+        """Recipients who clicked their own link, most clicks first."""
+        yield from self._conn().execute(
+            "SELECT r.phone, r.user_id, r.segment, l.ref, l.clicks "
+            "FROM recipients r JOIN links l ON l.key = r.phone "
+            "WHERE l.clicks > 0 ORDER BY l.clicks DESC, r.phone"
+        )
+
     # ---------- reporting ----------
 
     # ---------- delivery reports (see delivery.py) ----------

@@ -46,7 +46,22 @@ from .sender import (
     SenderConfig,
     token_problem,
 )
-from .shortlink import ShlinkClient, load_shlink_config, shlink_base_url
+from .clicks import (
+    ATTRIBUTION_HEADER,
+    CLICKERS_HEADER,
+    attribution_rows,
+    click_report,
+    clicker_rows,
+    sync_clicks,
+)
+from .clicks import describe as describe_clicks
+from .shortlink import (
+    ShlinkClient,
+    ShlinkError,
+    ShlinkHaltError,
+    load_shlink_config,
+    shlink_base_url,
+)
 from .window import DEFAULT_WINDOW, ENV_SEND_WINDOW, parse_window
 from .state import (
     NEEDS_REVIEW,
@@ -651,6 +666,17 @@ def status(db_path: str, campaign: str | None) -> None:
             f"{status} {links[status]}" for status in ("ready", "pending", "failed")
             if links.get(status)
         ))
+    synced = store.last_click_sync()
+    if synced is not None:
+        segments, campaign_clicks = click_report(store)
+        total = sum(s.clicks for s in segments) + campaign_clicks
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(synced))
+        personal = [s for s in segments if s.clicked is not None]
+        clicked = (
+            f"; clicked {sum(s.clicked or 0 for s in personal)} of "
+            f"{sum(s.sent for s in personal)} recipients" if personal else ""
+        )
+        click.echo(f"clicks     {total} (bots excluded, synced {when}){clicked}")
     counts = store.counts()
     if not counts:
         click.echo("(empty)")
@@ -846,6 +872,94 @@ def delivery(db_path: str, campaign: str | None, timeout: float, log_file: str) 
         sys.exit(2 if isinstance(e, HaltError) else 1)
     click.echo(f"checked {result.checked} SMS, {result.updated} with a status")
     click.echo(f"delivery   {describe_delivery(store.delivery_counts()) or '(nothing sent)'}")
+
+
+def _campaign_store(db_path: str, campaign: str | None) -> tuple[str, StateStore, str]:
+    """(db path, store, campaign name) for commands that read a campaign's
+    DB. Never creates one."""
+    db_path = _resolve_db_path(db_path, campaign)
+    if not Path(db_path).exists():
+        raise click.UsageError(f"No state DB at {db_path}.")
+    store = StateStore(db_path)
+    name = campaign or store.get_meta("campaign") or Path(db_path).stem
+    return db_path, store, name
+
+
+def _write_csv(path: Path, header: list[str], rows: Iterator[list]) -> int:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    n = 0
+    with path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(header)
+        for row in rows:
+            w.writerow(row)
+            n += 1
+    return n
+
+
+@cli.command()
+@click.option("--state", "db_path", default="./sms_state.db", show_default=True,
+              type=click.Path(dir_okay=False))
+@_campaign_option
+@click.option("--timeout", default=15.0, show_default=True, type=float)
+@click.option(
+    "--log-file", default="./logs/sms-sender.log", show_default=True,
+    type=click.Path(dir_okay=False),
+)
+def clicks(db_path: str, campaign: str | None, timeout: float, log_file: str) -> None:
+    """Fetch click counts from Shlink and show them per segment. Never sends anything.
+
+    Counts exclude bots and link-preview fetchers. Recipients without a user
+    ID are shown as missing user ID."""
+    logging_config.setup(log_file=log_file, console_level=logging.WARNING)
+    _, store, name = _campaign_store(db_path, campaign)
+    try:
+        client = ShlinkClient(load_shlink_config(timeout=timeout))
+    except RuntimeError as e:
+        raise click.UsageError(str(e)) from e
+    try:
+        result = sync_clicks(store, client, name)
+    except ShlinkError as e:
+        click.echo(f"Error: Shlink didn't answer: {e}", err=True)
+        sys.exit(2 if isinstance(e, ShlinkHaltError) else 1)
+    click.echo(f"{result.links} link(s) at Shlink, {result.clicks} click(s) (bots excluded)")
+    segments, campaign_clicks = click_report(store)
+    for line in describe_clicks(segments, campaign_clicks):
+        click.echo(line)
+
+
+@cli.command("export-attribution")
+@click.option("--state", "db_path", default="./sms_state.db", show_default=True,
+              type=click.Path(dir_okay=False))
+@_campaign_option
+@click.option("--out", default=None, type=click.Path(dir_okay=False),
+              help="Default: data/exports/<campaign>-attribution.csv")
+def export_attribution(db_path: str, campaign: str | None, out: str | None) -> None:
+    """Which recipient each link's `r` belongs to, for the backend. No phone numbers.
+
+    One row per sent recipient with a link of their own: ref, user ID (or
+    missing user ID), segment, link, accepted time (ISO 8601, UTC),
+    delivery and clicks. Run `clicks` first for fresh counts."""
+    _, store, name = _campaign_store(db_path, campaign)
+    path = Path(out or f"data/exports/{name}-attribution.csv")
+    n = _write_csv(path, ATTRIBUTION_HEADER, attribution_rows(store))
+    click.echo(f"Wrote {n} rows to {path}")
+
+
+@cli.command("export-clickers")
+@click.option("--state", "db_path", default="./sms_state.db", show_default=True,
+              type=click.Path(dir_okay=False))
+@_campaign_option
+@click.option("--out", default=None, type=click.Path(dir_okay=False),
+              help="Default: data/exports/<campaign>-clickers.csv")
+def export_clickers(db_path: str, campaign: str | None, out: str | None) -> None:
+    """Recipients who clicked their own link, most clicks first. Contains phone numbers.
+
+    Run `clicks` first for fresh counts."""
+    _, store, name = _campaign_store(db_path, campaign)
+    path = Path(out or f"data/exports/{name}-clickers.csv")
+    n = _write_csv(path, CLICKERS_HEADER, clicker_rows(store))
+    click.echo(f"Wrote {n} rows to {path}")
 
 
 @cli.command("dry-run")
