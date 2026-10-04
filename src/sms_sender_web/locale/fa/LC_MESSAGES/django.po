@@ -1256,3 +1256,173 @@ msgstr "شماره شما برای پیامک آزمایشی"
 #, python-brace-format
 msgid "{host} isn't an allowed destination. Allowed: {domains}."
 msgstr "{host} جزو مقصدهای مجاز نیست. مقصدهای مجاز: {domains}."
+
+# --- Reports, downloads and the status page ---
+
+msgid "Accepted at"
+msgstr "زمان پذیرش"
+
+msgid "Asked just now"
+msgstr "زمان استعلام"
+
+msgid "attribution, no phone numbers"
+msgstr "انتساب، بدون شماره تلفن"
+
+msgid "Attribution, no phone numbers (CSV)"
+msgstr "انتساب، بدون شماره تلفن (CSV)"
+
+msgid "Campaign page"
+msgstr "صفحه کمپین"
+
+msgid "Check again"
+msgstr "بررسی دوباره"
+
+msgid "clicked"
+msgstr "کلیک کرده"
+
+msgid "Clicks"
+msgstr "کلیک‌ها"
+
+msgid "Clicks leave out bots and link previews. A shared link's clicks belong to its segment or campaign, never to a person."
+msgstr "در شمارش کلیک‌ها ربات‌ها و پیش‌نمایش لینک کنار گذاشته می‌شوند. کلیک‌های لینک مشترک به گروه مخاطبان یا کمپین تعلق دارد، نه به یک فرد."
+
+msgid "Clicks on the campaign-wide link"
+msgstr "کلیک‌های لینک مشترک کمپین"
+
+msgid "Clicks updated"
+msgstr "آخرین به‌روزرسانی کلیک‌ها"
+
+msgid "code"
+msgstr "کد"
+
+msgid "Debug mode is off."
+msgstr "حالت آزمایشی (debug) خاموش است."
+
+msgid "Debug mode is on: no SMS is delivered. Turn it off in the Kavenegar panel."
+msgstr "حالت آزمایشی (debug) روشن است و هیچ پیامکی تحویل نمی‌شود. آن را در پنل کاوه‌نگار خاموش کنید."
+
+msgid "Delivery"
+msgstr "وضعیت تحویل"
+
+msgid "Delivery of accepted SMS"
+msgstr "وضعیت تحویل پیامک‌های پذیرفته‌شده"
+
+msgid "Downloads"
+msgstr "دریافت فایل‌ها"
+
+msgid "Files use English column names and Latin digits, for other systems. Every download is recorded in the activity log."
+msgstr "این فایل‌ها برای استفاده در سامانه‌های دیگر، نام ستون انگلیسی و ارقام لاتین دارند. هر دریافت در سابقه فعالیت‌ها ثبت می‌شود."
+
+msgid "Jobs waiting"
+msgstr "کارهای در صف"
+
+msgid "Kavenegar account"
+msgstr "حساب کاوه‌نگار"
+
+msgid "Kavenegar didn't answer. Try again in a moment."
+msgstr "کاوه‌نگار پاسخ نداد. کمی بعد دوباره بررسی کنید."
+
+msgid "Kavenegar refused the key or the account"
+msgstr "کاوه‌نگار کلید یا حساب را نپذیرفت"
+
+msgid "Kavenegar reports delivery only for 48 hours after sending."
+msgstr "کاوه‌نگار وضعیت تحویل را فقط تا ۴۸ ساعت پس از ارسال اعلام می‌کند."
+
+msgid "Kavenegar resends undelivered SMS once by itself (resend failed is on)."
+msgstr "کاوه‌نگار پیامک‌های تحویل‌نشده را خودش یک بار دوباره ارسال می‌کند (گزینه resend failed روشن است)."
+
+msgid "last seen"
+msgstr "آخرین فعالیت"
+
+msgid "Last seen"
+msgstr "آخرین فعالیت"
+
+msgid "Links"
+msgstr "لینک‌ها"
+
+msgid "Next"
+msgstr "بعدی"
+
+msgid "Not running: jobs wait until it starts."
+msgstr "در حال اجرا نیست؛ کارها تا راه‌اندازی آن منتظر می‌مانند."
+
+msgid "People who clicked"
+msgstr "افرادی که کلیک کردند"
+
+msgid "people who clicked, with phone numbers"
+msgstr "افرادی که کلیک کردند، با شماره تلفن"
+
+msgid "People who clicked, with phone numbers (CSV)"
+msgstr "افرادی که کلیک کردند، با شماره تلفن (CSV)"
+
+msgid "Phone number shown"
+msgstr "نمایش شماره تلفن"
+
+msgid "Previous"
+msgstr "قبلی"
+
+msgid "ready"
+msgstr "آماده"
+
+msgid "refused"
+msgstr "ردشده"
+
+msgid "Report"
+msgstr "گزارش"
+
+msgid "Report downloaded"
+msgstr "دریافت گزارش"
+
+msgid "running"
+msgstr "در حال اجرا"
+
+msgid "Service status"
+msgstr "وضعیت سرویس‌ها"
+
+msgid "Short links and clicks"
+msgstr "لینک‌های کوتاه و کلیک‌ها"
+
+msgid "Short-link service"
+msgstr "سرویس لینک کوتاه"
+
+msgid "show"
+msgstr "نمایش"
+
+msgid "Status"
+msgstr "وضعیت ارسال"
+
+msgid "summary"
+msgstr "خلاصه"
+
+msgid "Summary (CSV)"
+msgstr "خلاصه (CSV)"
+
+msgid "The Kavenegar key isn't set on the server."
+msgstr "کلید کاوه‌نگار روی سرور تنظیم نشده است."
+
+msgid "The short-link service didn't answer. Try again in a moment."
+msgstr "سرویس لینک کوتاه پاسخ نداد. کمی بعد دوباره بررسی کنید."
+
+msgid "The short-link service isn't set up on the server."
+msgstr "سرویس لینک کوتاه روی سرور تنظیم نشده است."
+
+msgid "The short-link service reports a problem."
+msgstr "سرویس لینک کوتاه مشکلی گزارش می‌کند."
+
+msgid "This number isn't in this campaign."
+msgstr "این شماره در این کمپین نیست."
+
+msgid "Valid until"
+msgstr "اعتبار تا"
+
+msgid "version"
+msgstr "نسخه"
+
+msgid "waiting"
+msgstr "در انتظار"
+
+msgid "Worker"
+msgstr "اجراکننده کارها"
+
+msgid "Working"
+msgstr "فعال"

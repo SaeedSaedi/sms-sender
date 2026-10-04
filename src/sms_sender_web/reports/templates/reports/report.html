@@ -1,0 +1,146 @@
+{% extends "base.html" %}{% load i18n fa roles %}
+{% block title %}{% translate "Report" %} · {{ name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{% translate "Report" %}: <bdi>{{ name }}</bdi></h1>
+  <div class="head-actions">
+    {% if campaign %}<a href="{% url 'campaign_detail' slug %}">{% translate "Campaign page" %}</a>{% endif %}
+    <a href="{% url 'home' %}">{% translate "All campaigns" %}</a>
+  </div>
+</div>
+<p class="muted">{{ slug|ltr }}{% if template %} · {% translate "Template" %}: {{ template|ltr }}{% endif %}{% if last_run_at %} · {% translate "Last run" %}: {{ last_run_at|jalali }}{% endif %}</p>
+
+<dl class="figures">
+  <div><dt>{% translate "Recipients" %}</dt><dd class="num">{{ total|fa_number }}</dd></div>
+  <div><dt>{% translate "Accepted" %}</dt><dd class="num">{{ counts|get:"sent"|fa_number }}</dd></div>
+  <div><dt>{% translate "Cost" %}</dt><dd class="num">{{ total_cost|fa_number }} {% translate "rials" %}</dd></div>
+  <div><dt>{% translate "Cost of one SMS" %}</dt><dd class="num">{% if average_cost %}{{ average_cost|fa_number }} {% translate "rials" %}{% else %}—{% endif %}</dd></div>
+</dl>
+
+<section class="card step">
+  <h2>{% translate "Statuses" %}</h2>
+  <ul class="badges">
+    {% for status in status_order %}{% with n=counts|get:status %}{% if n %}
+      <li class="badge status-{{ status }}">{{ status|status_label }} <span class="num">{{ n|fa_number }}</span></li>
+    {% endif %}{% endwith %}{% endfor %}
+  </ul>
+  {% if delivery %}
+    <h3>{% translate "Delivery of accepted SMS" %}</h3>
+    <ul class="badges">
+      {% for label, n in delivery %}<li class="badge">{{ label }} <span class="num">{{ n|fa_number }}</span></li>{% endfor %}
+    </ul>
+    <p class="hint">{% translate "Kavenegar reports delivery only for 48 hours after sending." %}</p>
+  {% endif %}
+</section>
+
+{% if links %}
+<section class="card step">
+  <h2>{% translate "Short links and clicks" %}</h2>
+  <p class="muted">{% translate "Links" %}:
+    {% for status, n in links.items %}{% if status == "ready" %}{% translate "ready" %}{% elif status == "pending" %}{% translate "waiting" %}{% else %}{% translate "refused" %}{% endif %} {{ n|fa_number }}{% if not forloop.last %} · {% endif %}{% endfor %}
+    {% if last_click_sync %} · {% translate "Clicks updated" %}: {{ last_click_sync|jalali }}{% endif %}</p>
+  {% if segments %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">{% translate "Segment" %}</th>
+          <th scope="col">{% translate "Accepted" %}</th>
+          <th scope="col">{% translate "Clicks" %}</th>
+          <th scope="col">{% translate "People who clicked" %}</th>
+          <th scope="col">{% translate "Missing user ID" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for s in segments %}
+        <tr>
+          <th scope="row">{{ s.segment|ltr }}</th>
+          <td class="num">{{ s.sent|fa_number }}</td>
+          <td class="num">{{ s.clicks|fa_number }}</td>
+          <td class="num">{% if s.clicked is not None %}{{ s.clicked|fa_number }}{% else %}—{% endif %}</td>
+          <td class="num">{{ s.missing_user_id|fa_number }}{% if s.clicked_missing_user_id %} ({% translate "clicked" %} {{ s.clicked_missing_user_id|fa_number }}){% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% if campaign_clicks %}<p>{% translate "Clicks on the campaign-wide link" %}: {{ campaign_clicks|fa_number }}</p>{% endif %}
+  <p class="hint">{% translate "Clicks leave out bots and link previews. A shared link's clicks belong to its segment or campaign, never to a person." %}</p>
+</section>
+{% endif %}
+
+<section class="card step">
+  <h2>{% translate "Downloads" %}</h2>
+  <div class="actions">
+    {% if user|can:"download_aggregates" %}<a class="button secondary" href="{% url 'report_summary_csv' slug %}">{% translate "Summary (CSV)" %}</a>{% endif %}
+    {% if user|can:"export_people" %}
+      <a class="button secondary" href="{% url 'report_attribution_csv' slug %}">{% translate "Attribution, no phone numbers (CSV)" %}</a>
+      <a class="button secondary" href="{% url 'report_clickers_csv' slug %}">{% translate "People who clicked, with phone numbers (CSV)" %}</a>
+    {% endif %}
+  </div>
+  <p class="hint">{% translate "Files use English column names and Latin digits, for other systems. Every download is recorded in the activity log." %}</p>
+</section>
+
+<section class="step">
+  <h2>{% translate "Recipients" %}</h2>
+  <form method="get" class="inline search">
+    <label for="id_q" class="visually-hidden">{% translate "Find a number" %}</label>
+    <input id="id_q" name="q" type="text" dir="ltr" inputmode="tel" value="{{ query }}" placeholder="{% translate "Find a number" %}">
+    <button type="submit" class="small secondary">{% translate "Find" %}</button>
+    {% if query %}<a href="{% url 'report' slug %}">{% translate "Show all" %}</a>{% endif %}
+  </form>
+  {% if query_invalid %}<p class="error" role="alert">{% translate "That isn't a valid mobile number." %}</p>{% endif %}
+  {% if rows %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">{% translate "Number" %}</th>
+          <th scope="col">{% translate "Status" %}</th>
+          <th scope="col">{% translate "Delivery" %}</th>
+          <th scope="col">{% translate "Segment" %}</th>
+          <th scope="col">{% translate "User ID" %}</th>
+          <th scope="col">{% translate "Clicks" %}</th>
+          <th scope="col">{% translate "Accepted at" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td>
+            {% if r.phone|slice:":8" == "INVALID:" %}{{ r.raw|mask_phone|fa_digits|ltr }}
+            {% else %}
+              <span>{{ r.phone|mask_phone|fa_digits|ltr }}</span>
+              {% if user|can:"reveal_phone" %}
+                <form method="post" action="{% url 'report_reveal' slug %}" class="inline reveal"
+                      hx-post="{% url 'report_reveal' slug %}" hx-target="closest td" hx-swap="innerHTML">
+                  {% csrf_token %}<input type="hidden" name="row" value="{{ r.id }}">
+                  <button type="submit" class="link">{% translate "show" %}</button>
+                </form>
+              {% endif %}
+            {% endif %}
+          </td>
+          <td>{% if r.phone|slice:":8" == "INVALID:" %}{{ "invalid"|status_label }}{% else %}{{ r.status|status_label }}{% endif %}</td>
+          <td>{% if r.status == "sent" %}{{ r.delivery_status|delivery_label }}{% else %}—{% endif %}</td>
+          <td>{% if r.segment %}{{ r.segment|ltr }}{% else %}—{% endif %}</td>
+          <td>{% if r.user_id %}<bdi>{{ r.user_id }}</bdi>{% elif r.status == "sent" %}<span class="muted">{% translate "Missing user ID" %}</span>{% else %}—{% endif %}</td>
+          <td class="num">{% if r.clicks is not None %}{{ r.clicks|fa_number }}{% else %}—{% endif %}</td>
+          <td>{% if r.sent_at %}{{ r.sent_at|jalali }}{% else %}—{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if pages > 1 %}
+  <nav class="pager" aria-label="{% translate "Pages" %}">
+    {% if page > 1 %}<a href="?page={{ page|add:"-1" }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}">{% translate "Previous" %}</a>{% endif %}
+    <span class="num">{{ page|fa_number }} / {{ pages|fa_number }}</span>
+    {% if page < pages %}<a href="?page={{ page|add:"1" }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}">{% translate "Next" %}</a>{% endif %}
+  </nav>
+  {% endif %}
+  {% elif query and not query_invalid %}
+  <p class="empty">{% translate "This number isn't in this campaign." %}</p>
+  {% endif %}
+</section>
+{% endblock %}

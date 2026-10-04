@@ -15,6 +15,7 @@ ACTIONS = (
     "campaign_created", "campaign_changed",
     "test_requested", "test_approved", "test_rejected", "send_started",
     "job_requested", "job_paused", "job_resumed", "job_cancelled",
+    "phone_revealed", "report_downloaded",
 )
 
 

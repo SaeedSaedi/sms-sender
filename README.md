@@ -426,7 +426,17 @@ internal, multi-user tool built with Django and HTMX. So far it has:
 
   Changing the message (template, tokens, link, segment) needs a new test
   SMS. Once sending has started, a campaign's settings are fixed.
-- the campaign list: the CLI's campaigns and the dashboard's.
+- the campaign list: the CLI's campaigns and the dashboard's;
+- a report per campaign:
+  - submission and delivery statuses, cost, and clicks per segment (bots and
+    link previews left out);
+  - every recipient, numbers masked. An operator can reveal one number at a
+    time, and each reveal is recorded;
+  - downloads: a summary for everyone; attribution (no phone numbers) and the
+    people who clicked (with phone numbers) for operators. Each download is
+    recorded;
+- a status page («وضعیت سرویس‌ها»): Kavenegar credit and account settings,
+  the short-link service, and whether the worker is running.
 
 The campaign pages hand their work to the worker (`docker compose up`
 starts it next to the web app), and the pages follow it as it runs.

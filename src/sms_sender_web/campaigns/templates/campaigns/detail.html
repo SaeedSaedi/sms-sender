@@ -5,6 +5,7 @@
   <h1><bdi>{{ campaign.name }}</bdi></h1>
   <div class="head-actions">
     {% if user|can:"edit_campaigns" and not send_started %}<a class="button secondary" href="{% url 'campaign_settings' campaign.slug %}">{% translate "Settings" %}</a>{% endif %}
+    {% if summary %}<a class="button secondary" href="{% url 'report' campaign.slug %}">{% translate "Report" %}</a>{% endif %}
     <a href="{% url 'home' %}">{% translate "All campaigns" %}</a>
   </div>
 </div>

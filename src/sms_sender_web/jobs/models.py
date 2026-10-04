@@ -115,3 +115,14 @@ class JobEvent(models.Model):
 
     class Meta:
         ordering = ["at", "id"]
+
+
+class WorkerBeat(models.Model):
+    """A worker's last sign of life, for the status page: written every
+    loop while idle, and with each heartbeat while a job runs."""
+
+    worker_id = models.CharField(max_length=64, unique=True)
+    seen_at = models.DateTimeField()
+
+    def __str__(self) -> str:
+        return f"{self.worker_id} at {self.seen_at:%Y-%m-%d %H:%M:%S}"

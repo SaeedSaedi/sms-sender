@@ -1,0 +1,43 @@
+{% extends "base.html" %}{% load i18n fa %}
+{% block title %}{% translate "Service status" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{% translate "Service status" %}</h1>
+  <a href="{% url 'status' %}">{% translate "Check again" %}</a>
+</div>
+<p class="muted">{% translate "Asked just now" %}: {{ checked_at|jalali:"%Y/%m/%d %H:%M:%S" }}</p>
+
+<section class="card step">
+  <h2>{% translate "Kavenegar account" %}</h2>
+  {% if kavenegar.ok %}
+    <dl class="figures">
+      <div><dt>{% translate "Account credit" %}</dt><dd class="num">{% if kavenegar.credit is not None %}{{ kavenegar.credit|fa_number }} {% translate "rials" %}{% else %}—{% endif %}</dd></div>
+      <div><dt>{% translate "Valid until" %}</dt><dd class="num">{% if kavenegar.expires %}{{ kavenegar.expires|jalali:"%Y/%m/%d" }}{% else %}—{% endif %}</dd></div>
+    </dl>
+    {% if kavenegar.debug_mode %}<p class="error">{% translate "Debug mode is on: no SMS is delivered. Turn it off in the Kavenegar panel." %}</p>
+    {% elif kavenegar.debug_mode is False %}<p class="ok">{% translate "Debug mode is off." %}</p>{% endif %}
+    {% if kavenegar.resend_failed %}<p class="hint">{% translate "Kavenegar resends undelivered SMS once by itself (resend failed is on)." %}</p>{% endif %}
+  {% elif kavenegar.problem == "no_key" %}
+    <p class="error">{% translate "The Kavenegar key isn't set on the server." %}</p>
+  {% elif kavenegar.problem == "refused" %}
+    <p class="error">{% translate "Kavenegar refused the key or the account" %} ({% translate "code" %} {{ kavenegar.code|fa_digits }}).</p>
+  {% else %}
+    <p class="error">{% translate "Kavenegar didn't answer. Try again in a moment." %}</p>
+  {% endif %}
+</section>
+
+<section class="card step">
+  <h2>{% translate "Short-link service" %}</h2>
+  {% if shlink.ok %}<p class="ok">{% translate "Working" %}{% if shlink.version %} · {% translate "version" %} {{ shlink.version|ltr }}{% endif %}</p>
+  {% elif shlink.problem == "no_key" %}<p class="error">{% translate "The short-link service isn't set up on the server." %}</p>
+  {% elif shlink.problem %}<p class="error">{% translate "The short-link service didn't answer. Try again in a moment." %}</p>
+  {% else %}<p class="error">{% translate "The short-link service reports a problem." %}</p>{% endif %}
+</section>
+
+<section class="card step">
+  <h2>{% translate "Worker" %}</h2>
+  {% if worker_alive %}<p class="ok">{% translate "Running" %} · {% translate "last seen" %} {{ worker_seen|jalali:"%H:%M:%S" }}</p>
+  {% else %}<p class="error">{% translate "Not running: jobs wait until it starts." %}{% if worker_seen %} {% translate "Last seen" %}: {{ worker_seen|jalali }}{% endif %}</p>{% endif %}
+  <p class="muted">{% translate "Jobs waiting" %}: {{ queued|fa_number }} · {% translate "running" %}: {{ running|fa_number }}</p>
+</section>
+{% endblock %}
