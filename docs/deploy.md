@@ -45,7 +45,7 @@ values.
 | `DJANGO_SECRET_KEY` | yes | Long random value: `python -c "import secrets; print(secrets.token_urlsafe(50))"`. Changing it signs everyone out. |
 | `DJANGO_ALLOWED_HOSTS` | yes | Host names or IPs people type in the browser, comma-separated. |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | with a host other than localhost | Full origins, e.g. `https://sms.example.internal`. |
-| `KAVENEGAR_API_KEY` | yes | The Kavenegar account campaigns are sent from. Better an account of its own, so a campaign can't use up the credit that login codes depend on. |
+| `KAVENEGAR_API_KEY` | yes | The campaign Kavenegar account. It's separate from the account that sends login codes, so a campaign can't use up their credit. |
 | `SHLINK_API_KEY` | for short links | A production key of its own, never the development one. Shlink can limit a key to the links it created (role `AUTHORED_SHORT_URLS`). Check that `sms-sender clicks` still counts with such a key before relying on it. |
 | `SHLINK_BASE_URL` | no | Default `https://kifpool.me/u`. |
 | `SMS_SENDER_LINK_DOMAINS` | no | Where links may lead. Default `kifpool.me` (subdomains included). |
