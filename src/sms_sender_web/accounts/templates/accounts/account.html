@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% load i18n fa roles %}
+{% extends "base.html" %}{% load i18n fa roles ui %}
 {% block title %}{% translate "My account" %} · {% translate "SMS campaigns" %}{% endblock %}
 {% block content %}
 <section class="card medium">
@@ -9,7 +9,7 @@
     <dt>{% translate "Two-step verification" %}</dt>
     <dd>{% if two_factor %}{% translate "Set up" %}{% else %}—{% endif %}</dd>
   </dl>
-  <p><a href="{% url 'password_change' %}">{% translate "Change password" %}</a></p>
+  <p><a class="button secondary" href="{% url 'password_change' %}">{% icon "lock" %}{% translate "Change password" %}</a></p>
 
   {% if sends_tests %}
   <h2>{% translate "Your number for test SMS" %}</h2>
@@ -18,8 +18,8 @@
     {% csrf_token %}
     <label for="id_test_phone">{% translate "Mobile number" %}</label>
     <input id="id_test_phone" name="test_phone" type="text" dir="ltr" inputmode="tel" data-cli="send --test-number"
-           value="{{ form.test_phone.value|default:'' }}" autocomplete="tel">
-    {% for error in form.test_phone.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+           value="{{ form.test_phone.value|default:'' }}" autocomplete="tel"{% aria form.test_phone %}>
+    {% field_errors form.test_phone %}
     <button type="submit">{% translate "Save" %}</button>
   </form>
   {% endif %}

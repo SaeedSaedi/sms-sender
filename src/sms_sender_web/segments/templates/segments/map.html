@@ -1,18 +1,29 @@
-{% extends "base.html" %}{% load i18n fa %}
+{% extends "base.html" %}{% load i18n fa ui %}
 {% block title %}{% translate "Choose the columns" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="{% translate "Breadcrumb" %}"><ol>
+  <li><a href="{% url 'segment_list' %}">{% translate "Segments" %}</a></li>
+  <li><a href="{% url 'segment_detail' segment.slug %}"><bdi>{{ segment.name }}</bdi></a></li>
+  <li aria-current="page">{% translate "Choose the columns" %}</li>
+</ol></nav>
+{% endblock %}
 {% block content %}
-<h1>{% translate "Choose the columns" %}</h1>
-<p><bdi>{{ segment.name }}</bdi> · {{ segment.original_name|ltr }} · {{ rows|fa_number }} {% translate "rows" %}</p>
+<header class="page-header">
+  <div>
+    <h1>{% translate "Choose the columns" %}</h1>
+    <p class="page-meta"><bdi>{{ segment.name }}</bdi> · {{ segment.original_name|ltr }} · {{ rows|fa_number }} {% translate "rows" %}</p>
+  </div>
+</header>
 <p>{% translate "Choose the column with the mobile numbers. A user ID column, and columns whose values go into the message's tokens, are optional." %}</p>
 <form method="post">
   {% csrf_token %}
-  {% for error in form.non_field_errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
-  {% for error in form.phone.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+  {% for error in form.non_field_errors %}<div class="callout callout-error" role="alert">{% icon "circle-alert" %}<p>{{ error }}</p></div>{% endfor %}
+  {% for error in form.phone.errors %}<div class="callout callout-error" role="alert">{% icon "circle-alert" %}<p>{{ error }}</p></div>{% endfor %}
   <label class="check">
     <input type="checkbox" name="has_header"{% if has_header %} checked{% endif %}>
     {% translate "The first row holds the column names" %}
   </label>
-  <div class="table-wrap">
+  <div class="table-wrap" tabindex="0" role="region" aria-label="{% translate "Choose the columns" %}">
     <table>
       <thead>
         <tr>
@@ -46,6 +57,6 @@
     </table>
   </div>
   <p class="hint">{% translate "Without a user ID, recipients are still sent, and appear as “missing user ID” in reports. A number that comes with two different user IDs is not sent." %}</p>
-  <button type="submit">{% translate "Save and check the list" %}</button>
+  <button type="submit">{% icon "check" %}{% translate "Save and check the list" %}</button>
 </form>
 {% endblock %}

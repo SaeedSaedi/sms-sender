@@ -30,6 +30,7 @@ from django_otp.plugins.otp_totp.models import TOTPDevice  # noqa: E402
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 AXE = Path(__file__).parent / "vendor" / "axe.min.js"
+expect = sync_api.expect  # Playwright's retrying assertions, for the test modules
 
 
 def fa(msgid: str) -> str:
@@ -77,12 +78,14 @@ def session_cookie(user, *, second_step: bool) -> str:
 
 @pytest.fixture
 def open_as(browser, live_server):
-    """open_as(user_or_None, path, width, second_step=True) → a Playwright
-    page at that viewport width, signed in as the user."""
+    """open_as(user_or_None, path, width, second_step=True, color_scheme="light")
+    → a Playwright page at that viewport width, signed in as the user."""
     contexts = []
 
-    def open_(user, path: str, width: int = 1366, *, second_step: bool = True, height: int = 900):
-        context = browser.new_context(viewport={"width": width, "height": height}, locale="fa-IR")
+    def open_(user, path: str, width: int = 1366, *, second_step: bool = True, height: int = 900,
+              color_scheme: str = "light"):
+        context = browser.new_context(viewport={"width": width, "height": height}, locale="fa-IR",
+                                      color_scheme=color_scheme)
         contexts.append(context)
         if user is not None:
             context.add_cookies([{

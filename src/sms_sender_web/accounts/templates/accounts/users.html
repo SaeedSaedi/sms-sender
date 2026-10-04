@@ -1,9 +1,9 @@
-{% extends "base.html" %}{% load i18n fa roles %}
+{% extends "base.html" %}{% load i18n fa roles ui %}
 {% block title %}{% translate "Users" %} · {% translate "SMS campaigns" %}{% endblock %}
 {% block content %}
-<h1>{% translate "Users" %}</h1>
+<header class="page-header"><h1>{% translate "Users" %}</h1></header>
 <div class="table-wrap">
-  <table>
+  <table class="table-stack">
     <thead>
       <tr>
         <th scope="col">{% translate "Username" %}</th>
@@ -18,7 +18,7 @@
     {% for row in rows %}
       <tr>
         <th scope="row">{{ row.user.username|ltr }}{% if row.is_me %} <span class="muted">({% translate "you" %})</span>{% endif %}</th>
-        <td>
+        <td data-label="{% translate "Role" %}">
           {% if row.is_me %}
             {{ row.role|role_label }}
           {% elif row.user.is_superuser %}
@@ -36,13 +36,13 @@
             </form>
           {% endif %}
         </td>
-        <td>
+        <td data-label="{% translate "Two-step verification" %}">
           {% if row.two_factor %}{% translate "Set up" %}
           {% elif row.needs_two_factor %}<span class="warn">{% translate "Not set up yet" %}</span>
           {% else %}—{% endif %}
         </td>
-        <td>{% if row.user.last_login %}{{ row.user.last_login|jalali }}{% else %}—{% endif %}</td>
-        <td>{% if row.user.is_active %}{% translate "Active" %}{% else %}<span class="muted">{% translate "Deactivated" %}</span>{% endif %}</td>
+        <td data-label="{% translate "Last sign-in" %}">{% if row.user.last_login %}{{ row.user.last_login|jalali }}{% else %}—{% endif %}</td>
+        <td data-label="{% translate "Account status" %}">{% if row.user.is_active %}<span class="badge pill-success">{% translate "Active" %}</span>{% else %}<span class="badge">{% translate "Deactivated" %}</span>{% endif %}</td>
         <td>
           {% if not row.is_me %}<div class="actions">
             {% if row.two_factor %}
@@ -85,18 +85,18 @@
     <input type="hidden" name="action" value="create">
     <label for="id_username">{% translate "Username" %}</label>
     <input id="id_username" name="username" type="text" dir="ltr" maxlength="150" required
-           autocomplete="off" value="{{ form.username.value|default:'' }}">
-    {% for error in form.username.errors %}<p class="error" role="alert">{{ error|fa_digits }}</p>{% endfor %}
+           autocomplete="off" value="{{ form.username.value|default:'' }}"{% aria form.username %}>
+    {% field_errors form.username %}
     <label for="id_password">{% translate "First password" %}</label>
-    <input id="id_password" name="password" type="password" dir="ltr" required autocomplete="new-password">
-    <p class="hint">{% translate "At least twelve characters. Give it to the person safely; they can change it after signing in." %}</p>
-    {% for error in form.password.errors %}<p class="error" role="alert">{{ error|fa_digits }}</p>{% endfor %}
+    <input id="id_password" name="password" type="password" dir="ltr" required autocomplete="new-password"{% aria form.password hint=True %}>
+    <p class="hint" id="id_password_hint">{% translate "At least twelve characters. Give it to the person safely; they can change it after signing in." %}</p>
+    {% field_errors form.password %}
     <label for="id_role">{% translate "Role" %}</label>
-    <select id="id_role" name="role">
+    <select id="id_role" name="role"{% aria form.role %}>
       {% for role in roles %}<option value="{{ role }}"{% if form.role.value == role %} selected{% endif %}>{{ role|role_label }}</option>{% endfor %}
     </select>
-    {% for error in form.role.errors %}<p class="error" role="alert">{{ error|fa_digits }}</p>{% endfor %}
-    <button type="submit">{% translate "Create user" %}</button>
+    {% field_errors form.role %}
+    <button type="submit">{% icon "plus" %}{% translate "Create user" %}</button>
   </form>
 </section>
 {% endblock %}

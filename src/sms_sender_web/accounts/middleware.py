@@ -1,10 +1,44 @@
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
-from django.shortcuts import redirect
+from django.contrib.auth.middleware import LoginRequiredMiddleware
+from django.http import HttpResponse
+from django.shortcuts import redirect, resolve_url
 from django.urls import reverse
 from django_otp import user_has_device
 
 from .roles import needs_two_factor
+
+
+def _shown_page(request) -> str:
+    """The page in the browser: for an HTMX request (a live update), the page
+    that made it, not the fragment's own URL."""
+    current = request.headers.get("HX-Current-URL")
+    if current:
+        parts = urlsplit(current)
+        return parts.path + (f"?{parts.query}" if parts.query else "")
+    return request.get_full_path()
+
+
+def _redirect(request, url: str):
+    """A redirect the browser follows as a whole page. For HTMX, HX-Redirect:
+    a plain one would swap the target page into the part being updated."""
+    if request.headers.get("HX-Request"):
+        response = HttpResponse()
+        response["HX-Redirect"] = url
+        return response
+    return redirect(url)
+
+
+class LoginRequired(LoginRequiredMiddleware):
+    """Django's LoginRequiredMiddleware, except that a live update from a
+    session that has ended sends the whole page to the login."""
+
+    def handle_no_permission(self, request, view_func):
+        if not request.headers.get("HX-Request"):
+            return super().handle_no_permission(request, view_func)
+        login = resolve_url(self.get_login_url(view_func))
+        field = self.get_redirect_field_name(view_func)
+        return _redirect(request, f"{login}?{field}={quote(_shown_page(request))}")
 
 # Pages reachable before the second step: signing in and out, the 2FA pages
 # themselves, and the health check.
@@ -30,4 +64,4 @@ class TwoFactorMiddleware:
         if match is not None and match.url_name in EXEMPT:
             return None
         step = "two_factor" if user_has_device(user, confirmed=True) else "two_factor_setup"
-        return redirect(f"{reverse(step)}?next={quote(request.get_full_path())}")
+        return _redirect(request, f"{reverse(step)}?next={quote(_shown_page(request))}")

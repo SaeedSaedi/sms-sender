@@ -1,9 +1,9 @@
 {% extends "base.html" %}{% load i18n fa %}
 {% block title %}{% translate "Activity log" %} · {% translate "SMS campaigns" %}{% endblock %}
 {% block content %}
-<h1>{% translate "Activity log" %}</h1>
+<header class="page-header"><h1 id="activity-heading">{% translate "Activity log" %}</h1></header>
 {% if rows %}
-<div class="table-wrap">
+<div class="table-wrap" tabindex="0" role="region" aria-labelledby="activity-heading">
   <table>
     <thead>
       <tr>

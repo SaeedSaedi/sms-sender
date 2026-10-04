@@ -345,7 +345,36 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - **Engine:** `jobs/engine.Engine` builds the CLI's runner from `Campaign.settings` (`make_runner(reporter=JobReporter, install_signal_handlers=False)`); tests swap in fakes. The approval test isn't part of a send job; it becomes its own dashboard step.
   - **Scheduler:** `Worker.schedule` queues delivery updates while sent rows are under 48 h old, and click updates for 14 days.
   - **One worker only.** Test DBs are files, not shared-memory SQLite (`settings_test`), because the heartbeat thread writes concurrently.
-- **CSS:** logical properties only (`margin-inline-start`, `padding-block`, …), so the layout mirrors for RTL. HTMX and the Vazirmatn font (OFL) are vendored in `static/`; no CDNs. Ordered lists use `list-style-type: persian`. A form with `data-confirm="…"` asks before submitting (`static/js/app.js`). Don't write inline `onclick` / `onsubmit` handlers.
+- **Design system ([app.css](src/sms_sender_web/static/css/app.css), plan 05 P1):**
+  - **Basics:**
+    - Plain CSS, no build step. Logical properties only, so the layout mirrors for RTL.
+    - Tokens are custom properties, with a dark mode under `prefers-color-scheme`.
+    - Older class names (`button.secondary`, `.figures`, `.badge`, …) map onto the same components.
+    - HTMX, idiomorph (0BSD) and the Vazirmatn font (OFL) are vendored in `static/`; no CDNs.
+    - Ordered lists use `list-style-type: persian`.
+    - No inline `onclick` / `onsubmit`; behaviour lives in `static/js/app.js`.
+  - **Shell:**
+    - `base.html`: a skip link, a sidebar from 1024 px and a `<dialog>` drawer below, the sandbox banner as a labelled region, `#connection` and `#confirm-dialog`.
+    - The menu is `templates/ui/nav.html`. `views.navigation` gives `nav_section`, which sets `aria-current`.
+    - Messages are callouts (`ui/messages.html`).
+  - **Icons:** `{% load ui %}{% icon "name" %}` from `static/icons/sprite.svg`, a Lucide subset (ISC). To add one, copy its `<symbol>` from lucide-static.
+  - **A page:** `{% block breadcrumbs %}` with `nav.breadcrumbs` (aria-label "Breadcrumb"), then `header.page-header` (h1, `.page-meta`, `.page-actions`).
+    - Problems and results are `.callout-*` (success, warning, error), never bare coloured text.
+    - Empty lists get an `.empty-state`: icon, title, a sentence and the main action. The header hides its own copy of that action while the list is empty.
+  - **Tables:**
+    - List tables are `table.table-stack`, with a `data-label` (the column's name) on every `td`, so phones get cards.
+    - A wide table that must scroll gets `.table-wrap` with `tabindex="0" role="region"` and a name.
+  - **Forms:**
+    - `data-confirm="…"` opens `#confirm-dialog`. Its title and confirm button are the submit button's text, and a `danger` button makes it red.
+    - A submitted form shows a busy button and ignores a second submit.
+    - `.file-field` gives a file input Persian text.
+    - A form that comes back with errors starts with an `.error-summary` marked `data-autofocus`.
+  - **Live updates:**
+    - Use `hx-swap="morph:outerHTML"`, so focus stays on the button you're on. Give the interactive parts stable ids.
+    - The view answers 286 when nothing is active: htmx swaps it in, then stops polling.
+    - A failed request shows `#connection`.
+    - For HTMX requests, `accounts.middleware.LoginRequired` and `TwoFactorMiddleware` answer an ended session with `HX-Redirect`, so the whole page moves; a plain redirect would swap the login page into the fragment.
+  - **Checks:** the browser scan (`tests/web/e2e/test_pages.py`) must stay at zero. `baseline.json` is empty, in light mode at 360–1366 px and in dark mode on desktop.
 - **Parity with the CLI ([parity.py](src/sms_sender_web/parity.py), plan 05):**
   - Every `sms-sender` command and option, and this app's management commands, has an entry. Each entry is one or more of:
     - `Control(page, role)`;

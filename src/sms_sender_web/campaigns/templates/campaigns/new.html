@@ -1,30 +1,36 @@
-{% extends "base.html" %}{% load i18n %}
+{% extends "base.html" %}{% load i18n ui %}
 {% block title %}{% translate "New campaign" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="{% translate "Breadcrumb" %}"><ol>
+  <li><a href="{% url 'home' %}">{% translate "Campaigns" %}</a></li>
+  <li aria-current="page">{% translate "New campaign" %}</li>
+</ol></nav>
+{% endblock %}
 {% block content %}
 <section class="card medium">
   <h1>{% translate "New campaign" %}</h1>
   <form method="post">
     {% csrf_token %}
     <label for="id_name">{% translate "Name" %}</label>
-    <input id="id_name" name="name" type="text" maxlength="200" required value="{{ form.name.value|default:'' }}">
-    {% for error in form.name.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+    <input id="id_name" name="name" type="text" maxlength="200" required value="{{ form.name.value|default:'' }}"{% aria form.name %}>
+    {% field_errors form.name %}
     <label for="id_slug">{% translate "Short name" %}</label>
-    <input id="id_slug" name="slug" type="text" dir="ltr" maxlength="64" required data-cli="send --campaign" value="{{ form.slug.value|default:'' }}">
-    <p class="hint">{% translate "Lowercase English letters, digits and dashes, e.g. coin-price-7. It names the campaign's records and tags its links, and can't change later." %}</p>
-    {% for error in form.slug.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+    <input id="id_slug" name="slug" type="text" dir="ltr" maxlength="64" required data-cli="send --campaign" value="{{ form.slug.value|default:'' }}"{% aria form.slug hint=True %}>
+    <p class="hint" id="id_slug_hint">{% translate "Lowercase English letters, digits and dashes, e.g. coin-price-7. It names the campaign's records and tags its links, and can't change later." %}</p>
+    {% field_errors form.slug %}
     <label for="id_segment">{% translate "Segment" %}</label>
-    <select id="id_segment" name="segment" required data-cli="send --input">
+    <select id="id_segment" name="segment" required data-cli="send --input"{% aria form.segment %}>
       <option value="">—</option>
       {% for segment in form.fields.segment.queryset %}
         <option value="{{ segment.slug }}"{% if form.segment.value == segment.slug %} selected{% endif %}>{{ segment.name }} ({{ segment.slug }})</option>
       {% endfor %}
     </select>
-    {% for error in form.segment.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
+    {% field_errors form.segment %}
     <label for="id_template">{% translate "Template" %}</label>
-    <input id="id_template" name="template" type="text" dir="ltr" maxlength="100" required data-cli="send --template" value="{{ form.template.value|default:'' }}">
-    <p class="hint">{% translate "The template's name exactly as in the Kavenegar panel." %}</p>
-    {% for error in form.template.errors %}<p class="error" role="alert">{{ error }}</p>{% endfor %}
-    <button type="submit">{% translate "Next: the message's tokens" %}</button>
+    <input id="id_template" name="template" type="text" dir="ltr" maxlength="100" required data-cli="send --template" value="{{ form.template.value|default:'' }}"{% aria form.template hint=True %}>
+    <p class="hint" id="id_template_hint">{% translate "The template's name exactly as in the Kavenegar panel." %}</p>
+    {% field_errors form.template %}
+    <button type="submit">{% translate "Next: the message's tokens" %}{% icon "chevron-left" %}</button>
   </form>
 </section>
 {% endblock %}

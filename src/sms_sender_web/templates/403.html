@@ -1,7 +1,8 @@
-{% extends "base.html" %}{% load i18n roles %}
+{% extends "base.html" %}{% load i18n roles ui %}
 {% block title %}{% translate "You don't have access to this page" %} · {% translate "SMS campaigns" %}{% endblock %}
 {% block content %}
 <section class="card narrow">
+  {% icon "lock" "icon-lg" %}
   <h1>{% translate "You don't have access to this page" %}</h1>
   {% if no_role %}
     <p>{% translate "Your account has no role yet. Ask a system admin to give you one." %}</p>

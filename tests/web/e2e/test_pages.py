@@ -1,5 +1,6 @@
-"""Every page at phone, tablet and desktop widths (plan 05, P0): it fits
-the window, and axe-core finds no accessibility problem.
+"""Every page at phone, tablet and desktop widths, and on desktop in dark
+mode too (plan 05): it fits the window, and axe-core finds no
+accessibility problem.
 
 baseline.json lists the problems known on 2026-10-04, until they're fixed.
 A new problem fails, and so does a fixed one that's still listed: take it
@@ -40,9 +41,10 @@ def _found(world, open_as, name: str) -> tuple[set[str], set[str]]:
     user, second_step = _who(world, spec)
     shots = os.environ.get("E2E_SHOTS")
     problems, too_wide = set(), set()
-    for width in WIDTHS:
-        page = open_as(user, path, width, second_step=second_step)
-        key = f"{name}@{width}"
+    # Every width in light mode; desktop in dark mode too, for its contrast.
+    for width, scheme in [(w, "light") for w in WIDTHS] + [(1366, "dark")]:
+        page = open_as(user, path, width, second_step=second_step, color_scheme=scheme)
+        key = f"{name}@{width}" + ("-dark" if scheme == "dark" else "")
         if overflow(page) > 1:
             too_wide.add(key)
         if width in AXE_WIDTHS:

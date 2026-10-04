@@ -1,7 +1,8 @@
-{% extends "base.html" %}{% load i18n %}
+{% extends "base.html" %}{% load i18n ui %}
 {% block title %}{% translate "This form has expired" %} · {% translate "SMS campaigns" %}{% endblock %}
 {% block content %}
 <section class="card narrow">
+  {% icon "clock" "icon-lg" %}
   <h1>{% translate "This form has expired" %}</h1>
   <p>{% translate "Go back, reload the page, and try again." %}</p>
 </section>

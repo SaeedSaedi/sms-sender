@@ -323,11 +323,15 @@ def test_a_failed_run_says_why_in_persian(operator_client, campaign):
 
 
 def test_the_live_part_polls_only_while_a_job_is_active(operator_client, campaign):
-    html = operator_client.get("/campaigns/coin-7/live/").content.decode()
-    assert "hx-get" not in html
+    response = operator_client.get("/campaigns/coin-7/live/")
+    # 286: HTMX swaps the final state in, then stops polling.
+    assert response.status_code == 286 and "hx-get" not in response.content.decode()
     operator_client.post("/campaigns/coin-7/test/")
-    html = operator_client.get("/campaigns/coin-7/live/").content.decode()
+    response = operator_client.get("/campaigns/coin-7/live/")
+    html = response.content.decode()
+    assert response.status_code == 200
     assert 'hx-get="/campaigns/coin-7/live/"' in html and 'hx-trigger="every 3s"' in html
+    assert 'hx-swap="morph:outerHTML"' in html  # in place, so focus stays on its button
 
 
 def test_settings_are_fixed_once_sending_started(operator_client, campaign):

@@ -77,7 +77,8 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     # Every page needs a login, except the ones marked @login_not_required.
-    "django.contrib.auth.middleware.LoginRequiredMiddleware",
+    # (Django's, with live updates sending the whole page to the login.)
+    "sms_sender_web.accounts.middleware.LoginRequired",
     # Operators and admins also confirm a code from their authenticator app
     # (spec 4.12); until they do, every page leads to that step.
     "django_otp.middleware.OTPMiddleware",
@@ -100,6 +101,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "sms_sender_web.views.sandbox",
+                "sms_sender_web.views.navigation",
             ],
         },
     },

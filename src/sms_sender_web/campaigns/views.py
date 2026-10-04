@@ -186,11 +186,17 @@ def campaign_detail(request, slug: str):
     return _page(request, get_object_or_404(Campaign, slug=slug))
 
 
+# HTMX swaps a 286 answer in, then stops polling: the jobs have finished.
+STOP_POLLING = 286
+
+
 @requires("view_campaigns")
 def campaign_live(request, slug: str):
     """The live part alone, for HTMX to poll while a job is active."""
     campaign = get_object_or_404(Campaign, slug=slug)
-    return render(request, "campaigns/_live.html", _live(request, campaign))
+    context = _live(request, campaign)
+    return render(request, "campaigns/_live.html", context,
+                  status=200 if context["active"] else STOP_POLLING)
 
 
 @requires("edit_campaigns")

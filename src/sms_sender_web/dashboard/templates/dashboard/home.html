@@ -1,12 +1,14 @@
-{% extends "base.html" %}{% load i18n fa roles %}
+{% extends "base.html" %}{% load i18n fa roles ui %}
 {% block content %}
-<div class="page-head">
+<header class="page-header">
   <h1>{% translate "Campaigns" %}</h1>
-  {% if user|can:"edit_campaigns" %}<a class="button" href="{% url 'campaign_new' %}">{% translate "New campaign" %}</a>{% endif %}
-</div>
+  {% if campaigns and user|can:"edit_campaigns" %}
+    <div class="page-actions"><a class="button" href="{% url 'campaign_new' %}">{% icon "plus" %}{% translate "New campaign" %}</a></div>
+  {% endif %}
+</header>
 {% if campaigns %}
 <div class="table-wrap">
-  <table>
+  <table class="table-stack">
     <thead>
       <tr>
         <th scope="col">{% translate "Campaign" %}</th>
@@ -22,17 +24,17 @@
     {% for row in campaigns %}{% with c=row.summary %}
       <tr>
         <th scope="row">{% if row.campaign %}<a href="{% url 'campaign_detail' c.slug %}"><bdi>{{ row.campaign.name }}</bdi></a>{% else %}{{ c.name|ltr }}{% endif %}</th>
-        <td>{% if c.template %}{{ c.template|ltr }}{% elif row.campaign.settings.template %}{{ row.campaign.settings.template|ltr }}{% else %}—{% endif %}</td>
-        <td class="num">{{ c.recipients|fa_number }}</td>
-        <td>
+        <td data-label="{% translate "Template" %}">{% if c.template %}{{ c.template|ltr }}{% elif row.campaign.settings.template %}{{ row.campaign.settings.template|ltr }}{% else %}—{% endif %}</td>
+        <td data-label="{% translate "Recipients" %}" class="num">{{ c.recipients|fa_number }}</td>
+        <td data-label="{% translate "Statuses" %}">
           <ul class="badges">
           {% for status in status_order %}{% with n=c.counts|get:status %}{% if n %}
             <li class="badge status-{{ status }}">{{ status|status_label }} <span class="num">{{ n|fa_number }}</span></li>
           {% endif %}{% endwith %}{% endfor %}
           </ul>
         </td>
-        <td class="num">{% if c.links %}{{ c.links|get:"ready"|fa_number }}{% else %}—{% endif %}</td>
-        <td>{% if c.last_run_at %}{{ c.last_run_at|jalali }}{% else %}—{% endif %}</td>
+        <td data-label="{% translate "Short links" %}" class="num">{% if c.links %}{{ c.links|get:"ready"|fa_number }}{% else %}—{% endif %}</td>
+        <td data-label="{% translate "Last run" %}">{% if c.last_run_at %}{{ c.last_run_at|jalali }}{% else %}—{% endif %}</td>
         <td>{% if c.counts %}<a href="{% url 'report' c.slug %}">{% translate "Report" %}</a>{% endif %}</td>
       </tr>
     {% endwith %}{% endfor %}
@@ -40,6 +42,11 @@
   </table>
 </div>
 {% else %}
-<p class="empty">{% translate "No campaigns yet. A campaign appears here after its first run." %}</p>
+<div class="empty-state">
+  {% icon "megaphone" %}
+  <h2>{% translate "No campaigns yet" %}</h2>
+  <p>{% translate "A campaign sends one message to a segment: set its text, send a test SMS to yourself, then send." %}</p>
+  {% if user|can:"edit_campaigns" %}<a class="button" href="{% url 'campaign_new' %}">{% icon "plus" %}{% translate "New campaign" %}</a>{% endif %}
+</div>
 {% endif %}
 {% endblock %}
