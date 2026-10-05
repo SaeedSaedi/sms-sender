@@ -2169,15 +2169,6 @@ msgstr "فقط آن‌هایی که دست‌کم این چند دقیقه از 
 msgid "Options"
 msgstr "گزینه‌ها"
 
-msgid "Queue again"
-msgstr "قرار دادن دوباره در صف"
-
-msgid "Queue recipients again"
-msgstr "قرار دادن دوباره گیرندگان در صف"
-
-msgid "Recipients queued again"
-msgstr "قرار گرفتن دوباره گیرندگان در صف"
-
 msgid "They go out with the next send, after the same checks."
 msgstr "این گیرندگان با ارسال بعدی و پس از همان بررسی‌ها ارسال می‌شوند."
 
@@ -2601,9 +2592,6 @@ msgstr "ارسال آزمایشی"
 msgid "Sent. Check that it arrived."
 msgstr "فرستاده شد. بررسی کنید که رسیده باشد."
 
-msgid "When a send ends or stops, these hear how it went: the CLI's run report, with the campaign's short name. Their addresses hold secrets, so they're shown masked."
-msgstr "وقتی ارسالی پایان یابد یا متوقف شود، این مقصدها از نتیجه آن باخبر می‌شوند: گزارش اجرای خط فرمان، همراه با نام کوتاه کمپین. نشانی آن‌ها رمز دارد، پس پوشیده نمایش داده می‌شوند."
-
 msgid "Write slack:https://hooks.slack.com/…, telegram:<bot token>:<chat id>, or an https:// address."
 msgstr "به شکل slack:https://hooks.slack.com/… یا telegram:<bot token>:<chat id> یا یک نشانی https:// بنویسید."
 
@@ -2830,3 +2818,15 @@ msgstr "می‌تواند وارد شود، ولی تا مدیر سامانه ن
 
 msgid "Operators and system admins enter a six-digit code from an authenticator app after the password."
 msgstr "اپراتور و مدیر سامانه پس از گذرواژه، کد شش‌رقمی برنامه احراز هویت را وارد می‌کنند."
+
+msgid "Queue again"
+msgstr "بازگرداندن به صف"
+
+msgid "Queue recipients again"
+msgstr "بازگرداندن گیرندگان به صف"
+
+msgid "Recipients queued again"
+msgstr "بازگرداندن گیرندگان به صف"
+
+msgid "When a send ends or stops, these hear how it went: the CLI's run report, with the campaign's short name. Their addresses hold secrets, so they're shown masked."
+msgstr "وقتی ارسالی پایان یابد یا متوقف شود، این مقصدها از نتیجه آن باخبر می‌شوند: گزارش اجرای خط فرمان، همراه با نام کوتاه کمپین. نشانی آن‌ها اطلاعات محرمانه دارد، پس پوشیده نمایش داده می‌شوند."
