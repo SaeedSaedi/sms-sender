@@ -48,13 +48,19 @@ def campaign_db(path: Path) -> StateStore:
 
 
 class Visits:
-    def __init__(self, counts: dict[str, int]):
+    def __init__(self, counts: dict[str, int], times=()):
         self.counts = counts
+        self.times = list(times)  # when each visit happened, for clicks over time
         self.tags: list[str] = []
+        self.since: list = []
 
     def visits_by_tag(self, tag):
         self.tags.append(tag)
         return [LinkVisits(code, total=n + 5, non_bots=n) for code, n in self.counts.items()]
+
+    def visit_times(self, tag, *, since=None):
+        self.since.append(since)
+        return [t for t in self.times if since is None or t >= since]
 
 
 def test_sync_stores_non_bot_clicks_per_link(tmp_path):
@@ -182,3 +188,36 @@ def test_exports_land_in_data_exports(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     rows = list(csv.reader(Path("data/exports/coin-7-clickers.csv").open(encoding="utf-8")))
     assert rows[1][:3] == [A, "u-1", "ok"] and len(rows) == 2
+
+
+# ---------- clicks over time (schema v7) ----------
+
+def test_clicks_are_kept_per_hour_and_never_counted_twice(tmp_path):
+    from datetime import datetime, timedelta, timezone
+
+    state = campaign_db(tmp_path / "s.db")
+    t0 = datetime(2026, 10, 5, 9, 40, tzinfo=timezone.utc)
+    source = Visits({"c1": 3}, times=[t0, t0 + timedelta(minutes=10), t0 + timedelta(minutes=30)])
+    assert sync_clicks(state, source, "coin-7").hours == 3
+    nine, ten = int(t0.replace(minute=0).timestamp()), int(t0.replace(minute=0).timestamp()) + 3600
+    assert state.click_hours() == [(nine, 2), (ten, 1)]
+    # The next sync reads from the start of the latest hour again, and counts
+    # that hour afresh: the 10:10 visit isn't counted twice.
+    source.times.append(t0 + timedelta(hours=1, minutes=5))
+    sync_clicks(state, source, "coin-7")
+    assert source.since[-1] == datetime.fromtimestamp(ten, tz=timezone.utc)
+    assert state.click_hours() == [(nine, 2), (ten, 2)]
+
+
+def test_counts_still_stand_when_shlink_cant_say_when(tmp_path):
+    from sms_sender.shortlink import ShlinkError
+
+    class NoTimes(Visits):
+        def visit_times(self, tag, *, since=None):
+            raise ShlinkError(404, "not-found", "no such endpoint")
+
+    state = campaign_db(tmp_path / "s.db")
+    result = sync_clicks(state, NoTimes({"c1": 2}), "coin-7")
+    assert (result.clicks, result.hours) == (2, 0) and state.click_hours() == []
+    segments, _ = click_report(state)
+    assert {seg.segment: seg.clicks for seg in segments}["vip-2"] == 2

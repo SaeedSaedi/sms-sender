@@ -47,6 +47,8 @@ from ..jobs.engine import Engine
 from ..jobs.models import Campaign, Job
 from ..jobs.sandbox import read_outbox
 from ..jobs.worker import last_seen, worker_alive
+from .charts import clicks_chart, funnel
+from .terms import CHART_BY_DAY, CHART_BY_HOUR
 
 PAGE = 100
 MATCHING = _("{n} recipients match these filters.")
@@ -122,6 +124,7 @@ def report(request, slug: str):
     rows = [] if query_invalid else store.recipients_page(limit=PAGE, offset=(number - 1) * PAGE, where=where)
     counts = store.display_counts()
     sends = check_sends(store)
+    chart = clicks_chart(store.click_hours())
     segments, campaign_clicks = click_report(store)
     stored = store.get_meta("settings")
     last_run = store.get_meta("last_run")
@@ -142,6 +145,10 @@ def report(request, slug: str):
         "filters": filters,
         "filter_query": urlencode(filters),
         "matching": say(MATCHING if filters else EVERYONE, {"n": total}),
+        "funnel": funnel(store, counts),
+        "chart": chart,
+        "chart_summary": say(CHART_BY_HOUR if chart.by_hour else CHART_BY_DAY,
+                             {"total": chart.total, "peak": chart.peak, "when": chart.peak_label}) if chart else "",
         "sends": sends,
         "sends_line": (
             say(SENDS_TWICE, {"n": len(sends.twice)}) if sends.twice
@@ -275,6 +282,42 @@ def failed_csv(request, slug: str):
     rows = ([r["phone"], r["raw"], r["status_code"], r["attempts"], r["last_error"]]
             for r in store.iter_failed_permanent())
     return _csv(f"{slug}-failed.csv", list(StateStore.FAILED_HEADER), rows)
+
+
+@requires("view_campaigns")
+def analytics(request):
+    """Every campaign side by side (the CLI's and the dashboard's): accepted,
+    delivered, clicked, cost. Read only; numbers only, no people."""
+    rows = []
+    names = dict(Campaign.objects.values_list("slug", "name"))
+    for path in sorted(Path(django_settings.SMS_SENDER_DB_DIR).glob("*.db")):
+        if not SLUG_RE.match(path.stem):
+            continue
+        store = StateStore(path)
+        counts = store.display_counts()
+        sent = counts.get("sent", 0)
+        segments, campaign_clicks = click_report(store)
+        personal = store.has_personal_links()
+        clicked = sum(s.clicked or 0 for s in segments) if personal else None
+        clicks = sum(s.clicks for s in segments) + campaign_clicks
+        delivered = store.delivery_counts().get(10, 0)
+        cost = store.total_cost()
+        rows.append({
+            "slug": path.stem, "name": names.get(path.stem) or store.get_meta("campaign") or path.stem,
+            "sent": sent, "delivered": delivered, "delivered_share": round(100 * delivered / sent) if sent else None,
+            "clicked": clicked, "clicked_share": round(100 * clicked / sent) if sent and clicked is not None else None,
+            "clicks": clicks, "cost": cost, "per_click": round(cost / clicks) if clicks else None,
+            "last": store.last_sent_at(),
+        })
+    rows.sort(key=lambda r: r["last"] or 0, reverse=True)
+    sent = sum(r["sent"] for r in rows)
+    clicks = sum(r["clicks"] for r in rows)
+    cost = sum(r["cost"] for r in rows)
+    return render(request, "reports/analytics.html", {
+        "rows": rows,
+        "totals": {"sent": sent, "clicks": clicks, "cost": cost, "per_click": round(cost / clicks) if clicks else None,
+                   "delivered": sum(r["delivered"] for r in rows)},
+    })
 
 
 def _expiry(value):

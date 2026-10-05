@@ -8,6 +8,7 @@ The operator and the admin have a linked authenticator app; the newcomer,
 an operator too, has none yet."""
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
@@ -84,6 +85,7 @@ PAGES: dict[str, tuple[str, str | None]] = {
     "campaign.completed.admin": ("/campaigns/completed/", "admin"),  # every status it may queue again
     "campaign.draft": ("/campaigns/draft-1/", "operator"),
     "report": ("/reports/completed/", "viewer"),
+    "analytics": ("/analytics/", "viewer"),
     "templates": ("/templates/", "viewer"),
     "template.new": ("/templates/new/", "operator"),
     "status": ("/status/", "viewer"),
@@ -238,6 +240,10 @@ def build_world(data_dir: Path) -> World:
         db_rows={**rows, PHONES[3]: "unknown", PHONES[4]: "failed_retriable"},
     )
     _test_job(done, operator, approved=True)
+    done_store = StateStore(campaign_db(done))
+    done_store.record_delivery({PHONES[0]: 10}, checked_at=0)
+    hour = int(time.time()) // 3600 * 3600
+    done_store.replace_click_hours(0, {hour - 5 * 3600: 2, hour - 3 * 3600: 1, hour - 2 * 3600: 4})
     finished = Job.objects.create(
         campaign=done, kind=Job.Kind.SEND, state=Job.State.DONE, requested_by=operator,
         settings_hash=services.settings_hash(done), started_at=now, finished_at=now,

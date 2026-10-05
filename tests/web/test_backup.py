@@ -46,6 +46,7 @@ def data(tmp_path):
     for i in range(10):
         store.claim(f"0912000{i:04d}")
         store.mark_sent(f"0912000{i:04d}", 1000 + i, 200, 3020)
+    store.close()  # a test that moves the file keeps no connection to it open
     (data / "segments" / "vip.csv").write_text("phone\n09120000001\n", encoding="utf-8")
     (data / "exports" / "x.csv").write_text("made again from the DBs\n", encoding="utf-8")
     (data / "sandbox" / "app.db").write_bytes(b"")
@@ -113,6 +114,9 @@ def test_an_existing_file_is_replaced_only_when_named_and_kept_aside(data, tmp_p
     assert result.restored == [] and sorted(result.kept) == ["app.db", "db/coin-7.db", "segments/vip.csv"]
     assert live.counts()[SENT] == 11  # untouched
 
+    # Moved aside while open, a WAL file can't be reopened in the same
+    # process (SQLite shares its index by file); a restore runs alone.
+    live.close()
     result = restore(path, data, replace=["db/coin-7.db"])
     ((rel, aside),) = result.replaced
     assert rel == "db/coin-7.db" and aside.startswith("coin-7.db.before-restore-")

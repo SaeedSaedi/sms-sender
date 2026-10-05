@@ -487,6 +487,9 @@ internal, multi-user tool built with Django and HTMX. So far it has:
     numbers), the people who clicked, the filtered recipients, and the
     rejected and invalid rows (the CLI's `export-failed`), all with phone
     numbers except attribution. Each download is recorded;
+- in each report, the funnel from accepted to delivered to clicked, and
+  clicks over time; and an analytics page («تحلیل‌ها») with every campaign
+  side by side;
 - a status page («وضعیت سرویس‌ها»): Kavenegar credit and account settings,
   the short-link service, and whether the worker is running.
 
