@@ -472,11 +472,14 @@ internal, multi-user tool built with Django and HTMX. So far it has:
 - a report per campaign:
   - submission and delivery statuses, cost, and clicks per segment (bots and
     link previews left out);
-  - every recipient, numbers masked. An operator can reveal one number at a
-    time, and each reveal is recorded;
-  - downloads: a summary for everyone; attribution (no phone numbers) and the
-    people who clicked (with phone numbers) for operators. Each download is
-    recorded;
+  - every recipient, numbers masked, filtered by status, segment, delivery,
+    clicks or a missing user ID. A number is looked up without it ever
+    appearing in an address. An operator can reveal one number at a time,
+    and each reveal is recorded;
+  - downloads: a summary for everyone. For operators: attribution (no phone
+    numbers), the people who clicked, the filtered recipients, and the
+    rejected and invalid rows (the CLI's `export-failed`), all with phone
+    numbers except attribution. Each download is recorded;
 - a status page («وضعیت سرویس‌ها»): Kavenegar credit and account settings,
   the short-link service, and whether the worker is running.
 

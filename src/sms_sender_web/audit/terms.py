@@ -56,6 +56,8 @@ DOWNLOADS = {
     "summary": _("summary"),
     "attribution": _("attribution, no phone numbers"),
     "clickers": _("people who clicked, with phone numbers"),
+    "recipients": _("recipients, filtered, with phone numbers"),
+    "failed": _("rejected rows, with phone numbers"),
 }
 
 
