@@ -508,6 +508,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - The journey finds everything by its Persian name: `fa("msgid")` is the catalog's text. A redesign that keeps the words keeps the test.
   - `test_pages.py` opens every page in `tests/web/world.py`'s `PAGES` at 360 / 390 / 768 / 1024 / 1366 px. It checks for horizontal overflow, runs axe-core (vendored for tests only, MPL-2.0), and finds controls smaller than 24 × 24 px (`small_targets`, WCAG 2.2 2.5.8; inline links and checkboxes inside their label are exempt).
   - `test_keyboard.py`: signing in with the keyboard alone, the skip link, and a visible focus ring on everything Tab reaches.
+  - `test_operations.py`: pause and resume; a stopped send resumed; a requeue's confirmation; the report's filters, an audience and a download; a test notification; an admin's password reset.
   - Known problems live in `baseline.json`, a ratchet: a new problem fails, and a fixed one still listed fails too.
   - `world.py` builds the made-up dashboard (users, segments, a campaign in every state) for these tests and the parity test.
 - **Packaging:** the image installs the package, not the source tree, so each app's `templates/` must be listed in `[tool.setuptools.package-data]`.
