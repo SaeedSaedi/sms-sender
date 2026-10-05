@@ -2383,9 +2383,6 @@ msgstr "آن را به صورت «Authorization: Bearer <token>» به /api/v1/c
 msgid "The token is revoked. Calls with it are refused from now on."
 msgstr "توکن باطل شد. از این پس فراخوانی‌ها با آن پذیرفته نمی‌شود."
 
-msgid "Token"
-msgstr "توکن"
-
 msgid "Which system uses it"
 msgstr "کدام سامانه از آن استفاده می‌کند"
 
@@ -2660,3 +2657,176 @@ msgstr "در نخستین ورود، گذرواژه خودش را انتخاب �
 
 msgid "chooses a new password at sign-in"
 msgstr "در ورود بعدی گذرواژه تازه انتخاب می‌کند"
+
+msgid "API token"
+msgstr "توکن API"
+
+# --- Help (plan 05, P6) ---
+
+msgid "Help"
+msgstr "راهنما"
+
+msgid "How a campaign goes, what each status means, and the rules that keep anyone from getting an SMS twice."
+msgstr "یک کمپین چگونه پیش می‌رود، هر وضعیت چه معنایی دارد و چه قاعده‌هایی نمی‌گذارند کسی پیامکی را دو بار دریافت کند."
+
+msgid "On this page"
+msgstr "در این صفحه"
+
+msgid "Rules every send keeps"
+msgstr "قاعده‌هایی که هر ارسال رعایت می‌کند"
+
+msgid "Buttons"
+msgstr "دکمه‌ها"
+
+msgid "When sending stops"
+msgstr "وقتی ارسال متوقف می‌شود"
+
+msgid "Roles"
+msgstr "نقش‌ها"
+
+msgid "A campaign's five steps"
+msgstr "پنج مرحله کمپین"
+
+msgid "The outcome of handing each recipient's SMS to Kavenegar."
+msgstr "نتیجه سپردن پیامک هر گیرنده به کاوه‌نگار."
+
+msgid "Whether an accepted SMS reached the phone, as Kavenegar reports it."
+msgstr "اینکه پیامک پذیرفته‌شده، به گزارش کاوه‌نگار، به گوشی رسیده است یا نه."
+
+msgid "Something unclear, or a send that won't continue? Ask a system admin."
+msgstr "چیزی روشن نیست یا ارسالی ادامه نمی‌یابد؟ از مدیر سامانه کمک بگیرید."
+
+msgid "What does each status mean?"
+msgstr "هر وضعیت چه معنایی دارد؟"
+
+msgid "What does each delivery status mean?"
+msgstr "هر وضعیت تحویل چه معنایی دارد؟"
+
+msgid "The check reads the list as a send would: the valid numbers, the template, the tokens, the short link and the sending window. The preview shows each recipient's final text."
+msgstr "فهرست درست همان‌گونه که در ارسال خوانده می‌شود بررسی می‌شود: شماره‌های معتبر، قالب پیامک، متغیرهای قالب، لینک کوتاه و بازه مجاز ارسال. پیش‌نمایش، متن نهایی هر گیرنده را نشان می‌دهد."
+
+msgid "One SMS to your own number, set on “My account”, with the final text and link. Check it on your phone, then approve it or reject it."
+msgstr "یک پیامک با متن و لینک نهایی به شماره خودتان، که در «حساب من» ثبت کرده‌اید. آن را روی گوشی خود ببینید و سپس تأیید یا رد کنید."
+
+msgid "A send needs a test SMS approved for these exact settings. It starts now or at a set time: the short links are made first, then the SMS go out inside the sending window."
+msgstr "ارسال به پیامک آزمایشی‌ای نیاز دارد که برای همین تنظیمات تأیید شده باشد. ارسال همین حالا یا در زمان تعیین‌شده آغاز می‌شود: نخست لینک‌های کوتاه ساخته می‌شوند، سپس پیامک‌ها در بازه مجاز ارسال فرستاده می‌شوند."
+
+msgid "What was accepted, delivered and clicked, and what's left to do. Delivery is checked for 48 hours after sending, clicks for 14 days."
+msgstr "پیامک‌های پذیرفته‌شده، تحویل‌شده و کلیک‌شده، و کارهای باقی‌مانده. وضعیت تحویل تا ۴۸ ساعت پس از ارسال و کلیک‌ها تا ۱۴ روز پیگیری می‌شوند."
+
+msgid "Nobody gets the same campaign twice: a number Kavenegar accepted is never sent again, even after a crash or a restart."
+msgstr "هیچ‌کس پیامک یک کمپین را دو بار دریافت نمی‌کند: به شماره‌ای که کاوه‌نگار پیامکش را پذیرفته است دیگر ارسال نمی‌شود، حتی اگر سامانه ناگهان از کار بیفتد یا دوباره راه‌اندازی شود."
+
+msgid "An SMS that may have gone out (“Unknown”) is checked with Kavenegar, never sent again blindly."
+msgstr "پیامکی که ممکن است ارسال شده باشد («نامعلوم») از کاوه‌نگار استعلام می‌شود و هرگز بی‌بررسی دوباره ارسال نمی‌شود."
+
+msgid "SMS go out only inside the campaign's sending window, Tehran time: {start} to {end} unless the campaign sets another."
+msgstr "پیامک‌ها فقط در بازه مجاز ارسال کمپین (به وقت تهران) فرستاده می‌شوند: از {start} تا {end}، مگر اینکه کمپین بازه دیگری تعیین کرده باشد."
+
+msgid "Numbers on the suppression list get no SMS."
+msgstr "شماره‌های فهرست عدم ارسال هیچ پیامکی دریافت نمی‌کنند."
+
+msgid "When a system admin sets a frequency cap, nobody gets more campaign SMS than it allows."
+msgstr "اگر مدیر سامانه سقف ارسال تعیین کند، هیچ‌کس بیش از آن پیامک کمپین دریافت نمی‌کند."
+
+msgid "Every short link is made before the first SMS. If one can't be made, nothing is sent."
+msgstr "همه لینک‌های کوتاه پیش از نخستین پیامک ساخته می‌شوند. اگر حتی یکی ساخته نشود، هیچ پیامکی ارسال نمی‌شود."
+
+msgid "A test SMS goes only to your own number. Settings changed after its approval need a new test."
+msgstr "پیامک آزمایشی فقط به شماره خودتان ارسال می‌شود. اگر تنظیمات پس از تأیید آن تغییر کند، پیامک آزمایشی تازه‌ای لازم است."
+
+msgid "Not sent to Kavenegar yet."
+msgstr "هنوز برای کاوه‌نگار فرستاده نشده است."
+
+msgid "The request is on its way to Kavenegar."
+msgstr "درخواست در حال فرستادن به کاوه‌نگار است."
+
+msgid "Kavenegar accepted the SMS. That doesn't mean it has reached the phone."
+msgstr "کاوه‌نگار پیامک را پذیرفته است؛ این به معنای رسیدن آن به گوشی نیست."
+
+msgid "The SMS certainly didn't go out, so sending it again is safe."
+msgstr "پیامک قطعاً فرستاده نشده است و ارسال دوباره آن بی‌خطر است."
+
+msgid "Kavenegar rejected the request. It isn't sent again until the cause is fixed."
+msgstr "کاوه‌نگار درخواست را رد کرده است؛ بدون اصلاح دوباره ارسال نمی‌شود."
+
+msgid "Kavenegar may have accepted the SMS. It's never sent again by itself: its outcome is checked with Kavenegar."
+msgstr "ممکن است کاوه‌نگار پیامک را پذیرفته باشد؛ هرگز به‌طور خودکار دوباره ارسال نمی‌شود و وضعیتش از کاوه‌نگار استعلام می‌شود."
+
+msgid "Reconciliation couldn't reach a clear answer, so a system admin decides."
+msgstr "تطبیق به نتیجه قطعی نرسید؛ تصمیم با مدیر سامانه است."
+
+msgid "This number is on the suppression list and gets no SMS."
+msgstr "این شماره در فهرست عدم ارسال است و پیامکی دریافت نمی‌کند."
+
+msgid "This row's number or data can't be used, for example a number that came with two different user IDs."
+msgstr "شماره یا داده این ردیف قابل استفاده نیست؛ برای نمونه، شماره‌ای که با دو شناسه کاربر متفاوت آمده است."
+
+msgid "The campaign was cancelled before this recipient was sent."
+msgstr "کمپین پیش از ارسال به این گیرنده لغو شد."
+
+msgid "This recipient already got as many campaign SMS as the frequency cap allows. It's checked again at the next send."
+msgstr "این گیرنده به اندازه‌ای که سقف ارسال اجازه می‌دهد پیامک کمپین دریافت کرده است؛ در ارسال بعدی دوباره بررسی می‌شود."
+
+msgid "Delivery hasn't been asked of Kavenegar yet."
+msgstr "وضعیت تحویل هنوز از کاوه‌نگار پرسیده نشده است."
+
+msgid "The SMS is in Kavenegar's sending queue."
+msgstr "پیامک در صف ارسال کاوه‌نگار است."
+
+msgid "The SMS was handed to the network and is on its way to the phone."
+msgstr "پیامک به مخابرات سپرده شده و در انتظار رسیدن به گوشی است."
+
+msgid "The SMS reached the recipient's phone."
+msgstr "پیامک به گوشی گیرنده رسیده است."
+
+msgid "The SMS hasn't reached the phone yet. It's checked again for up to 48 hours."
+msgstr "پیامک هنوز به گوشی نرسیده است؛ تا ۴۸ ساعت دوباره بررسی می‌شود."
+
+msgid "The network or Kavenegar reported the send as failed."
+msgstr "مخابرات یا کاوه‌نگار ارسال را ناموفق اعلام کرده است."
+
+msgid "The recipient has blocked this kind of SMS."
+msgstr "گیرنده دریافت این نوع پیامک را مسدود کرده است."
+
+msgid "One SMS to the operator's own number before the main send, to see the final text."
+msgstr "یک پیامک به شماره خود اپراتور پیش از ارسال اصلی، برای دیدن متن نهایی."
+
+msgid "No new recipients are sent. Requests already on their way finish and are recorded."
+msgstr "ارسال به گیرندگان تازه متوقف می‌شود؛ درخواست‌های در جریان تکمیل و ثبت می‌شوند."
+
+msgid "Unknown outcomes are checked with Kavenegar first, then sending continues from where it stopped."
+msgstr "نخست وضعیت‌های نامعلوم از کاوه‌نگار استعلام می‌شوند، سپس ارسال از همان‌جا ادامه می‌یابد."
+
+msgid "Sending to the remaining recipients is cancelled. SMS Kavenegar has accepted can't be taken back."
+msgstr "ارسال به گیرندگان باقی‌مانده لغو می‌شود؛ پیامک‌هایی که کاوه‌نگار پذیرفته است قابل بازگشت نیستند."
+
+msgid "Asks Kavenegar about the SMS whose outcome is unknown. No SMS is sent."
+msgstr "وضعیت پیامک‌های نامعلوم از کاوه‌نگار استعلام می‌شود؛ هیچ پیامکی ارسال نمی‌شود."
+
+msgid "Asks Kavenegar which SMS were delivered. No SMS is sent."
+msgstr "وضعیت تحویل پیامک‌ها از کاوه‌نگار استعلام می‌شود؛ هیچ پیامکی ارسال نمی‌شود."
+
+msgid "Puts the recipients of one status back in the queue for the next send, after a confirmation that names how many. Only a system admin can do it for anyone who may already have the SMS, because they could get it twice."
+msgstr "گیرندگان یک وضعیت، پس از تأییدی که تعدادشان را اعلام می‌کند، برای ارسال بعدی دوباره در صف قرار می‌گیرند. برای کسانی که ممکن است پیامک را گرفته باشند فقط مدیر سامانه این کار را می‌کند، چون ممکن است پیامک را دو بار دریافت کنند."
+
+msgid "Someone paused the send, or the sending window ended. A send the window paused continues by itself when the window opens again; one a person paused waits for “Resume sending”."
+msgstr "ارسال را کسی موقتاً متوقف کرده یا بازه مجاز ارسال به پایان رسیده است. ارسالی که با پایان بازه متوقف شده، با آغاز دوباره بازه خودکار ادامه می‌یابد؛ ارسالی که کسی متوقف کرده، منتظر «ادامه ارسال» می‌ماند."
+
+msgid "Sending stopped because of a problem, such as too little credit or an invalid Kavenegar key. Fix it, then resume: nobody gets the SMS twice."
+msgstr "ارسال به‌دلیل مشکلی، مانند اعتبار ناکافی یا کلید نامعتبر کاوه‌نگار، متوقف شد. پس از رفع آن ارسال را ادامه دهید؛ هیچ گیرنده‌ای پیامک را دو بار دریافت نمی‌کند."
+
+msgid "Sees the campaigns and reports only; part of every phone number is hidden."
+msgstr "فقط کمپین‌ها و گزارش‌ها را می‌بیند؛ بخشی از هر شماره تلفن پنهان است."
+
+msgid "Makes segments and campaigns, and runs the sends."
+msgstr "گروه‌های مخاطبان و کمپین‌ها را می‌سازد و ارسال را اجرا می‌کند."
+
+msgid "Everything an operator does, and manages the users, the suppression list and the system settings."
+msgstr "افزون بر کار اپراتور، کاربران، فهرست عدم ارسال و تنظیمات سامانه را مدیریت می‌کند."
+
+msgid "Can sign in, but sees nothing until a system admin gives them a role."
+msgstr "می‌تواند وارد شود، ولی تا مدیر سامانه نقشی به او ندهد چیزی نمی‌بیند."
+
+msgid "Operators and system admins enter a six-digit code from an authenticator app after the password."
+msgstr "اپراتور و مدیر سامانه پس از گذرواژه، کد شش‌رقمی برنامه احراز هویت را وارد می‌کنند."

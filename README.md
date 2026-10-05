@@ -531,6 +531,9 @@ internal, multi-user tool built with Django and HTMX. So far it has:
   confirmation and a backup (the CLI's `purge`);
 - campaigns the CLI made can be brought to the dashboard: their follow-ups
   and reports at once, sending again after a segment and a test SMS.
+- a help page («راهنما»): the five steps, the rules every send keeps, and
+  what each status, delivery status, button and role means, in the same
+  words as the pages. The report and the campaign page link to it.
 
 It works on phones (the menu moves into a drawer, tables become cards), by
 keyboard and with screen readers. It follows the system's dark mode.
@@ -697,17 +700,28 @@ pytest                                  # everything but the browser tests
 pip install -e ".[dev,web,e2e]"         # once, for the browser tests
 pytest -m e2e                           # the dashboard in Google Chrome
 E2E_SHOTS=/tmp/shots pytest -m e2e      # also save a screenshot of every page and width
+pytest -m perf                          # the pages with 100,000 recipients
 ```
 
 The browser tests drive the Google Chrome you have installed, through
 Playwright. They run the dashboard in sandbox mode with a real worker, so
 nothing is sent:
 - a whole operator journey, from the first sign-in to the report;
-- every page at 360, 390, 768 and 1366 px: no sideways scrolling, and no
-  problem axe-core can find.
+- the operations: schedule, pause, resume, cancel, a stopped send resumed, a
+  send the sending window paused going on by itself, reconcile and the
+  "did anyone get it twice?" check, requeue, the report's filters, an
+  audience and a download, notifications, a changed message, and the admin's
+  password reset, backups, deleting a campaign and bringing in one the CLI
+  made;
+- the keyboard alone: sign-in, the skip link, and a visible focus on
+  everything Tab reaches;
+- every page at 360, 390, 768, 1024 and 1366 px (and dark mode): no sideways
+  scrolling, no target under 24 px, and no problem axe-core can find.
 
-Problems known before the redesign are listed in
-`tests/web/e2e/baseline.json` until they're fixed.
+`tests/web/e2e/baseline.json` lists known problems. It's empty, so any new
+one fails.
+
+`pytest -m perf` keeps every page under 2 seconds with 100,000 recipients.
 
 GitHub Actions runs the suite on Python 3.10 and 3.14, and the browser tests,
 for every push to `main` and every pull request (`.github/workflows/tests.yml`).

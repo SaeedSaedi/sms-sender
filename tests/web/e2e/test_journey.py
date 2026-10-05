@@ -104,6 +104,8 @@ def test_an_operator_runs_a_campaign_from_a_list_to_its_report(sandbox, sandbox_
     assert ROWS[1] not in page.url  # it went in a POST
     page.get_by_role("button", name=fa("Send a test SMS"), exact=True).click()
     page.get_by_role("button", name=fa("Yes, approve"), exact=True).wait_for(timeout=60_000)  # the page follows the job
+    # A screen reader hears the new stage: the polite live region follows it.
+    expect(page.locator("#live-status")).to_have_text(fa("Awaiting approval"))
     page.get_by_role("button", name=fa("Yes, approve"), exact=True).click()
     page.get_by_text(fa("The test SMS is approved. Sending can start.")).wait_for()
 

@@ -92,6 +92,7 @@ PAGES: dict[str, tuple[str, str | None]] = {
     "templates": ("/templates/", "viewer"),
     "template.new": ("/templates/new/", "operator"),
     "status": ("/status/", "viewer"),
+    "help": ("/help/", "viewer"),
     "account": ("/account/", "operator"),
     "password": ("/password/", "operator"),
     "users": ("/users/", "admin"),

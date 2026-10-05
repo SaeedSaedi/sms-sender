@@ -489,6 +489,11 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
     - A failed request shows `#connection`.
     - For HTMX requests, `accounts.middleware.LoginRequired` and `TwoFactorMiddleware` answer an ended session with `HX-Redirect`, so the whole page moves; a plain redirect would swap the login page into the fragment.
   - **Checks:** the browser scan (`tests/web/e2e/test_pages.py`) must stay at zero. `baseline.json` is empty, in light mode at 360–1366 px and in dark mode on desktop.
+- **Help (`/help/`, [dashboard/help.py](src/sms_sender_web/dashboard/help.py), plan 05 P6):** one short page in the glossary's words: the five steps, the rules every send keeps, and what each status, delivery status, button, stop and role means.
+  - Each item is shown under the label the other pages use (`SUBMISSION_STATUS`, `DELIVERY_STATUS`, `ROLE_LABELS`, the buttons' own msgids), so the help never names a thing twice.
+  - `tests/web/test_help.py` fails when a status or a delivery status has no explanation: a new status needs its line here.
+  - The rule about the sending window names the default new campaigns get (`SystemSettings.default_send_window`, else 08:00–21:00).
+  - The report and the campaign page link to `/help/#statuses` and `#delivery`.
 - **Parity with the CLI ([parity.py](src/sms_sender_web/parity.py), plan 05):**
   - Every `sms-sender` command and option, and this app's management commands, has an entry. Each entry is one or more of:
     - `Control(page, role)`;
@@ -508,7 +513,8 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - The journey finds everything by its Persian name: `fa("msgid")` is the catalog's text. A redesign that keeps the words keeps the test.
   - `test_pages.py` opens every page in `tests/web/world.py`'s `PAGES` at 360 / 390 / 768 / 1024 / 1366 px. It checks for horizontal overflow, runs axe-core (vendored for tests only, MPL-2.0), and finds controls smaller than 24 × 24 px (`small_targets`, WCAG 2.2 2.5.8; inline links and checkboxes inside their label are exempt).
   - `test_keyboard.py`: signing in with the keyboard alone, the skip link, and a visible focus ring on everything Tab reaches.
-  - `test_operations.py`: pause and resume; a stopped send resumed; a requeue's confirmation; the report's filters, an audience and a download; a test notification; an admin's password reset.
+  - `test_operations.py`: pause and resume; a stopped send resumed; a send the window paused going on by itself (the window is flipped open in the campaign's settings, as if the clock reached it); an unknown outcome reconciled from the sandbox outbox, then the report's "did anyone get it twice?" panel; a requeue's confirmation; the report's filters, an audience and a download; a test notification; an admin's password reset, backup and check, and purge; adopting a CLI campaign.
+  - `test_journey.py` also checks the polite live region (`#live-status`), which is what a screen reader announces when the stage changes.
   - Known problems live in `baseline.json`, a ratchet: a new problem fails, and a fixed one still listed fails too.
   - `world.py` builds the made-up dashboard (users, segments, a campaign in every state) for these tests and the parity test.
 - **Packaging:** the image installs the package, not the source tree, so each app's `templates/` must be listed in `[tool.setuptools.package-data]`.
