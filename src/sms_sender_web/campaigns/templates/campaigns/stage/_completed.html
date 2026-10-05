@@ -1,0 +1,20 @@
+{% load i18n fa roles ui %}
+<h2>{% icon "circle-check" %}{% translate "Results" %}</h2>
+{% include "campaigns/stage/_results.html" %}
+{% for item in followup_items %}
+  <div class="callout callout-{{ item.tone }}">{% icon item.icon %}
+    <div>
+      <p>{{ item.text }}</p>
+      {% if item.action == "reconcile" and user|can:"update_campaigns" %}
+        <form method="post" action="{% url 'campaign_action' campaign.slug 'reconcile' %}" class="form-actions" id="followup-reconcile">
+          {% csrf_token %}<button type="submit" class="small secondary">{% icon "refresh-cw" %}{% translate "Reconcile with Kavenegar" %}</button>
+        </form>
+      {% elif item.action == "send" and approved and user|can:"run_campaigns" %}
+        <form method="post" action="{% url 'campaign_action' campaign.slug 'send' %}" class="form-actions" id="followup-send"
+              data-confirm="{{ send_confirm }}">
+          {% csrf_token %}<button type="submit" class="small">{% icon "send" %}{% translate "Send to them again" %}</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+{% endfor %}

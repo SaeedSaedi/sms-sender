@@ -132,9 +132,12 @@ class SendCounts:
 
 class Reporter(Protocol):
     """Where a run reports progress: notes for the operator, and a tick per
-    finished recipient. The dashboard worker passes one that writes its DB."""
+    finished recipient. The dashboard worker passes one that writes its DB.
 
-    def note(self, text: str) -> None: ...
+    A note is English text for the CLI, plus a `key` and its `fields`, so
+    the dashboard can say it in Persian (never the engine's English)."""
+
+    def note(self, text: str, key: str = "note", **fields: object) -> None: ...
     def start(self, total: int) -> None: ...
     def advance(self, counts: SendCounts) -> None: ...
     def finish(self) -> None: ...
@@ -146,7 +149,7 @@ class TqdmReporter:
     def __init__(self) -> None:
         self._bar: tqdm | None = None
 
-    def note(self, text: str) -> None:
+    def note(self, text: str, key: str = "note", **fields: object) -> None:
         tqdm.write(text)
 
     def start(self, total: int) -> None:
@@ -481,7 +484,8 @@ class Runner:
         )
         extended = f", {result.extended} given more time" if result.extended else ""
         self._reporter.note(
-            f"Links: {result.needed} ready ({result.created} created now{extended})."
+            f"Links: {result.needed} ready ({result.created} created now{extended}).",
+            "links_ready", needed=result.needed, created=result.created, extended=result.extended,
         )
 
     def _preflight(self, phones: list[str]) -> None:
@@ -526,7 +530,8 @@ class Runner:
             self._credit = info.remaining_credit
             self._reporter.note(
                 f"Account: credit={info.remaining_credit} "
-                f"expires={info.expire_date or '?'} type={info.type or '?'}"
+                f"expires={info.expire_date or '?'} type={info.type or '?'}",
+                "account", credit=info.remaining_credit,
             )
             if phones and info.remaining_credit <= 0:
                 raise PreflightError(
@@ -561,7 +566,8 @@ class Runner:
         if config.resend_failed:
             self._reporter.note(
                 "Note: Kavenegar's 'resend failed' setting is on, so it resends "
-                "undelivered SMS once by itself."
+                "undelivered SMS once by itself.",
+                "resend_failed_on",
             )
 
     def _check_credit(self, phones: list[str]) -> None:
@@ -583,7 +589,8 @@ class Runner:
             if self.token_columns is not None else ""
         self._reporter.note(
             f"Estimated cost: {len(phones)} SMS × {per_sms} = {estimate} rials; "
-            f"credit {self._credit} rials{varies}."
+            f"credit {self._credit} rials{varies}.",
+            "cost_estimate", count=len(phones), per_sms=per_sms, estimate=estimate, credit=self._credit,
         )
         logger.info(
             "cost_estimate",
@@ -623,12 +630,12 @@ class Runner:
                     "approval test needs a recipient row to borrow tokens from", "test_needs_recipient",
                 )
             tokens = self._row_tokens[sample]
-            self._reporter.note(f"Approval test uses the tokens of {sample}.")
+            self._reporter.note(f"Approval test uses the tokens of {sample}.", "test_tokens_from", phone=sample)
         if self.links is not None and self._test_link_token is not None:
             # Its own link, so the operator's click never counts for a recipient.
             tokens = {**(tokens or {}), self.links.token: self._test_link_token}
         logger.info("approval_test_target", extra={"phone": target})
-        self._reporter.note(f"Approval test: sending to {target} synchronously …")
+        self._reporter.note(f"Approval test: sending to {target} synchronously …", "test_sending", phone=target)
 
         kind = _ATTEMPT_KIND.set("test")
         try:
@@ -657,7 +664,7 @@ class Runner:
         self._approval_message_id = result.message_id
         self._add_cost(result.cost)
         if self.test_only:
-            self._reporter.note("Test SMS sent; it's approved in the dashboard before sending.")
+            self._reporter.note("Test SMS sent; it's approved in the dashboard before sending.", "test_sent")
             return
         approved = self._approval_prompt(target, len(phones))
         if not approved:
@@ -692,7 +699,9 @@ class Runner:
             self._reporter.note(
                 f"Checked {result.checked} unknown row(s) with Kavenegar: "
                 f"{result.sent} had been sent, {result.requeued} had not (safe to "
-                f"send again), {result.needs_review} need review."
+                f"send again), {result.needs_review} need review.",
+                "reconciled", checked=result.checked, sent=result.sent,
+                requeued=result.requeued, needs_review=result.needs_review,
             )
         if result.checked or result.deferred:
             logger.info(
@@ -716,7 +725,7 @@ class Runner:
 
         target = phones[0]
         logger.info("smoke_test_target", extra={"phone": target})
-        self._reporter.note(f"Smoke test: sending to {target} synchronously …")
+        self._reporter.note(f"Smoke test: sending to {target} synchronously …", "smoke_sending", phone=target)
         outcome, _ = self._send_one(target)
         if outcome != "sent":
             raise PreflightError(
@@ -724,7 +733,7 @@ class Runner:
                 "fix the issue (template/tokens/account) before sending the rest",
                 "smoke_failed", outcome=outcome,
             )
-        self._reporter.note("Smoke test passed.")
+        self._reporter.note("Smoke test passed.", "smoke_passed")
 
     def run(self) -> RunSummary:
         # One process per DB: a second run would treat our `in_flight` rows
@@ -765,7 +774,8 @@ class Runner:
         if self._window_closed.is_set():
             self._reporter.note(
                 f"The sending window ({self.send_window}) closed. Re-run the same "
-                "command inside it to continue."
+                "command inside it to continue.",
+                "window_closed",
             )
 
         # On a long run, rows that went `unknown` early may be old enough now.
@@ -796,7 +806,8 @@ class Runner:
             )
             if changed:
                 logger.warning("campaign_settings_changed", extra={"changed": ", ".join(changed)})
-                self._reporter.note(f"Campaign settings changed: {', '.join(changed)}.")
+                self._reporter.note(f"Campaign settings changed: {', '.join(changed)}.",
+                                    "settings_changed", changed=changed)
         loaded = input_loader.load(self.input_path, self.token_columns, self.user_id_column)
         if self.token_columns is not None:
             self._row_tokens = {r.phone: r.tokens for r in loaded.valid}
@@ -829,7 +840,8 @@ class Runner:
             logger.warning("orphans_marked_unknown", extra={"n": orphans})
             self._reporter.note(
                 f"{orphans} recipient(s) were mid-send when the last run stopped. They are "
-                "marked unknown and NOT resent: they may already have the SMS."
+                "marked unknown and NOT resent: they may already have the SMS.",
+                "orphans", n=orphans,
             )
         # Settle old-enough `unknown` rows first, so the ones Kavenegar never
         # got go out in this run like everyone else.
@@ -842,7 +854,8 @@ class Runner:
             if suppressed:
                 logger.info("opted_out_suppressed", extra={"n": suppressed})
                 self._reporter.note(
-                    f"{suppressed} recipient(s) are on the opt-out list and won't be sent."
+                    f"{suppressed} recipient(s) are on the opt-out list and won't be sent.",
+                    "suppressed", n=suppressed,
                 )
 
         phones = self.state.list_claimable_phones()
@@ -854,7 +867,8 @@ class Runner:
                 logger.warning("skipped_not_in_input", extra={"n": not_in_input})
                 self._reporter.note(
                     f"Skipping {not_in_input} claimable row(s) that aren't in "
-                    f"{self.input_path.name} (no per-recipient tokens for them)."
+                    f"{self.input_path.name} (no per-recipient tokens for them).",
+                    "not_in_input", n=not_in_input,
                 )
                 phones = [p for p in phones if p in self._row_tokens]
         logger.info(
@@ -885,7 +899,8 @@ class Runner:
         if loaded.missing_user_id:
             self._reporter.note(
                 f"{loaded.missing_user_id} recipient(s) have no user ID: they're sent, "
-                "and reported as missing user ID."
+                "and reported as missing user ID.",
+                "missing_user_id", n=loaded.missing_user_id,
             )
         return set(loaded.conflicts) | {phone for phone, _, _ in earlier}
 
@@ -900,7 +915,8 @@ class Runner:
         self._reporter.note(
             f"{len(conflicting)} phone(s) came with two different user IDs and "
             f"won't be sent ({excluded} taken out of the queue; any already "
-            "sent stay sent). Fix the IDs at the source."
+            "sent stay sent). Fix the IDs at the source.",
+            "user_id_conflicts", n=len(conflicting),
         )
 
     def _preflight_checks(self, phones: list[str]) -> tuple[list[str], int]:

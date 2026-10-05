@@ -1,0 +1,49 @@
+{% load i18n fa roles ui %}
+<h2>{% icon "list-checks" %}{% translate "Check and preview" %}</h2>
+{% if life.test_failed %}
+  <div class="callout callout-error" role="alert">{% icon "circle-alert" %}<p>{% translate "The last test SMS didn't go out" %}{% if test_reason %}: {{ test_reason }}{% endif %}</p></div>
+{% elif test.decision == "rejected" %}
+  <div class="callout callout-warning">{% icon "triangle-alert" %}<p>{% translate "Rejected. Change the settings, then send a new test SMS." %}</p></div>
+{% elif test_outdated %}
+  <div class="callout callout-warning">{% icon "triangle-alert" %}<p>{% translate "The settings changed after this test. Send a new test SMS." %}</p></div>
+{% endif %}
+<p class="hint">{% translate "Reads the segment with these settings, without sending anything: who would get the SMS, and what's in the way." %}</p>
+{% if user|can:"edit_campaigns" %}
+  <form method="post" action="{% url 'campaign_check' campaign.slug %}" class="form-actions" id="check-form">
+    {% csrf_token %}
+    <button type="submit" class="secondary" data-cli="dry-run">{% icon "list-checks" %}{% translate "Check now" %}</button>
+  </form>
+{% endif %}
+{% if check %}
+  {% for problem in check_problems %}<div class="callout callout-error" role="alert">{% icon "circle-alert" %}<p>{{ problem }}</p></div>{% endfor %}
+  {% if check.ok %}<div class="callout callout-success" role="status">{% icon "circle-check" %}<p>{% translate "Ready for a test SMS." %}</p></div>{% endif %}
+  <dl class="figures">
+    <div><dt>{% translate "To send" %}</dt><dd class="num">{{ check.to_send|fa_number }}</dd></div>
+    <div><dt>{% translate "Valid numbers" %}</dt><dd class="num">{{ check.valid|fa_number }}</dd></div>
+    <div><dt>{% translate "Invalid rows" %}</dt><dd class="num">{{ check.invalid_total|fa_number }}</dd></div>
+    <div><dt>{% translate "On the suppression list" %}</dt><dd class="num">{{ check.suppressed|fa_number }}</dd></div>
+    <div><dt>{% translate "Already sent" %}</dt><dd class="num">{{ check.already_sent|fa_number }}</dd></div>
+    {% if segment.user_id_column %}<div><dt>{% translate "Missing user ID" %}</dt><dd class="num">{{ check.missing_user_id|fa_number }}</dd></div>{% endif %}
+  </dl>
+  {% if check_invalid %}
+    <ul class="plain">{% for label, n in check_invalid %}<li>{{ label }}: {{ n|fa_number }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if not check.window_open %}<div class="callout callout-warning">{% icon "clock" %}<p>{% translate "It's outside the sending window now; a test SMS or a send waits for it." %}</p></div>{% endif %}
+{% endif %}
+
+<h3>{% translate "Test SMS" %}</h3>
+<p>{% translate "Before sending, one SMS goes to your own number, so you can see the final text. The short links are made first." %}</p>
+{% if user|can:"run_campaigns" %}
+  {% if test_phone %}
+    <form method="post" action="{% url 'campaign_action' campaign.slug 'test' %}" class="form-actions" id="test-form">
+      {% csrf_token %}
+      <button type="submit" data-cli="send --approval-test, preview --send">{% icon "send" %}{% if test %}{% translate "Send a new test SMS" %}{% else %}{% translate "Send a test SMS" %}{% endif %}</button>
+      <span class="hint">{% translate "to" %} {{ test_phone|mask_phone|fa_digits|ltr }}</span>
+    </form>
+  {% else %}
+    <div class="callout callout-warning">{% icon "triangle-alert" %}
+      <p>{% translate "First set your own mobile number on “My account”: test SMS go only there." %}
+        <a href="{% url 'my_account' %}">{% translate "My account" %}</a></p>
+    </div>
+  {% endif %}
+{% endif %}

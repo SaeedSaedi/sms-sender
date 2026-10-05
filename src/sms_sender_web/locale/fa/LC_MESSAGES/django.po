@@ -819,9 +819,6 @@ msgstr "در حال لغو…"
 msgid "Changing the message, its tokens, the link or the segment needs a new test SMS before sending."
 msgstr "با تغییر قالب، متغیرها، لینک یا گروه مخاطبان، پیش از ارسال یک پیامک آزمایشی تازه لازم است."
 
-msgid "Check"
-msgstr "اعتبارسنجی"
-
 msgid "Check now"
 msgstr "اجرای اعتبارسنجی"
 
@@ -1090,10 +1087,6 @@ msgstr "اجرا با خطایی پیش‌بینی‌نشده متوقف شد. �
 
 msgid "The segment's file couldn't be read."
 msgstr "فایل گروه مخاطبان خوانده نشد."
-
-#, python-brace-format
-msgid "The sending window ({start} to {end}) ended. Resume inside the next one: it carries on from where it stopped."
-msgstr "بازه مجاز ارسال ({start} تا {end}) به پایان رسید. در بازه بعدی «ادامه ارسال» را بزنید؛ ارسال از همان‌جا ادامه می‌یابد."
 
 msgid "The settings changed after the test SMS. Send a new test SMS and approve it."
 msgstr "تنظیمات پس از پیامک آزمایشی تغییر کرده است. یک پیامک آزمایشی تازه بفرستید و آن را تأیید کنید."
@@ -1550,3 +1543,182 @@ msgstr "فایلی انتخاب نشده است"
 
 msgid "Some settings need fixing; each one is marked below."
 msgstr "برخی تنظیمات نیاز به اصلاح دارند؛ هر کدام در ادامه مشخص شده است."
+
+# Plan 05 · P2: the campaign's stage, steps and history
+
+msgid "An error Kavenegar didn't explain"
+msgstr "خطایی که کاوه‌نگار توضیحی برایش نداد"
+
+msgid "Awaiting approval"
+msgstr "در انتظار تأیید"
+
+msgid "Cancelled. Recipients who hadn't got the SMS won't get it."
+msgstr "لغو شد. گیرندگانی که هنوز پیامک نگرفته بودند، آن را دریافت نمی‌کنند."
+
+msgid "Check and preview"
+msgstr "بررسی و پیش‌نمایش"
+
+msgid "Check the list, then send a test SMS to yourself."
+msgstr "فهرست را بررسی کنید و سپس یک پیامک آزمایشی برای خودتان بفرستید."
+
+msgid "Check the test SMS on your phone, then approve it or reject it."
+msgstr "پیامک آزمایشی را روی گوشی خود ببینید و سپس آن را تأیید یا رد کنید."
+
+msgid "Checked {checked} unknown outcomes with Kavenegar: {sent} had been sent, {requeued} had not, {needs_review} need review."
+msgstr "وضعیت {checked} گیرنده نامعلوم با کاوه‌نگار تطبیق داده شد: {sent} پیامک را گرفته بود، {requeued} نگرفته بود و {needs_review} نیازمند بررسی است."
+
+msgid "Checked {checked} · New delivery statuses {updated}"
+msgstr "استعلام‌شده {checked} · وضعیت تحویل تازه {updated}"
+
+msgid "Choose the segment, the template and what fills its tokens."
+msgstr "گروه مخاطبان، قالب پیامک و مقدار متغیرهای آن را انتخاب کنید."
+
+msgid "Complete the settings"
+msgstr "تکمیل تنظیمات"
+
+msgid "Completed"
+msgstr "پایان‌یافته"
+
+msgid "Draft"
+msgstr "پیش‌نویس"
+
+msgid "Duration"
+msgstr "مدت"
+
+msgid "Error {code}: {meaning}"
+msgstr "خطای {code}: {meaning}"
+
+msgid "Estimated cost: {count} SMS × {per_sms} rials = {estimate} rials; credit {credit} rials."
+msgstr "برآورد هزینه: {count} پیامک × {per_sms} ریال = {estimate} ریال؛ اعتبار حساب {credit} ریال."
+
+msgid "Everything is ready. Start sending when you want."
+msgstr "همه‌چیز آماده است. هر وقت خواستید ارسال را آغاز کنید."
+
+msgid "Found sent {sent} · Safe to send again {requeued} · Needs review {needs_review} · Not checked yet {deferred}"
+msgstr "ارسال‌شده {sent} · قابل ارسال دوباره {requeued} · نیازمند بررسی {needs_review} · هنوز بررسی‌نشده {deferred}"
+
+msgid "Kavenegar account credit: {credit} rials."
+msgstr "اعتبار حساب کاوه‌نگار: {credit} ریال."
+
+msgid "Kavenegar rejected {n} recipients; the most common reasons are above."
+msgstr "کاوه‌نگار {n} گیرنده را رد کرد؛ دلیل‌های پرتکرار در بالا آمده است."
+
+msgid "Links {links} · Clicks {clicks}"
+msgstr "لینک‌ها {links} · کلیک‌ها {clicks}"
+
+msgid "Made with the command line"
+msgstr "ساخته‌شده با خط فرمان"
+
+msgid "Message and list"
+msgstr "پیام و فهرست"
+
+msgid "Most common errors"
+msgstr "خطاهای پرتکرار"
+
+msgid "Paused. Resume when you're ready."
+msgstr "متوقف شد. هر وقت آماده بودید، ارسال را ادامه دهید."
+
+msgid "Paused: the sending window closed. Sending continues by itself when it opens again."
+msgstr "در توقف موقت: بازه مجاز ارسال به پایان رسید. با شروع دوباره بازه، ارسال خودکار ادامه می‌یابد."
+
+msgid "Ready for a test"
+msgstr "آماده آزمایش"
+
+msgid "Ready to send"
+msgstr "آماده ارسال"
+
+msgid "Results"
+msgstr "نتایج"
+
+msgid "Scheduled"
+msgstr "زمان‌بندی‌شده"
+
+msgid "Send to them again"
+msgstr "ارسال دوباره به آن‌ها"
+
+msgid "Sending finished. The results and what's left to do are below."
+msgstr "ارسال به پایان رسید. نتایج و کارهای باقی‌مانده در ادامه آمده است."
+
+msgid "Sending starts at the set time."
+msgstr "ارسال در زمان تعیین‌شده آغاز می‌شود."
+
+msgid "Sending stopped on an error. Fix it, then continue: nobody gets the SMS twice."
+msgstr "ارسال به دلیل خطا متوقف شد. پس از رفع آن ارسال را ادامه دهید؛ هیچ گیرنده‌ای پیامک را دو بار دریافت نمی‌کند."
+
+msgid "Sending the test SMS to {phone}."
+msgstr "ارسال پیامک آزمایشی به {phone}."
+
+msgid "Sending to one recipient first: {phone}."
+msgstr "ارسال نخست به یک گیرنده: {phone}."
+
+msgid "Sending. You can pause or cancel at any time."
+msgstr "در حال ارسال. هر زمان بخواهید می‌توانید آن را متوقف یا لغو کنید."
+
+msgid "Short links ready: {needed} ({created} made now)."
+msgstr "لینک‌های کوتاه آماده: {needed} ({created} مورد همین حالا ساخته شد)."
+
+msgid "Steps"
+msgstr "مراحل"
+
+msgid "Stopped with an error"
+msgstr "متوقف با خطا"
+
+msgid "Testing"
+msgstr "در حال آزمایش"
+
+msgid "The campaign's settings changed: {changed}."
+msgstr "تنظیمات کمپین تغییر کرد: {changed}."
+
+msgid "The first recipient's SMS was accepted; sending to the rest."
+msgstr "پیامک نخستین گیرنده پذیرفته شد؛ ارسال به بقیه ادامه دارد."
+
+msgid "The last test SMS didn't go out"
+msgstr "آخرین پیامک آزمایشی ارسال نشد"
+
+msgid "The sending window ({start} to {end}) ended. Sending continues by itself when it opens again, from where it stopped."
+msgstr "بازه مجاز ارسال ({start} تا {end}) به پایان رسید. با شروع دوباره بازه، ارسال از همان جایی که متوقف شده بود خودکار ادامه می‌یابد."
+
+msgid "The sending window closed."
+msgstr "بازه مجاز ارسال به پایان رسید."
+
+msgid "The sending window opened; sending continues."
+msgstr "بازه مجاز ارسال آغاز شد؛ ارسال ادامه می‌یابد."
+
+msgid "The test SMS is on its way to your number."
+msgstr "پیامک آزمایشی در راه شماره شماست."
+
+msgid "The test SMS uses the tokens of {phone}."
+msgstr "پیامک آزمایشی با مقدار متغیرهای {phone} ساخته شد."
+
+msgid "The test SMS was sent."
+msgstr "پیامک آزمایشی ارسال شد."
+
+msgid "{n} numbers came with two different user IDs and won't be sent."
+msgstr "{n} شماره با دو شناسه کاربر متفاوت آمده است و ارسال نمی‌شود."
+
+msgid "{n} queued recipients aren't in the segment's file, so they were skipped."
+msgstr "{n} گیرنده در صف ارسال در فایل گروه مخاطبان نیست و کنار گذاشته شد."
+
+msgid "{n} recipients are on the suppression list and won't be sent."
+msgstr "{n} گیرنده در فهرست عدم ارسال است و پیامکی دریافت نمی‌کند."
+
+msgid "{n} recipients have no user ID: they're sent, and reported as missing user ID."
+msgstr "{n} گیرنده شناسه کاربر ندارد: پیامک ارسال می‌شود و در گزارش‌ها «بدون شناسه کاربر» نشان داده می‌شود."
+
+msgid "{n} recipients need review: Kavenegar's records weren't clear, so an admin decides."
+msgstr "{n} گیرنده نیازمند بررسی است: سوابق کاوه‌نگار روشن نبود، پس مدیر سامانه تصمیم می‌گیرد."
+
+msgid "{n} recipients were mid-send when the last run stopped: they're marked unknown and not sent again."
+msgstr "{n} گیرنده هنگام توقف اجرای قبلی در میانه ارسال بود: وضعیتشان نامعلوم ثبت شد و دوباره ارسال نمی‌شود."
+
+msgid "{n} recipients weren't sent (for example, Kavenegar was busy). You can send to them again."
+msgstr "برای {n} گیرنده پیامکی ارسال نشد (برای نمونه، کاوه‌نگار مشغول بود). می‌توانید دوباره برایشان ارسال کنید."
+
+msgid "{n} recipients' outcome is unknown: they're checked with Kavenegar at the next run, or you can check now."
+msgstr "وضعیت {n} گیرنده نامعلوم است: در اجرای بعدی با کاوه‌نگار تطبیق داده می‌شود، یا همین حالا می‌توانید آن را بررسی کنید."
+
+msgid "Needs attention"
+msgstr "نیازمند توجه"
+
+msgid "Stage"
+msgstr "مرحله"

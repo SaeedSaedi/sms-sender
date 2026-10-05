@@ -23,7 +23,11 @@ from ..jobs.models import Campaign, Job
 from ..segments.models import Segment
 from .checks import check_campaign
 from .forms import TOKENS, NewCampaignForm, SettingsForm
-from .terms import CHECK_PROBLEMS, CONFLICTS, INVALID_ROWS, stop_reason
+from .lifecycle import lifecycle
+from .present import notes, result_line, say, send_summary
+from .terms import (
+    CHECK_PROBLEMS, CONFLICTS, FOLLOWUPS, INVALID_ROWS, NEXT_STEP, STAGES, STEPS, stop_reason,
+)
 
 # Who may do what (spec 4.12).
 _ACTIONS = {
@@ -124,13 +128,37 @@ def _links_progress(job: Job | None) -> dict | None:
     }
 
 
+def _followups(counts: dict) -> list[dict]:
+    """What's left after a send, each with its action (if any)."""
+    items = []
+    for status, key, tone, icon, action in (
+        ("unknown", "unknown", "warning", "clock", "reconcile"),
+        ("failed_retriable", "not_sent", "info", "send", "send"),
+        ("needs_review", "needs_review", "warning", "triangle-alert", ""),
+        ("failed_permanent", "rejected", "error", "circle-x", ""),
+    ):
+        if counts.get(status):
+            items.append({"tone": tone, "icon": icon, "action": action,
+                          "text": say(FOLLOWUPS[key], {"n": counts[status]})})
+    return items
+
+
+def _steps(current: int) -> list[dict]:
+    return [
+        {"n": n, "label": label, "state": "done" if n < current else "current" if n == current else "todo"}
+        for n, label in enumerate(STEPS, start=1)
+    ]
+
+
 def _live(request, campaign: Campaign) -> dict:
-    """What the live part of the page shows: the steps, the jobs, the counts."""
+    """What the live part of the page shows: where the campaign stands and
+    what comes next, the current step, the counts and the history."""
     jobs = list(
         Job.objects.filter(campaign=campaign).select_related("requested_by", "decided_by")
-        .order_by("-created_at", "-id")[:20]
+        .prefetch_related("events").order_by("-created_at", "-id")[:20]
     )
     active = [job for job in jobs if job.state in services.ACTIVE]
+    life = lifecycle(campaign)
     test = services.latest_test(campaign)
     db = campaign_db(campaign)
     summary = read_campaign(db) if db.exists() else None
@@ -146,7 +174,7 @@ def _live(request, campaign: Campaign) -> dict:
             if waiting else _("Start sending this campaign now?")
         ),
         "campaign": campaign,
-        "jobs": [(job, stop_reason(job.result.get("stop_reason"), job.result.get("stop_fields"))) for job in jobs],
+        "jobs": jobs,
         "active": bool(active),
         "active_send": next((j for j in active if j.kind == Job.Kind.SEND), None),
         "active_test": next((j for j in active if j.kind == Job.Kind.TEST), None),
@@ -165,6 +193,19 @@ def _live(request, campaign: Campaign) -> dict:
         "status_order": STATUS_ORDER,
         "test_phone": test_phone_of(request.user),
         "send_started": _send_started(campaign),
+        "life": life,
+        "stage_label": STAGES[life.stage],
+        "stage_template": f"campaigns/stage/_{life.stage}.html",
+        "next_step": NEXT_STEP["paused_by_window" if life.paused_by_window else life.stage],
+        "steps": _steps(life.step),
+        "send_reason": stop_reason(
+            (life.send.result or {}).get("stop_reason"), (life.send.result or {}).get("stop_fields"),
+        ) if life.send else "",
+        "send_summary": send_summary(life.send),
+        "followup_items": _followups(counts),
+        "history": [
+            {"job": job, "result": result_line(job), "notes": notes(job)} for job in jobs
+        ],
     }
 
 

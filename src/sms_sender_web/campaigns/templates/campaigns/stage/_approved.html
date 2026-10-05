@@ -1,0 +1,13 @@
+{% load i18n fa roles ui %}
+<h2>{% icon "send" %}{% translate "Send" %}</h2>
+{% include "campaigns/stage/_test_figures.html" %}
+<div class="callout callout-success">{% icon "circle-check" %}<p>{% translate "Approved" %}{% if test.decided_by %} · {{ test.decided_by.username|ltr }}{% endif %} · {{ test.decided_at|jalali }}</p></div>
+{% if user|can:"run_campaigns" %}
+  <form method="post" action="{% url 'campaign_action' campaign.slug 'send' %}" class="form-actions" id="send-form"
+        data-confirm="{{ send_confirm }}">
+    {% csrf_token %}
+    <button type="submit" data-cli="send">{% icon "send" %}{% translate "Start sending" %}</button>
+  </form>
+{% else %}
+  <p class="muted">{% translate "Sending needs an approved test SMS for the current settings." %}</p>
+{% endif %}

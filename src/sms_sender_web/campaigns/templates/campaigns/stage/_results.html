@@ -1,0 +1,15 @@
+{% load i18n fa %}
+{% if send_summary %}
+<dl class="figures">
+  <div><dt>{% translate "Accepted" %}</dt><dd class="num">{{ send_summary.sent|fa_number }}</dd></div>
+  <div><dt>{% translate "Rejected" %}</dt><dd class="num">{{ send_summary.failed_permanent|fa_number }}</dd></div>
+  <div><dt>{% translate "Not sent" %}</dt><dd class="num">{{ send_summary.failed_retriable|fa_number }}</dd></div>
+  <div><dt>{% translate "Unknown" %}</dt><dd class="num">{{ send_summary.unknown|fa_number }}</dd></div>
+  <div><dt>{% translate "Cost" %}</dt><dd class="num">{{ send_summary.cost|fa_number }} {% translate "rials" %}</dd></div>
+  <div><dt>{% translate "Duration" %}</dt><dd class="num"><bdi dir="ltr">{{ send_summary.elapsed }}</bdi></dd></div>
+</dl>
+{% if send_summary.errors %}
+  <h3>{% translate "Most common errors" %}</h3>
+  <ul class="plain">{% for text, count in send_summary.errors %}<li>{{ text }} — <span class="num">{{ count|fa_number }}</span></li>{% endfor %}</ul>
+{% endif %}
+{% endif %}
