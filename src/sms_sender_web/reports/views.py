@@ -15,13 +15,16 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from django.conf import settings as django_settings
+from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.utils import timezone as dj_timezone
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_POST
 
+from sms_sender.conversions import ConversionFileError, import_conversions, read_rows
 from sms_sender.clicks import (
     ATTRIBUTION_HEADER,
     CLICKERS_HEADER,
@@ -47,8 +50,15 @@ from ..jobs.engine import Engine
 from ..jobs.models import Campaign, Job
 from ..jobs.sandbox import read_outbox
 from ..jobs.worker import last_seen, worker_alive
+from ..segments import files as segment_files
+from ..segments.audience import make_audience, suggest_slug
+from ..segments.forms import UPLOAD_ERRORS, clean_slug
+from ..segments.models import Segment
+from ..text import persian_text
 from .charts import clicks_chart, funnel
-from .terms import CHART_BY_DAY, CHART_BY_HOUR
+from .terms import (
+    AUDIENCE_DONE, AUDIENCE_HINT, AUDIENCE_NAME, AUDIENCES, CHART_BY_DAY, CHART_BY_HOUR, CONVERSIONS_IMPORTED,
+)
 
 PAGE = 100
 MATCHING = _("{n} recipients match these filters.")
@@ -100,6 +110,28 @@ def _filters(data) -> tuple[RecipientFilter, dict]:
     return where, {k: v for k, v in values.items() if v}
 
 
+def _conversions(store: StateStore, counts: dict) -> dict | None:
+    people, conversions, value = store.conversion_totals()
+    if not conversions:
+        return None
+    sent = counts.get(SENT, 0)
+    return {"people": people, "conversions": conversions, "value": round(value),
+            "share": round(100 * people / sent) if sent else None}
+
+
+def _audiences(store: StateStore) -> list[tuple[str, str, int]]:
+    """The ready-made audiences that have anyone in them: (label, query, how many)."""
+    personal = store.has_personal_links()
+    out = []
+    for _key, label, params in AUDIENCES:
+        if "clicked" in params and not personal:
+            continue
+        n = store.recipient_total(where=_filters(params)[0])
+        if n:
+            out.append((label, urlencode(params), n))
+    return out
+
+
 @requires("view_campaigns")
 @require_http_methods(["GET", "POST"])
 def report(request, slug: str):
@@ -145,7 +177,13 @@ def report(request, slug: str):
         "filters": filters,
         "filter_query": urlencode(filters),
         "matching": say(MATCHING if filters else EVERYONE, {"n": total}),
+        # Ready-made audiences (each a filter), and making a segment from the list.
+        "audiences": _audiences(store),
+        "audience_name": str(AUDIENCE_NAME) % {"campaign": campaign.name if campaign else slug},
+        "audience_slug": suggest_slug(slug),
+        "audience_hint": say(AUDIENCE_HINT, {"n": total}),
         "funnel": funnel(store, counts),
+        "conversions": _conversions(store, counts),
         "chart": chart,
         "chart_summary": say(CHART_BY_HOUR if chart.by_hour else CHART_BY_DAY,
                              {"total": chart.total, "peak": chart.peak, "when": chart.peak_label}) if chart else "",
@@ -180,7 +218,7 @@ def report(request, slug: str):
 @require_POST
 def reveal(request, slug: str):
     """One full number, for an operator who needs it; recorded."""
-    store, _ = _store(slug)
+    store, _campaign = _store(slug)
     row = request.POST.get("row", "")
     phone = store.phone_of_row(int(row)) if row.isdigit() else None
     if phone is None or phone.startswith("INVALID:"):
@@ -223,21 +261,21 @@ def _summary_rows(store: StateStore):
 
 @requires("download_aggregates")
 def summary_csv(request, slug: str):
-    store, _ = _store(slug)
+    store, _campaign = _store(slug)
     record("report_downloaded", request=request, campaign=slug, kind="summary")
     return _csv(f"{slug}-summary.csv", ["section", "name", "value"], _summary_rows(store))
 
 
 @requires("export_people")
 def attribution_csv(request, slug: str):
-    store, _ = _store(slug)
+    store, _campaign = _store(slug)
     record("report_downloaded", request=request, campaign=slug, kind="attribution")
     return _csv(f"{slug}-attribution.csv", ATTRIBUTION_HEADER, attribution_rows(store))
 
 
 @requires("export_people")
 def clickers_csv(request, slug: str):
-    store, _ = _store(slug)
+    store, _campaign = _store(slug)
     record("report_downloaded", request=request, campaign=slug, kind="clickers")
     return _csv(f"{slug}-clickers.csv", CLICKERS_HEADER, clicker_rows(store))
 
@@ -264,10 +302,71 @@ def _recipient_rows(store: StateStore, where: RecipientFilter):
         ]
 
 
+@requires("edit_campaigns")
+@require_POST
+def audience(request, slug: str):
+    """A new segment from the recipients the list's filters match."""
+    store, campaign = _store(slug)
+    where, filters = _filters(request.POST)
+    back = f"{request.path.rsplit('audience/', 1)[0]}?{urlencode(filters)}#recipients"
+    new_slug = request.POST.get("segment_slug", "").strip()
+    try:
+        clean_slug(new_slug)
+    except ValidationError as e:
+        messages.error(request, e.messages[0])
+        return redirect(back)
+    if Segment.objects.filter(slug=new_slug).exists():
+        messages.error(request, _("A segment with this short name already exists. Choose another."))
+        return redirect(back)
+    if not store.recipient_total(where=where):
+        messages.error(request, _("No recipient matches these filters."))
+        return redirect(back)
+    name = persian_text(request.POST.get("name", "").strip())[:200] or new_slug
+    made = make_audience(store, where, slug=new_slug, name=name, user=request.user)
+    record("audience_created", request=request, campaign=slug, segment=new_slug, filters=filters,
+           count=made.rows, columns=made.columns)
+    messages.success(request, say(AUDIENCE_DONE, {"n": made.rows}))
+    return redirect("segment_detail", slug=new_slug)
+
+
+@requires("update_campaigns")
+@require_POST
+def conversions(request, slug: str):
+    """Conversions from the business's own records, by CSV: matched to the
+    recipients who were sent the SMS, by the link's r or by user ID."""
+    store, _campaign = _store(slug)
+    back = redirect(f"{request.path.rsplit('conversions/', 1)[0]}#conversions")
+    upload = request.FILES.get("file")
+    if upload is None:
+        messages.error(request, _("Choose a CSV file."))
+        return back
+    if upload.size > segment_files.MAX_BYTES:
+        messages.error(request, UPLOAD_ERRORS["too_big"])
+        return back
+    try:
+        table = segment_files.parse(upload.read())
+        found, invalid = read_rows(table.rows[0], table.rows[1:])
+    except segment_files.UploadError as e:
+        messages.error(request, UPLOAD_ERRORS[e.code])
+        return back
+    except ConversionFileError:
+        messages.error(request, _("The file needs a column named r (the link's reference) or user_id."))
+        return back
+    result = import_conversions(store, found, batch=f"{upload.name} {dj_timezone.now().isoformat()}", invalid=invalid)
+    record("conversions_imported", request=request, campaign=slug, file=upload.name, rows=result.rows,
+           by_ref=result.by_ref, by_user_id=result.by_user_id, unmatched=result.unmatched,
+           duplicates=result.duplicates, invalid=result.invalid)
+    messages.success(request, say(CONVERSIONS_IMPORTED, {
+        "added": result.added, "by_ref": result.by_ref, "by_user_id": result.by_user_id,
+        "unmatched": result.unmatched, "duplicates": result.duplicates, "invalid": result.invalid,
+    }))
+    return back
+
+
 @requires("export_people")
 def recipients_csv(request, slug: str):
     """The recipients list with its filters, numbers in full."""
-    store, _ = _store(slug)
+    store, _campaign = _store(slug)
     where, filters = _filters(request.GET)
     record("report_downloaded", request=request, campaign=slug, kind="recipients", filters=filters)
     return _csv(f"{slug}-recipients.csv", RECIPIENTS_HEADER, _recipient_rows(store, where))
@@ -277,7 +376,7 @@ def recipients_csv(request, slug: str):
 def failed_csv(request, slug: str):
     """The CLI's `export-failed`: the rows Kavenegar rejected and the input
     rows that weren't valid, to fix and feed again."""
-    store, _ = _store(slug)
+    store, _campaign = _store(slug)
     record("report_downloaded", request=request, campaign=slug, kind="failed")
     rows = ([r["phone"], r["raw"], r["status_code"], r["attempts"], r["last_error"]]
             for r in store.iter_failed_permanent())

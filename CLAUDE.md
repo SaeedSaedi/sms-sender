@@ -352,6 +352,14 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
     - clicks over time: SVG bars, per hour up to `HOURLY_UP_TO` (72), else per day (Tehran). Time runs right to left. Coordinates are formatted in Python, so no locale's decimal mark reaches an SVG attribute. A table holds the same numbers.
 
     `/analytics/` puts every campaign DB side by side (the CLI's too): accepted, delivered, clicked, clicks, cost, cost per click.
+  - **Audiences** (`segments/audience.make_audience`, operators): a new ready segment from the recipients the list's filters match.
+    - Ready-made filters: clicked, didn't click, delivered but didn't click, not delivered, rejected. Only those with anyone in them are offered.
+    - Numbers and user IDs come from the campaign DB.
+    - Token columns come back from each source segment's file: only the columns every source has, and none if any source file is gone, so no row gets an empty token cell.
+  - **Conversions** (`sms_sender/conversions.py`, schema v8 `conversions`, operators with `update_campaigns`): a CSV with `r` and/or `user_id`, optional value and converted_at.
+    - Matched to a recipient who was sent the SMS: by r first (their own link), then by user ID.
+    - The same person, value and moment isn't added twice.
+    - The report shows people converted (of the accepted), conversions and value; the funnel gains "Converted". No phone numbers are needed or stored from the file.
   - **"Did anyone get it twice?"** (`check-sends`) runs `sendcheck.check_sends` on the report, for viewers too: twice, maybe, or OK, with masked numbers. Calls from before schema 2 are counted apart.
   - **The recipients list** filters with `state.RecipientFilter`, shared by `recipients_page`, `recipient_total` and `iter_recipients`. The filters:
     - status, as `display_counts` names it (`invalid` included);

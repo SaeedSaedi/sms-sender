@@ -12,4 +12,6 @@ urlpatterns = [
     path("reports/<slug:slug>/clickers.csv", views.clickers_csv, name="report_clickers_csv"),
     path("reports/<slug:slug>/recipients.csv", views.recipients_csv, name="report_recipients_csv"),
     path("reports/<slug:slug>/failed.csv", views.failed_csv, name="report_failed_csv"),
+    path("reports/<slug:slug>/audience/", views.audience, name="report_audience"),
+    path("reports/<slug:slug>/conversions/", views.conversions, name="report_conversions"),
 ]

@@ -2267,3 +2267,67 @@ msgstr "در مجموع {total} کلیک؛ بیشترین در یک ساعت: {p
 
 msgid "Nothing sent yet"
 msgstr "هنوز ارسالی انجام نشده است"
+
+msgid "A CSV from your own records, with a column r (the link's reference) or user_id, and optionally value and converted_at. Each row counts for a recipient who was sent the SMS; a file imported twice adds nothing twice. It needs no phone numbers."
+msgstr "یک فایل CSV از سوابق خودتان، با ستون r (شناسه لینک) یا user_id، و در صورت نیاز value و converted_at. هر سطر برای گیرنده‌ای شمرده می‌شود که پیامک برایش ارسال شده است؛ اگر فایلی دو بار وارد شود، چیزی دو بار شمرده نمی‌شود. به شماره تلفن نیازی نیست."
+
+msgid "A segment of {n} recipients is ready. It can be used by a new campaign."
+msgstr "گروه مخاطبانی با {n} گیرنده آماده است و کمپین تازه‌ای می‌تواند از آن استفاده کند."
+
+msgid "Choose a CSV file."
+msgstr "یک فایل CSV انتخاب کنید."
+
+msgid "Conversions"
+msgstr "تبدیل‌ها"
+
+msgid "Conversions imported"
+msgstr "ورود تبدیل‌ها"
+
+msgid "Converted"
+msgstr "تبدیل‌شده"
+
+msgid "Delivered, didn't click"
+msgstr "تحویل‌شده، بدون کلیک"
+
+#, python-format
+msgid "From the report of %(campaign)s"
+msgstr "از گزارش %(campaign)s"
+
+msgid "Import conversions"
+msgstr "ورود تبدیل‌ها"
+
+msgid "Make a segment from these recipients"
+msgstr "ساخت گروه مخاطبان از این گیرندگان"
+
+msgid "Make the segment"
+msgstr "ساخت گروه مخاطبان"
+
+msgid "People who converted"
+msgstr "افراد تبدیل‌شده"
+
+msgid "Ready-made audiences"
+msgstr "مخاطبان آماده"
+
+msgid "Ready-made:"
+msgstr "آماده:"
+
+msgid "Segment made from a report"
+msgstr "ساخت گروه مخاطبان از گزارش"
+
+msgid "The file needs a column named r (the link's reference) or user_id."
+msgstr "فایل باید ستونی به نام r (شناسه لینک) یا user_id داشته باشد."
+
+msgid "Their value"
+msgstr "ارزش آن‌ها"
+
+msgid "{added} conversions added ({by_ref} by r, {by_user_id} by user ID). Not matched to anyone sent: {unmatched}; already imported: {duplicates}; unusable rows: {invalid}."
+msgstr "{added} تبدیل افزوده شد ({by_ref} با r و {by_user_id} با شناسه کاربر). بدون تطبیق با گیرنده‌ای که پیامک گرفته: {unmatched}؛ پیش‌تر واردشده: {duplicates}؛ سطرهای بی‌استفاده: {invalid}."
+
+msgid "{file}: {count} matched"
+msgstr "{file}: {count} مورد تطبیق داده شد"
+
+msgid "{n} recipients become a new segment, with their user IDs and, where their list's file still has them, its token columns."
+msgstr "{n} گیرنده به یک گروه مخاطبان تازه تبدیل می‌شوند، همراه با شناسه کاربرشان و، اگر فایل فهرستشان هنوز موجود باشد، ستون‌های متغیر آن."
+
+msgid "{segment}: {count}"
+msgstr "{segment}: {count}"
