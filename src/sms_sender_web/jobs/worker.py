@@ -77,6 +77,15 @@ class _StopReason:
             return False
 
 
+# The worker's lanes: sends one at a time, the short jobs beside them.
+SEND_KINDS = (Job.Kind.SEND,)
+SHORT_KINDS = (Job.Kind.TEST, Job.Kind.RECONCILE, Job.Kind.DELIVERY, Job.Kind.CLICKS)
+LANES = (("send", SEND_KINDS), ("short", SHORT_KINDS))
+# Jobs that hold their campaign's run lock: never two of them for one
+# campaign at a time (delivery and clicks only write their own columns).
+LOCKING = (Job.Kind.SEND, Job.Kind.TEST, Job.Kind.RECONCILE)
+
+
 class _Heartbeat(threading.Thread):
     """Renews the lease and turns pause / cancel / shutdown into `on_stop`."""
 
@@ -144,13 +153,19 @@ class Worker:
 
     # ---------- claiming ----------
 
-    def claim(self) -> Job | None:
-        """Take the oldest waiting job — or a running one whose worker died
-        (lease expired) — atomically: two workers never get the same job."""
+    def claim(self, kinds: tuple[str, ...] | None = None) -> Job | None:
+        """Take the oldest waiting job of these kinds (any: None) — or a
+        running one whose worker died (lease expired) — atomically: two
+        workers, or two lanes, never get the same job. A job that takes its
+        campaign's run lock waits while another one holds it."""
         while True:
             now = timezone.now()
             due = Q(not_before__isnull=True) | Q(not_before__lte=now)  # a scheduled send waits
             claimable = (Q(state=Job.State.QUEUED) & due) | Q(state=Job.State.RUNNING, lease_until__lt=now)
+            if kinds is not None:
+                claimable &= Q(kind__in=kinds)
+            holding = Job.objects.filter(state=Job.State.RUNNING, kind__in=LOCKING, lease_until__gte=now)
+            claimable &= ~Q(kind__in=LOCKING, campaign_id__in=holding.values("campaign_id"))
             with transaction.atomic():
                 job = Job.objects.filter(claimable).order_by("created_at", "id").first()
                 if job is None:
@@ -172,27 +187,51 @@ class Worker:
 
     # ---------- running ----------
 
-    def run_once(self) -> Job | None:
-        job = self.claim()
+    def run_once(self, kinds: tuple[str, ...] | None = None) -> Job | None:
+        job = self.claim(kinds)
         if job is not None:
             self.execute(job)
             job.refresh_from_db()
         return job
 
     def run_forever(self, poll_sec: float = 2.0) -> None:
+        """Two lanes: sends one at a time (the frequency cap and Kavenegar's
+        rate count on that), and the short jobs (test SMS, reconcile,
+        delivery, clicks) beside them, so an urgent test never waits behind
+        an hour-long send. This thread keeps the heartbeat, the schedule and
+        the window's resumes."""
         logger.info("worker_started", extra={"worker": self.id})
+        lanes = [
+            threading.Thread(target=self._lane, args=(name, kinds, poll_sec), name=f"lane-{name}", daemon=True)
+            for name, kinds in LANES
+        ]
+        for lane in lanes:
+            lane.start()
         while not self.stop.is_set():
             close_old_connections()
             try:
                 self.beat()
                 self.schedule()
                 self.resume_when_window_opens()
-                if self.run_once() is None:
-                    self.stop.wait(poll_sec)
             except Exception:  # noqa: BLE001 — keep the worker alive
                 logger.exception("worker_error", extra={"worker": self.id})
-                self.stop.wait(poll_sec)
+            self.stop.wait(poll_sec)
+        for lane in lanes:
+            lane.join()  # each lets its job requeue itself (shutdown) first
         logger.info("worker_stopped", extra={"worker": self.id})
+
+    def _lane(self, name: str, kinds: tuple[str, ...], poll_sec: float) -> None:
+        try:
+            while not self.stop.is_set():
+                close_old_connections()
+                try:
+                    if self.run_once(kinds) is None:
+                        self.stop.wait(poll_sec)
+                except Exception:  # noqa: BLE001 — keep the lane alive
+                    logger.exception("worker_error", extra={"worker": self.id, "lane": name})
+                    self.stop.wait(poll_sec)
+        finally:
+            connection.close()
 
     def execute(self, job: Job) -> None:
         handler = {

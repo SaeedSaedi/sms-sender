@@ -455,13 +455,15 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - The settings page previews live: HTMX posts the unsaved form to `settings/preview/`, which saves nothing.
   - `{% translate %}` doubles a `%` before the lookup, so a template string with `%` always shows in English. `test_catalog` refuses one; put such text in Python, or reword it.
 - **Jobs and the worker** (`jobs/`, spec 4.6 / 4.8). `Campaign` holds a campaign's send settings, in the CLI's terms; its `slug` names `data/db/<slug>.db`. `Job` kinds: send, reconcile, delivery, clicks. `JobEvent` holds the engine's notes.
-  - **Claiming:** `Worker.claim` takes the oldest queued job, or a running one whose lease expired, with an atomic UPDATE. A heartbeat thread renews the lease every 10 s and reads `Job.control`.
+  - **Claiming:** `Worker.claim(kinds)` takes the oldest queued job of those kinds, or a running one whose lease expired, with an atomic UPDATE. A heartbeat thread renews the lease every 10 s and reads `Job.control`.
+  - **Two lanes** (`run_forever`, `LANES`): one thread runs sends, one at a time, which the frequency cap and Kavenegar's rate count on. Another runs `SHORT_KINDS` (test, reconcile, delivery, clicks) beside it, so an urgent test SMS never waits behind an hour-long send. The main thread keeps the heartbeat, the schedule and the window's resumes.
+  - A job that holds its campaign's run lock (`LOCKING`: send, test, reconcile) isn't claimed while another one of that campaign holds it with a live lease. Delivery and clicks may run beside a send. `run_once(kinds=None)` (tests, `run_worker --once`) claims any kind.
   - **Stopping:** pause, cancel and SIGTERM all end in `Runner.cancel()`. Afterwards, a paused job waits, a cancelled one runs `StateStore.cancel_remaining()` (claimable → `cancelled`), and an interrupted one goes back to queued.
   - **Giving up:** after `MAX_ATTEMPTS` lost leases a job fails.
   - **Operator actions** are in `jobs/services.py`: enqueue (one active job per campaign and kind), pause, resume, cancel. Cancelling a job that isn't running takes the campaign's run lock.
   - **Engine:** `jobs/engine.Engine` builds the CLI's runner from `Campaign.settings` (`make_runner(reporter=JobReporter, install_signal_handlers=False)`); tests swap in fakes. The approval test isn't part of a send job; it becomes its own dashboard step.
   - **Scheduler:** `Worker.schedule` queues delivery updates while sent rows are under 48 h old, and click updates for 14 days.
-  - **One worker only.** Test DBs are files, not shared-memory SQLite (`settings_test`), because the heartbeat thread writes concurrently.
+  - **One worker process only** (with its two lanes). Test DBs are files, not shared-memory SQLite (`settings_test`), because the heartbeat and lane threads write concurrently.
 - **Design system ([app.css](src/sms_sender_web/static/css/app.css), plan 05 P1):**
   - **Basics:**
     - Plain CSS, no build step. Logical properties only, so the layout mirrors for RTL.
