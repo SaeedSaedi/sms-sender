@@ -219,6 +219,87 @@ def folder_sends_since(folder: Path, since: float) -> dict[str, int]:
 
 
 @dataclass(frozen=True)
+class NumberSighting:
+    """One campaign DB's record of a number (`number_history`)."""
+    campaign: str                    # the DB's name: its campaign's short name
+    status: str | None               # the recipient's status; None: only a test SMS went there
+    segment: str | None = None
+    user_id: str | None = None
+    sent_at: float | None = None
+    status_code: int | None = None   # Kavenegar's code for the last attempt
+    delivery_status: int | None = None
+    clicks: int | None = None        # its own link's clicks; None without a link of its own
+    sms: int = 0                     # accepted SMS: send calls and reconciled ones (tests apart)
+    undecided: int = 0               # calls whose outcome is still unknown
+    tests: int = 0                   # test SMS to this number
+    last_seen: float = 0.0           # its latest call or send there
+
+
+def _column(row: sqlite3.Row, name: str):
+    return row[name] if name in row.keys() else None
+
+
+def number_history(folder: Path, phone: str) -> list[NumberSighting]:
+    """Every campaign DB in `folder` that knows this number (as a recipient,
+    or as a test SMS's number), the latest activity first. Read only
+    (query_only); unreadable files are skipped, and a sent row without a
+    recorded call (from before calls were recorded) counts as one SMS."""
+    found: list[NumberSighting] = []
+    for path in sorted(Path(folder).glob("*.db")):
+        try:
+            conn = sqlite3.connect(str(path), timeout=5)
+            conn.row_factory = sqlite3.Row
+            try:
+                conn.execute("PRAGMA query_only = ON")
+                tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                if "recipients" not in tables:
+                    continue
+                row = conn.execute("SELECT * FROM recipients WHERE phone = ?", (phone,)).fetchone()
+                sms = undecided = tests = 0
+                last = 0.0
+                if "attempts" in tables:
+                    for kind, outcome, n, latest in conn.execute(
+                        "SELECT kind, outcome, COUNT(*), MAX(started_at) FROM attempts WHERE phone = ? "
+                        "GROUP BY kind, outcome", (phone,),
+                    ):
+                        last = max(last, latest or 0.0)
+                        if kind == "test":
+                            tests += n if outcome == "accepted" else 0
+                        elif (kind, outcome) in (("send", "accepted"), ("reconcile", "reconciled_sent")):
+                            sms += n
+                        elif kind in ("send", "recovery") and outcome == "unknown":
+                            undecided += n
+                if row is not None and row["status"] == SENT and not sms:
+                    sms = 1  # sent before calls were recorded
+                if row is None and not (sms or tests):
+                    continue
+                clicks = None
+                link_key = _column(row, "link_key") if row is not None else None
+                if link_key == phone and "links" in tables:  # a link of its own (shared ones count for many)
+                    link = conn.execute("SELECT clicks FROM links WHERE key = ?", (link_key,)).fetchone()
+                    clicks = (link["clicks"] or 0) if link is not None else None
+                # Its latest call or send there; else when it was last tried, or loaded.
+                seen = max(last, (row["sent_at"] or 0.0) if row is not None else 0.0)
+                if not seen and row is not None:
+                    seen = row["last_attempt_at"] or row["first_seen_at"] or 0.0
+                found.append(NumberSighting(
+                    campaign=path.stem,
+                    status=row["status"] if row is not None else None,
+                    segment=_column(row, "segment") if row is not None else None,
+                    user_id=_column(row, "user_id") if row is not None else None,
+                    sent_at=row["sent_at"] if row is not None else None,
+                    status_code=row["status_code"] if row is not None else None,
+                    delivery_status=_column(row, "delivery_status") if row is not None else None,
+                    clicks=clicks, sms=sms, undecided=undecided, tests=tests, last_seen=seen,
+                ))
+            finally:
+                conn.close()
+        except sqlite3.Error:
+            continue
+    return sorted(found, key=lambda s: s.last_seen, reverse=True)
+
+
+@dataclass(frozen=True)
 class RecipientFilter:
     """Which recipients a list or an export shows; empty fields match all."""
     status: str | None = None        # as display_counts names it, `invalid` included

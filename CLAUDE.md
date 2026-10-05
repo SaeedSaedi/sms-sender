@@ -144,6 +144,7 @@ Capped people got nothing from this campaign, so freeing them again can't send a
 - **Crash recovery via `mark_orphans_unknown`.** Any `in_flight` row at startup was left by a process that stopped mid-send (the run lock rules out a live one). Its request may or may not have reached Kavenegar, so it becomes `unknown` — never `pending` — and is never claimed again until checked with the provider. So you can `Ctrl-C` mid-run and re-run safely; the rest of the campaign carries on.
 - **Every provider call is an `attempts` row** (kind `send` / `test` (the approval test, via the `runner._ATTEMPT_KIND` context variable) / `recovery`, outcome `accepted` / `retry` / `rejected` / `halt` / `unknown`, codes, `message_id`, `cost`, redacted detail). `Sender(on_attempt=…)` reports each call; `make_runner(make_sender=…)` wires it to `StateStore.record_attempt`. A failing audit write is logged and never changes the send's outcome. `recipients.cost` holds the accepted SMS's cost in rials.
 - **One kernel per folder (`sharing.py`).** The dashboard's worker writes `db/.dashboard-worker.json` (its kernel's boot ID) as it beats. A CLI on another kernel, such as a host outside Docker Desktop's VM where flock and SQLite's locks don't reach, exits 2 on any command that changes rows while that heartbeat is fresh, and warns on reads (`cli._guard_folder`). On one Linux kernel, host and containers share locks, so nothing is refused.
+- **The hold on all sending (`sharing.HOLD`).** While an admin holds all sending on the dashboard, `db/.sending-held.json` is in the folder, and `send`, `retry-failed` and `preview --send` exit 2 (`cli._refuse_while_held`, on any kernel). A marker that can't be read still holds.
 - **One process per DB (`locking.RunLock`).** `Runner.run` and the commands that change rows (`retry-failed`, `reset`, `purge`) hold `fcntl.flock` on `<db>.lock`. A second process exits with code 2 instead of treating the first one's `in_flight` rows as crash leftovers and sending them again. The OS drops the lock when the holder dies (even `kill -9`), so crash recovery still works. `status` / `export-failed` only read and don't lock.
 - **Invalid inputs are persisted with synthetic key `INVALID:<raw>`.** This keeps the `phone` PK constraint while letting `export-failed` surface them.
 - **Schema versions.** `PRAGMA user_version` + append-only steps in `state._MIGRATIONS`. Opening a DB upgrades it in place, in one transaction; a DB written by a newer sms-sender is refused (`StateSchemaError`). Never edit a step that has shipped — existing DBs already applied it; add a new one.
@@ -334,10 +335,20 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - Purge (`campaign_purge`, `delete_campaign_data`, the CLI's `purge`): the typed short name, refused while any of the campaign's jobs is on its way, a backup first, then the DB files deleted under the run lock, and the `Campaign` with them.
   - Adopt (`campaign_adopt`, operators, from the home page): a `Campaign` for a DB the CLI made, its settings from the DB's bound ones. With no segment it's a draft. As it has sent, its message is fixed, so the draft offers the next segment like another round.
   - The status page shows the version, the queue and the last backup.
+  - **Hold all sending** (`system/views.sending_hold`, the status page, `manage_settings`; review R5), the emergency stop:
+    - `services.hold_sending` sets `SystemSettings.sending_held_at` / `_by`, cancels test SMS on their way and writes the folder's marker for the CLI. An `OSError` there is reported, and the dashboard's hold still stands.
+    - The worker claims no send or test while held (`worker.SENDING`). A running one stops at its next heartbeat with the reason `held`: a send ends `PAUSED` with `result.held`, a test is cancelled. An operator's pause outranks the hold.
+    - `request_test`, `start_send`, `start_now` and `resume` raise `JobConflict("held")`.
+    - `release_sending` clears it all and resumes only the sends marked `held`. Each continues from its campaign DB, so nobody is sent twice.
+    - Every page shows a banner while held (the `sandbox` context processor gives `sending_held`). The notification targets hear of both, and the activity log records `sending_held` / `sending_released`.
 - **System settings (`system/`, `/system/`, `manage_settings`):** one `SystemSettings` row. Changes are recorded as `system_settings_changed`.
   - The frequency cap: `Engine.runner` passes it to every run, and `checks.check_campaign` counts it (`capped`, `cap`).
-  - Notification targets (the CLI's `--notify`): `worker._announce` sends each one the run report with `heading=<slug>` when a send ends or stops (not for tests, not on a shutdown requeue). They're secrets: pages and the log only show `notify.redact_target`. There's a "send a test" button (`notify.notify_text`).
+  - Notification targets (the CLI's `--notify`): `worker._announce` sends each one the run report with `heading=<slug>` when a send ends or stops (not for tests, not on a shutdown requeue). A send that stops before its run (busy, settings mismatch, a list it can't read, a crash) has no report: `_announce_failure` sends a line instead. A test SMS that went out is announced too (`_announce_test`, its number masked), as it waits for someone to approve or reject it. They're secrets: pages and the log only show `notify.redact_target`. There's a "send a test" button (`notify.notify_text`).
   - Defaults for new campaigns: the window and the rate.
+  - **Credit warning** (`credit_floor`, rials; `system/credit.py`, review R5):
+    - `ProviderCheck` (one row) keeps Kavenegar's account as last asked. `Worker.schedule` asks every 15 minutes (`credit.due`), and the status page records its live answer too.
+    - Under the floor, the campaign list warns, and the targets hear it once per drop (`below_since`). A refused account check is an error callout of its own.
+    - A send still checks its own estimate against the credit before anything goes out.
 - **Suppression list (`suppression/`):**
   - A `Suppression` row is a canonical phone, either global (`campaign` null) or for one campaign. Two partial unique constraints keep each number once per scope, because NULLs never collide in a plain UNIQUE.
   - `service.add` and `service.phones_for(campaign)` are the API. `jobs.engine.Engine.runner` passes `phones_for(campaign)` into the runner's `opt_out`, so every send skips them.
@@ -425,6 +436,12 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 
     Each download records `report_downloaded`, with the filters (never a number).
   - `/status/` asks Kavenegar (`account_info` / `account_config`) and Shlink (`health`) live, on every view.
+  - **Find a number** (`/numbers/`, `reports/numbers.py`, `reveal_phone`; review R5): `state.number_history` reads every campaign DB in the folder, the CLI's too, `query_only` and without upgrading old ones. For each campaign that knows the number:
+    - its status, segment, sent time, delivery and its own link's clicks;
+    - accepted SMS: send calls and reconciled ones, or 1 for a sent row from before calls were recorded;
+    - calls still undecided, and test SMS apart.
+
+    The page adds the suppression list and the frequency cap's count, and calls out a campaign that sent it twice. The number goes in a POST, and `number_looked_up` is recorded with it, shown masked.
   - Worker liveness is `jobs.WorkerBeat`: written every idle loop and with each job heartbeat. `worker_alive()` means seen within 60 s.
 - **The attribution API (`api/`, plan 05 decision 8):**
   - Read only: `GET /api/v1/campaigns/` and `/api/v1/campaigns/<slug>/attribution/?page=N`. The rows are `clicks.attribution_rows`, 1,000 a page, never a phone number.

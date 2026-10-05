@@ -1,9 +1,10 @@
 from django.urls import path
 
-from . import views
+from . import numbers, views
 
 urlpatterns = [
     path("status/", views.status, name="status"),
+    path("numbers/", numbers.number_lookup, name="number_lookup"),
     path("analytics/", views.analytics, name="analytics"),
     path("reports/<slug:slug>/", views.report, name="report"),
     path("reports/<slug:slug>/reveal/", views.reveal, name="report_reveal"),

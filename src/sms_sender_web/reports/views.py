@@ -45,13 +45,13 @@ from ..audit.record import record
 from ..campaigns.present import say
 from ..campaigns.terms import stop_reason
 from ..dashboard.terms import CLICK_FILTERS, DELIVERY_FILTERS, DELIVERY_STATUS, STATUS_ORDER
-from ..dashboard.templatetags.fa import status_label
+from ..dashboard.templatetags.fa import fa_number, status_label
 from ..jobs.engine import Engine
 from ..jobs.models import Campaign, Job
 from ..jobs.sandbox import read_outbox
 from ..jobs.worker import last_seen, worker_alive
 from ..segments import files as segment_files
-from ..system import operations
+from ..system import credit, operations
 from ..segments.audience import make_audience, suggest_slug
 from ..segments.forms import UPLOAD_ERRORS, clean_slug
 from ..segments.models import Segment
@@ -447,6 +447,7 @@ def status(request):
     try:
         sender = engine.sender()
         info = sender.account_info()
+        credit.record(info.remaining_credit)  # what the campaign list's warning reads
         expires, never_expires = _expiry(info.expire_date)
         kavenegar = {"ok": True, "credit": info.remaining_credit, "expires": expires,
                      "never_expires": never_expires, "type": info.type}
@@ -461,6 +462,8 @@ def status(request):
         kavenegar = {"problem": "refused", "text": stop_reason("account_refused", {"code": e.status_code})}
     except SendError as e:
         kavenegar = {"problem": "unreachable", "code": e.status_code}
+    if kavenegar.get("problem"):
+        credit.record(None, kavenegar["problem"])
 
     shlink: dict
     try:
@@ -472,7 +475,11 @@ def status(request):
         shlink = {"problem": "unreachable", "code": e.status}
 
     outbox = read_outbox() if django_settings.SANDBOX else []
+    sends = Job.objects.filter(kind=Job.Kind.SEND, state__in=(Job.State.QUEUED, Job.State.RUNNING)).count()
     return render(request, "reports/status.html", {
+        "hold_confirm": _(
+            "Hold all sending? %(n)s sends on their way or waiting stop, and no SMS goes out until the hold is lifted."
+        ) % {"n": fa_number(sends)},
         "outbox_count": len(outbox),
         "outbox_latest": outbox[-5:][::-1],
         "kavenegar": kavenegar,

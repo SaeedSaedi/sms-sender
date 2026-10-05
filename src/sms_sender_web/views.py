@@ -16,8 +16,12 @@ def healthz(request):
 
 
 def sandbox(request) -> dict:
-    """Every page knows whether this is the sandbox, for its banner."""
-    return {"sandbox": settings.SANDBOX}
+    """Every page knows whether this is the sandbox, and whether all sending
+    is held, for their banners."""
+    from .jobs.services import held
+
+    hold = held() if getattr(request, "user", None) is not None and request.user.is_authenticated else None
+    return {"sandbox": settings.SANDBOX, "sending_held": hold}
 
 
 # Which menu entry a page belongs to, by its URL name.
@@ -29,7 +33,7 @@ _SECTIONS = {
     "users": "users", "audit_log": "activity", "my_account": "account", "password_change": "account",
     "template_list": "templates", "template_new": "templates", "template_edit": "templates",
     "analytics": "analytics", "campaign_duplicate": "campaigns", "api_tokens": "api", "system_settings": "system", "backups": "backups",
-    "help": "help",
+    "help": "help", "campaign_import": "campaigns", "number_lookup": "numbers",
 }
 
 

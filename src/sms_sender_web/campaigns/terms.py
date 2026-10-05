@@ -55,6 +55,7 @@ KAVENEGAR_CODES = {
 _UNKNOWN_CODE = _("Kavenegar didn't say more.")
 
 CONFLICTS = {
+    "held": _("All sending is held by an admin. It can start again once the hold is lifted."),
     "busy": _("Another process is using this campaign right now. Try again in a moment."),
     "no_test_number": _("First set your own mobile number on “My account”: test SMS go only there."),
     "send_active": _("This campaign is sending; a test SMS can't run at the same time."),

@@ -53,7 +53,9 @@
 <h3>{% translate "Test SMS" %}</h3>
 <p>{% translate "Before sending, one SMS goes to your own number, so you can see the final text." %}{% if campaign.settings.links.token %} {% translate "It carries a short link of its own; the recipients' links are made when sending starts." %}{% endif %}</p>
 {% if user|can:"run_campaigns" %}
-  {% if test_phone %}
+  {% if sending_held %}
+    {% include "campaigns/stage/_held_note.html" %}
+  {% elif test_phone %}
     <form method="post" action="{% url 'campaign_action' campaign.slug 'test' %}" class="form-actions" id="test-form">
       {% csrf_token %}
       <button type="submit" data-cli="send --approval-test, preview --send">{% icon "send" %}{% if test %}{% translate "Send a new test SMS" %}{% else %}{% translate "Send a test SMS" %}{% endif %}</button>

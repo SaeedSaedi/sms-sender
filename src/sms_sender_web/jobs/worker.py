@@ -10,8 +10,12 @@
   `Runner.cancel()`: nothing new is claimed, and requests in flight finish
   and are recorded. Then a paused job waits, a cancelled one cancels its
   remaining recipients, and an interrupted one is queued again.
+- While an admin holds all sending, no send or test SMS is claimed, and a
+  running one stops within a heartbeat: a send waits, paused, until the
+  hold is lifted; a test SMS is cancelled.
 - When idle, it queues delivery updates while Kavenegar still answers
-  (48 h) and click updates for recent campaigns.
+  (48 h) and click updates for recent campaigns, and asks Kavenegar for the
+  account's credit every 15 minutes (system/credit.py).
 """
 from __future__ import annotations
 
@@ -41,7 +45,7 @@ from sms_sender.window import DEFAULT_WINDOW, now_tehran, parse_window
 from .engine import Engine, campaign_db
 from .models import Campaign, Job, JobEvent, WorkerBeat
 from .reporter import JobReporter
-from .services import ACTIVE, settings_hash
+from .services import ACTIVE, held, settings_hash
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +65,8 @@ CLICKS_EVERY = timedelta(hours=1)
 CLICKS_FOR = timedelta(days=14)
 
 # Why a running send was stopped; a later reason only wins if it's stronger.
-_STOP_PRIORITY = {"lost": 0, "shutdown": 1, "pause": 2, "cancel": 3}
+# An operator's pause outranks the hold: lifting the hold doesn't resume it.
+_STOP_PRIORITY = {"lost": 0, "shutdown": 1, "held": 2, "pause": 3, "cancel": 4}
 
 
 class _StopReason:
@@ -84,16 +89,19 @@ LANES = (("send", SEND_KINDS), ("short", SHORT_KINDS))
 # Jobs that hold their campaign's run lock: never two of them for one
 # campaign at a time (delivery and clicks only write their own columns).
 LOCKING = (Job.Kind.SEND, Job.Kind.TEST, Job.Kind.RECONCILE)
+# What the hold on all sending stops: everything that sends an SMS.
+SENDING = (Job.Kind.SEND, Job.Kind.TEST)
 
 
 class _Heartbeat(threading.Thread):
     """Renews the lease and turns pause / cancel / shutdown into `on_stop`."""
 
-    def __init__(self, worker: "Worker", job_id: int, on_stop):
+    def __init__(self, worker: "Worker", job_id: int, on_stop, *, sends: bool = False):
         super().__init__(name=f"heartbeat-{job_id}", daemon=True)
         self.worker = worker
         self.job_id = job_id
         self.on_stop = on_stop
+        self.sends = sends  # an SMS-sending job: the hold on all sending stops it
         self._done = threading.Event()
 
     def run(self) -> None:
@@ -109,6 +117,8 @@ class _Heartbeat(threading.Thread):
                 control = Job.objects.filter(pk=self.job_id).values_list("control", flat=True).first()
                 if control:
                     self.on_stop(control)
+                elif self.sends and held():
+                    self.on_stop("held")
                 elif self.worker.stop.is_set():
                     self.on_stop("shutdown")
         finally:
@@ -129,6 +139,31 @@ def _announce(job: Job, summary) -> None:
 
     for target in SystemSettings.load().notify_targets:
         notify(target, summary, heading=job.campaign.slug)
+
+
+def _announce_failure(job: Job, why: str) -> None:
+    """A send that stopped before it could run has no run report: the
+    targets hear why, in a line. Best-effort, like the report."""
+    from sms_sender.notify import notify_text
+
+    from ..system.models import SystemSettings
+
+    for target in SystemSettings.load().notify_targets:
+        notify_text(target, f"sms-sender: {job.campaign.slug}: the send stopped before sending anything: {why}")
+
+
+def _announce_test(job: Job) -> None:
+    """A test SMS went out: the targets hear that it waits for someone to
+    approve or reject it (its number masked). Best-effort."""
+    from sms_sender.notify import notify_text
+
+    from ..privacy import mask_phone
+    from ..system.models import SystemSettings
+
+    phone = mask_phone(str(job.params.get("test_number", "")))
+    for target in SystemSettings.load().notify_targets:
+        notify_text(target, f"sms-sender: {job.campaign.slug}: the test SMS went to {phone}. "
+                            "It waits for someone to approve or reject it on the dashboard.")
 
 
 class Worker:
@@ -164,6 +199,8 @@ class Worker:
             claimable = (Q(state=Job.State.QUEUED) & due) | Q(state=Job.State.RUNNING, lease_until__lt=now)
             if kinds is not None:
                 claimable &= Q(kind__in=kinds)
+            if held():
+                claimable &= ~Q(kind__in=SENDING)  # nothing sends until the hold is lifted
             holding = Job.objects.filter(state=Job.State.RUNNING, kind__in=LOCKING, lease_until__gte=now)
             claimable &= ~Q(kind__in=LOCKING, campaign_id__in=holding.values("campaign_id"))
             with transaction.atomic():
@@ -247,6 +284,8 @@ class Worker:
         except Exception as e:  # noqa: BLE001 — recorded on the job
             logger.exception("job_crashed", extra={"job": job.pk})
             state, result, error = Job.State.FAILED, {"stop_reason": "crashed"}, f"{type(e).__name__}: {e}"
+            if job.kind == Job.Kind.SEND:
+                _announce_failure(job, "an unexpected error; the details are in the worker's log")
         finished = None if state == Job.State.QUEUED else timezone.now()
         Job.objects.filter(pk=job.pk, lease_owner=self.id).update(
             state=state, result=result, last_error=error, control="",
@@ -289,6 +328,8 @@ class Worker:
         except (InputError, FileNotFoundError) as e:
             # A list it can't read (a segment being replaced, an opt-out file
             # gone): nothing was read or sent.
+            if not test:
+                _announce_failure(job, f"a list can't be read ({e})")
             return Job.State.FAILED, {"stop_reason": "input_unreadable"}, str(e)
         reason = _StopReason()
 
@@ -297,16 +338,22 @@ class Worker:
                 logger.info("job_stop_requested", extra={"job": job.pk, "why": why})
             runner.cancel()
 
-        heartbeat = _Heartbeat(self, job.pk, on_stop)
+        heartbeat = _Heartbeat(self, job.pk, on_stop, sends=True)
         heartbeat.start()
         try:
             summary = runner.run()
         except RunLockError as e:
-            return (Job.State.FAILED, {"stop_reason": "busy"},
-                    f"another sms-sender process is sending this campaign: {e}")
+            why = f"another sms-sender process is sending this campaign: {e}"
+            if not test:
+                _announce_failure(job, why)
+            return Job.State.FAILED, {"stop_reason": "busy"}, why
         except CampaignMismatchError as e:
+            if not test:
+                _announce_failure(job, f"the campaign's records were sent with other settings ({e})")
             return Job.State.FAILED, {"stop_reason": "settings_mismatch"}, str(e)
         except (InputError, FileNotFoundError) as e:
+            if not test:
+                _announce_failure(job, f"a list can't be read ({e})")
             return Job.State.FAILED, {"stop_reason": "input_unreadable"}, str(e)
         finally:
             heartbeat.finish()
@@ -317,7 +364,10 @@ class Worker:
         result["top_errors"] = [[message, count] for message, count in summary.top_errors]
         if not test and reason.value not in ("shutdown", "lost"):
             _announce(job, summary)  # the CLI's --notify: a send ended or stopped
-        if reason.value == "cancel" or (test and reason.value == "pause"):
+        if reason.value == "held" and not test:
+            # It goes on when the hold is lifted (services.release_sending).
+            return Job.State.PAUSED, {**result, "held": True}, ""
+        if reason.value == "cancel" or (test and reason.value in ("pause", "held")):
             if not test:
                 with RunLock(campaign_db(job.campaign)):
                     result["cancelled"] = self.engine.state(job.campaign).cancel_remaining()
@@ -337,6 +387,8 @@ class Worker:
             return Job.State.FAILED, result, why or reporter.last_note or "the run halted"
         if summary.stopped and not test:
             return Job.State.PAUSED, result, "the sending window closed; it continues when the window opens"
+        if test and summary.test_message_id is not None:
+            _announce_test(job)
         return Job.State.DONE, result, ""
 
     def _reconcile(self, job: Job):
@@ -396,6 +448,7 @@ class Worker:
         if not force and self._next_schedule is not None and now < self._next_schedule:
             return
         self._next_schedule = now + SCHEDULE_EVERY
+        self._check_credit(now)
         for campaign in Campaign.objects.all():
             if not campaign_db(campaign).exists():
                 continue
@@ -407,6 +460,18 @@ class Worker:
             ).exists()
             if last_send and store.link_counts().get("ready"):
                 self._enqueue_if_due(campaign, Job.Kind.CLICKS, CLICKS_EVERY)
+
+    def _check_credit(self, now) -> None:
+        from ..system import credit
+
+        if not credit.due(now):
+            return
+        try:
+            sender = self.engine.sender()
+        except RuntimeError:  # no Kavenegar key on this server
+            credit.record(None, "no_key", now=now)
+        else:
+            credit.check_now(sender)
 
     def _enqueue_if_due(self, campaign: Campaign, kind: str, every: timedelta) -> None:
         jobs = Job.objects.filter(campaign=campaign, kind=kind)

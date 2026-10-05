@@ -6,7 +6,7 @@ import logging
 from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.utils.translation import gettext as _
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 
 from sms_sender.notify import notify_text, redact_target, valid_target
 from sms_sender.rate import parse_rate
@@ -15,6 +15,8 @@ from sms_sender.window import parse_window
 from ..accounts.decorators import requires
 from ..audit.record import record
 from ..backup import BackupError
+from ..dashboard.templatetags.fa import fa_number
+from ..jobs import services
 from . import operations
 from .models import SystemSettings
 
@@ -97,6 +99,21 @@ def _defaults(request, current: SystemSettings) -> str:
     return ""
 
 
+def _credit(request, current: SystemSettings) -> str:
+    """The credit warning level, in rials (empty: no warning)."""
+    value = request.POST.get("credit_floor", "").strip().translate(_DIGITS).replace(",", "").replace("٬", "")
+    if value and not value.isdigit():
+        return _("Write the credit in rials, digits only, or leave it empty for no warning.")
+    floor = int(value) if value else None
+    if floor != current.credit_floor:
+        before = current.credit_floor
+        current.credit_floor, current.updated_by = floor, request.user
+        current.save()
+        record("system_settings_changed", request=request,
+               credit_floor={"before": before if before is not None else "-", "after": floor if floor is not None else "-"})
+    return ""
+
+
 @requires("manage_settings")
 @require_http_methods(["GET", "POST"])
 def system_settings(request):
@@ -104,18 +121,54 @@ def system_settings(request):
     errors: dict[str, str] = {}
     if request.method == "POST":
         section = request.POST.get("section", "cap")
-        handler = {"cap": _cap, "defaults": _defaults}.get(section, _notifications)
+        handler = {"cap": _cap, "defaults": _defaults, "credit": _credit}.get(section, _notifications)
         error = handler(request, current)
         if error:
-            errors[section if section in ("cap", "defaults") else "notify"] = error
+            errors[section if section in ("cap", "defaults", "credit") else "notify"] = error
         else:
-            if section in ("cap", "defaults", "notify_add", "notify_remove"):
+            if section in ("cap", "defaults", "credit", "notify_add", "notify_remove"):
                 messages.success(request, _("Saved. It applies to the next check and the next send of every campaign."))
             return redirect("system_settings")
     return render(request, "system/settings.html", {
         "settings": current, "errors": errors, "post": request.POST,
         "targets": [redact_target(t) for t in current.notify_targets or []],
     })
+
+
+HELD_MESSAGE = "sms-sender: {who} held all sending on the dashboard. Nothing is sent until an admin lifts the hold."
+RELEASED_MESSAGE = "sms-sender: {who} lifted the hold on all sending. {n} paused send(s) continue."
+
+
+@requires("manage_settings")
+@require_POST
+def sending_hold(request):
+    """An admin's emergency stop (status page): hold all sending, or lift
+    the hold. The team's notification targets hear of it either way."""
+    who = request.user.get_username()
+    if request.POST.get("action") == "release":
+        resumed = services.release_sending(request.user)
+        record("sending_released", request=request, resumed=resumed)
+        messages.success(request, _("The hold is lifted. Sends it paused continue: %(n)s.") % {"n": fa_number(resumed)})
+        text = RELEASED_MESSAGE.format(who=who, n=resumed)
+    else:
+        try:
+            sends = services.hold_sending(request.user)
+        except OSError:
+            logger.exception("hold_marker_failed")
+            sends = None
+            messages.error(request, _(
+                "Sending is held on the dashboard, but the CLI's folder couldn't be marked: "
+                "tell whoever sends from the command line. The details are in the system log."
+            ))
+        record("sending_held", request=request, sends=sends)
+        if sends is not None:
+            messages.success(request, _(
+                "All sending is held. Sends on their way pause within seconds: %(n)s."
+            ) % {"n": fa_number(sends)})
+        text = HELD_MESSAGE.format(who=who)
+    for target in SystemSettings.load().notify_targets or []:
+        notify_text(target, text)  # best-effort: never raises
+    return redirect("status")
 
 
 @requires("manage_settings")

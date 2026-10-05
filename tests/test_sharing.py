@@ -81,3 +81,28 @@ def test_without_a_worker_nothing_changes(tmp_path):
     result = CliRunner().invoke(cli, ["reset", "--status", "sent", "--state", str(db), "--yes"])
     assert result.exit_code == 0, result.output
     assert StateStore(db).counts() == {PENDING: 2}
+
+
+def test_while_sending_is_held_no_cli_send_starts(tmp_path, monkeypatch):
+    """The dashboard's emergency stop marks the folder: send, retry-failed and
+    preview --send refuse there (exit 2) and change nothing."""
+    monkeypatch.chdir(tmp_path)
+    folder = tmp_path / "data" / "db"
+    folder.mkdir(parents=True)
+    db = folder / "coin-7.db"
+    seed(db)
+    sharing.write_hold(folder, by="admin1")
+    (tmp_path / "in.txt").write_text("09120000002\n", encoding="utf-8")
+    for args in (
+        ["send", "--input", "in.txt", "--template", "t", "--token", "x", "--campaign", "coin-7"],
+        ["retry-failed", "--input", "in.txt", "--template", "t", "--token", "x", "--campaign", "coin-7"],
+        ["preview", "--phone", "09120000002", "--template", "t", "--token", "x", "--send"],
+    ):
+        result = CliRunner().invoke(cli, args)
+        assert result.exit_code == 2, (args, result.output)
+        assert "held from the dashboard (by admin1" in result.output
+    assert StateStore(db).counts() == {SENT: 1, PENDING: 1}
+    # Reading is still fine.
+    assert CliRunner().invoke(cli, ["status", "--campaign", "coin-7"]).exit_code == 0
+    sharing.clear_hold(folder)
+    assert sharing.held(folder) is None

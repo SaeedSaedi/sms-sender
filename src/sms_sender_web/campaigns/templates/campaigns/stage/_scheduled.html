@@ -6,16 +6,19 @@
   </div>
   {% if user|can:"run_campaigns" %}
     <div class="actions follow-up">
+      {% if not sending_held %}
       <form method="post" action="{% url 'campaign_action' campaign.slug 'start_now' %}" class="inline" id="start-now-form"
             data-confirm="{{ send_confirm }}">
         {% csrf_token %}<input type="hidden" name="job" value="{{ life.send.pk }}">
         <button type="submit" class="small">{% icon "play" %}{% translate "Start now" %}</button>
       </form>
+      {% endif %}
       <form method="post" action="{% url 'campaign_action' campaign.slug 'unschedule' %}" class="inline" id="unschedule-form">
         {% csrf_token %}<input type="hidden" name="job" value="{{ life.send.pk }}">
         <button type="submit" class="small secondary">{% icon "x" %}{% translate "Cancel the schedule" %}</button>
       </form>
     </div>
     <p class="hint">{% translate "Cancelling the schedule cancels no one: the campaign stays ready to send." %}</p>
+    {% if sending_held %}{% include "campaigns/stage/_held_note.html" %}{% endif %}
   {% endif %}
 {% endif %}

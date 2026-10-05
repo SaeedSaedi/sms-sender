@@ -7,7 +7,11 @@ Desktop on a Mac or on Windows runs the worker inside a VM: a CLI on the
 host opens the same files through the mount, but neither kind of lock
 reaches across it, so a CLI send could claim recipients the worker is
 sending to. The worker leaves a heartbeat in the folder; a CLI on another
-kernel refuses to change anything there while that heartbeat is fresh."""
+kernel refuses to change anything there while that heartbeat is fresh.
+
+An admin's hold on all sending (the dashboard's emergency stop) leaves a
+marker in the folder too: while it's there, a CLI send from that folder
+refuses to start, on any kernel."""
 from __future__ import annotations
 
 import json
@@ -20,6 +24,7 @@ from pathlib import Path
 
 HEARTBEAT = ".dashboard-worker.json"
 FRESH_SEC = 120  # the worker beats every 10 s while busy, every loop while idle
+HOLD = ".sending-held.json"
 
 
 @lru_cache(maxsize=1)
@@ -64,3 +69,28 @@ def foreign_worker(folder: Path | str, *, now: float | None = None) -> dict | No
     if data.get("kernel") == kernel_id():
         return None
     return data
+
+
+def write_hold(folder: Path | str, *, by: str) -> None:
+    """Mark the folder held. Raises OSError when it can't be written: the
+    caller says so, as the CLI there wouldn't know."""
+    folder = Path(folder)
+    tmp = folder / f"{HOLD}.{os.getpid()}.tmp"
+    tmp.write_text(json.dumps({"by": by, "at": time.time()}), encoding="utf-8")
+    tmp.replace(folder / HOLD)
+
+
+def clear_hold(folder: Path | str) -> None:
+    (Path(folder) / HOLD).unlink(missing_ok=True)
+
+
+def held(folder: Path | str) -> dict | None:
+    """Who held all sending in this folder, and when; None when nobody has.
+    A marker that can't be read still holds."""
+    try:
+        data = json.loads((Path(folder) / HOLD).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}

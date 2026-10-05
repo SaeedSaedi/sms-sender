@@ -356,6 +356,20 @@ body.has-nav .topbar { display: none; }
   font-weight: 700;
   text-align: center;
 }
+/* All sending is held (an admin's emergency stop): on every page until lifted. */
+.hold-banner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--s-2);
+  padding: .5rem var(--s-4);
+  background: var(--danger-soft);
+  border-block-end: 1px solid var(--danger-border);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-align: center;
+}
 
 .page {
   inline-size: 100%;
@@ -655,9 +669,10 @@ input[type="file"]:not(.file-input) { font: inherit; max-inline-size: 100%; }
   box-shadow: var(--shadow-1);
   overflow: hidden;
 }
-.figures > div { flex: 1 1 8rem; min-inline-size: 0; padding: var(--s-4) var(--s-5); background: var(--surface); }
+/* Never narrower than its number: a long one moves the figure to a row of its own instead of breaking. */
+.figures > div { flex: 1 1 8rem; min-inline-size: min-content; padding: var(--s-4) var(--s-5); background: var(--surface); }
 .figures dt { color: var(--muted); font-size: var(--fs-xs); font-weight: 600; }
-.figures dd { margin: var(--s-1) 0 0; font-size: 1.45rem; font-weight: 760; line-height: 1.3; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.figures dd { margin: var(--s-1) 0 0; font-size: 1.45rem; font-weight: 760; line-height: 1.3; font-variant-numeric: tabular-nums; overflow-wrap: break-word; }
 .figures dd .hint { font-size: var(--fs-xs); font-weight: 500; }
 .card .figures { box-shadow: none; }
 ul.figures { padding: 0; list-style: none; }
@@ -929,6 +944,10 @@ td.num, th.num { text-align: end; }
 form.search { display: flex; gap: var(--s-2); margin-block-end: var(--s-4); }
 form.search input { inline-size: min(20rem, 100%); }
 form.search > button { margin: 0; }
+/* One field and its button on a line, under the field's own label. */
+.field-with-button { display: flex; gap: var(--s-2); align-items: stretch; }
+.field-with-button > input { flex: 1 1 auto; min-inline-size: 0; }
+.field-with-button > button { flex: none; margin: 0; }
 
 /* Above a list: tabs or filters on one side, search on the other. */
 .toolbar {
@@ -1188,6 +1207,8 @@ button.block { inline-size: 100%; }
 .attention-list li > a, .attention-list .attention-name > a { color: var(--text); text-decoration: none; font-weight: 700; }
 .attention-list li > a:hover, .attention-list .attention-name > a:hover { color: var(--primary); text-decoration: underline; }
 .cell-sub { display: block; color: var(--muted); font-size: var(--fs-xs); font-weight: 400; }
+/* A row that needs someone's eye, e.g. a number sent twice. */
+tr.is-danger > * { background: var(--danger-soft); }
 progress.mini { display: block; inline-size: 8rem; block-size: .4rem; margin-block-start: var(--s-1); }
 
 /* ---------- the campaign settings form ---------- */

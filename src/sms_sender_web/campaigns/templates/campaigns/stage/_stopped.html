@@ -2,7 +2,9 @@
 <h2>{% icon "megaphone" %}{% translate "Send" %}</h2>
 <div class="callout callout-error" role="alert">{% icon "circle-alert" %}<p>{% if send_reason %}{{ send_reason }}{% else %}{% translate "A check before sending failed." %}{% endif %}</p></div>
 {% include "campaigns/stage/_results.html" %}
-{% if user|can:"run_campaigns" and approved %}
+{% if user|can:"run_campaigns" and approved and sending_held %}
+  {% include "campaigns/stage/_held_note.html" %}
+{% elif user|can:"run_campaigns" and approved %}
   <form method="post" action="{% url 'campaign_action' campaign.slug 'send' %}" class="form-actions" id="send-form"
         data-confirm="{{ send_confirm }}">
     {% csrf_token %}
