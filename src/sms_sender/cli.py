@@ -68,6 +68,7 @@ from .frequency import parse_cap
 from .window import DEFAULT_WINDOW, ENV_SEND_WINDOW, parse_window
 from . import sharing
 from .state import (
+    CAMPAIGN_DB_DIR,
     CANCELLED,
     INVALID,
     NEEDS_REVIEW,
@@ -340,6 +341,21 @@ def _guard_folder(db_path: str, *, changes: bool = True) -> None:
     )
 
 
+def _refuse_while_held(folder: Path) -> None:
+    """An admin held all sending on the dashboard (its emergency stop):
+    no send starts from this folder until they lift it (exit 2)."""
+    hold = sharing.held(folder)
+    if hold is None:
+        return
+    since = f" since {time.strftime('%Y-%m-%d %H:%M', time.localtime(hold['at']))}" if hold.get("at") else ""
+    click.echo(
+        f"Error: all sending is held from the dashboard (by {hold.get('by') or '?'}{since}). Nothing is "
+        f"sent from {folder} until an admin lifts the hold on the dashboard's status page.",
+        err=True,
+    )
+    sys.exit(2)
+
+
 @click.group(invoke_without_command=True)
 @click.option(
     "--config", "config_path", default=None, type=click.Path(dir_okay=False),
@@ -540,6 +556,7 @@ def _do_send(
         )
     db_path = _resolve_db_path(db_path, campaign)
     _guard_folder(db_path)
+    _refuse_while_held(Path(db_path).parent)
     console_level = (
         logging.DEBUG if verbose else (logging.WARNING if quiet else logging.INFO)
     )
@@ -666,6 +683,7 @@ def retry_failed(include_permanent: bool, **kwargs: Any) -> None:
     """
     kwargs["db_path"] = _resolve_db_path(kwargs["db_path"], kwargs.get("campaign"))
     _guard_folder(kwargs["db_path"])
+    _refuse_while_held(Path(kwargs["db_path"]).parent)
     store = StateStore(kwargs["db_path"])
     with _db_lock(kwargs["db_path"]):
         n = store.reset_status("failed_retriable")
@@ -1183,6 +1201,8 @@ def preview(
             "--send can't include a link: links are made by `send`. To see a real "
             "one, use `send --approval-test`, which sends the test SMS its own link."
         )
+    if do_send:
+        _refuse_while_held(CAMPAIGN_DB_DIR)  # no state DB: the campaigns' folder
     static_tokens = {"token": token, "token2": token2, "token3": token3,
                      "token10": token10, "token20": token20}
     token_columns = _parse_token_columns(token_column, value_map, static_tokens)

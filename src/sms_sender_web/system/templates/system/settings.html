@@ -53,6 +53,20 @@
   </form>
 </section>
 
+<section class="card medium" aria-labelledby="credit-heading">
+  <h2 id="credit-heading">{% icon "triangle-alert" %}{% translate "Credit warning" %}</h2>
+  <p>{% translate "When Kavenegar's credit is under this level, the campaign list says so, and the notification targets hear it once each time it drops under. The worker checks it every 15 minutes." %}</p>
+  <form method="post" id="credit-form">
+    {% csrf_token %}<input type="hidden" name="section" value="credit">
+    {% if errors.credit %}<div class="field-errors" id="credit-error" role="alert" tabindex="-1" data-autofocus><p class="error">{{ errors.credit }}</p></div>{% endif %}
+    <label for="id_credit_floor">{% translate "Warn under (rials)" %}</label>
+    <input id="id_credit_floor" name="credit_floor" type="text" dir="ltr" inputmode="numeric" maxlength="16" placeholder="5000000"
+           value="{% if post.credit_floor %}{{ post.credit_floor }}{% elif settings.credit_floor is not None %}{{ settings.credit_floor }}{% endif %}"{% if errors.credit %} aria-describedby="credit-error" aria-invalid="true"{% endif %}>
+    <p class="hint">{% translate "Empty: no warning. A send still checks its own estimate against the credit before anything goes out." %}</p>
+    <div class="form-actions"><button type="submit" class="secondary">{% translate "Save" %}</button></div>
+  </form>
+</section>
+
 <section class="card medium" aria-labelledby="defaults-heading">
   <h2 id="defaults-heading">{% icon "clock" %}{% translate "Defaults for new campaigns" %}</h2>
   <form method="post" id="defaults-form">

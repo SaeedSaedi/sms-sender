@@ -49,6 +49,25 @@
   {% if queue.oldest %}<p class="hint">{% translate "The oldest waiting since" %} {{ queue.oldest|jalali }}</p>{% endif %}
 </section>
 
+{% if user|can:"manage_settings" %}
+<section class="card" id="hold" aria-labelledby="hold-title">
+  <div class="card-header"><h2 id="hold-title">{% icon "pause" %}{% translate "Hold all sending" %}</h2><span class="health-state {% if sending_held %}is-bad{% else %}is-ok{% endif %}">{% if sending_held %}{% translate "Held" %}{% else %}{% translate "Not held" %}{% endif %}</span></div>
+  {% if sending_held %}
+    <p>{% translate "Nothing is sent: sends on their way paused, test SMS were cancelled, and new ones are refused, here and from the CLI on this folder." %}</p>
+    <form method="post" action="{% url 'sending_hold' %}" id="release-form" data-confirm="{% translate "Lift the hold? The sends it paused continue from where they stopped, and new sends can start." %}">
+      {% csrf_token %}<input type="hidden" name="action" value="release">
+      <div class="form-actions"><button type="submit">{% icon "play" %}{% translate "Lift the hold" %}</button></div>
+    </form>
+  {% else %}
+    <p>{% translate "For an emergency: sends on their way pause within seconds and wait, test SMS are cancelled, and no send starts, here or from the CLI on this folder, until the hold is lifted. Nobody gets an SMS twice." %}</p>
+    <form method="post" action="{% url 'sending_hold' %}" id="hold-form" data-confirm="{{ hold_confirm }}">
+      {% csrf_token %}<input type="hidden" name="action" value="hold">
+      <div class="form-actions"><button type="submit" class="danger">{% icon "pause" %}{% translate "Hold all sending" %}</button></div>
+    </form>
+  {% endif %}
+</section>
+{% endif %}
+
 <section class="card">
   <h2>{% icon "info" %}{% translate "This installation" %}</h2>
   <dl class="pairs">

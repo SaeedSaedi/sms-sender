@@ -12,6 +12,7 @@ from ..campaigns.present import say
 from ..campaigns.terms import CLI_CAMPAIGN, FOLLOWUPS, NEXT_STEP, STAGES, fill, stop_reason
 from ..jobs.models import Campaign, Job
 from ..jobs.worker import worker_alive
+from ..system import credit
 from ..system.models import SystemSettings
 from . import help as guide
 from .campaigns import CampaignSummary, list_campaigns
@@ -127,6 +128,7 @@ def home(request):
         "attention": attention[:ATTENTION_SHOWN],
         "attention_more": max(0, len(attention) - ATTENTION_SHOWN),
         "worker_alive": worker_alive(),
+        "credit_warning": credit.warning(),
     })
 
 

@@ -12,6 +12,9 @@
 <p class="nav-group">{% translate "Reports and monitoring" %}</p>
 <ul class="nav-list">
   <li><a href="{% url 'analytics' %}"{% if nav_section == "analytics" %} aria-current="true"{% endif %}>{% icon "chart-column" %}<span>{% translate "Analytics" %}</span></a></li>
+  {% if user|can:"reveal_phone" %}
+    <li><a href="{% url 'number_lookup' %}"{% if nav_section == "numbers" %} aria-current="true"{% endif %}>{% icon "search" %}<span>{% translate "Find a number" %}</span></a></li>
+  {% endif %}
   <li><a href="{% url 'status' %}"{% if nav_section == "status" %} aria-current="true"{% endif %}>{% icon "activity" %}<span>{% translate "Service status" %}</span></a></li>
 </ul>
 {% endif %}

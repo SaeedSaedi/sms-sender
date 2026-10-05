@@ -441,9 +441,21 @@ internal, multi-user tool built with Django and HTMX. So far it has:
   one number in so many days, across all campaigns. It's off until an admin
   sets it; the CLI's `--frequency-cap 2/7` does the same;
 - notifications (the CLI's `--notify`, on «تنظیمات سامانه»): Slack, Telegram
-  or a webhook hears how each send ended. The addresses are shown masked, and
-  each has a test button. The same page sets new campaigns' default window
-  and rate;
+  or a webhook hears how each send ended, or why it couldn't start. The
+  addresses are shown masked, and each has a test button. The same page sets
+  new campaigns' default window and rate, and a credit warning level: the
+  worker checks Kavenegar's credit every 15 minutes, the campaign list warns
+  under that level, and the targets hear it once each time it drops under;
+- **hold all sending** (admins, on «وضعیت سرویس‌ها»), the emergency stop:
+  sends on their way pause within seconds, test SMS are cancelled, and
+  nothing starts, from the dashboard or from the CLI on the same folder,
+  until the hold is lifted. Lifting it resumes the sends it paused. Every
+  page shows a banner while it lasts;
+- **find a number** (operators): what every campaign recorded for one
+  number, the CLI's campaigns too: its status, segment, delivery, clicks,
+  how many SMS it got, whether it's on the suppression list, and how close
+  it is to the frequency cap. The number is sent in a POST, and each lookup
+  is in the activity log;
 - campaigns, run from the browser in the spec's stages:
   1. **Settings:** the segment, the template, and what fills each token: a
      fixed value, a column of the segment, or the short link. Then value

@@ -356,6 +356,20 @@ body.has-nav .topbar { display: none; }
   font-weight: 700;
   text-align: center;
 }
+/* All sending is held (an admin's emergency stop): on every page until lifted. */
+.hold-banner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--s-2);
+  padding: .5rem var(--s-4);
+  background: var(--danger-soft);
+  border-block-end: 1px solid var(--danger-border);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-align: center;
+}
 
 .page {
   inline-size: 100%;
@@ -1188,6 +1202,8 @@ button.block { inline-size: 100%; }
 .attention-list li > a, .attention-list .attention-name > a { color: var(--text); text-decoration: none; font-weight: 700; }
 .attention-list li > a:hover, .attention-list .attention-name > a:hover { color: var(--primary); text-decoration: underline; }
 .cell-sub { display: block; color: var(--muted); font-size: var(--fs-xs); font-weight: 400; }
+/* A row that needs someone's eye, e.g. a number sent twice. */
+tr.is-danger > * { background: var(--danger-soft); }
 progress.mini { display: block; inline-size: 8rem; block-size: .4rem; margin-block-start: var(--s-1); }
 
 /* ---------- the campaign settings form ---------- */

@@ -2,6 +2,8 @@
 <h2>{% icon "megaphone" %}{% translate "Send" %}</h2>
 {% if life.paused_by_window and send_reason %}
   <div class="callout callout-warning">{% icon "clock" %}<p>{{ send_reason }}</p></div>
+{% elif active_send.state == "paused" and active_send.result.held %}
+  <div class="callout callout-warning">{% icon "pause" %}<p>{% translate "Paused by the hold on all sending. It continues by itself when an admin lifts the hold." %}</p></div>
 {% endif %}
 {% if active_send %}
   <p class="busy">{{ active_send.get_state_display }}{% if active_send.control == "pause" %} · {% translate "pausing…" %}{% elif active_send.control == "cancel" %} · {% translate "cancelling…" %}{% endif %}</p>
@@ -22,7 +24,7 @@
   {% endwith %}
   {% if user|can:"run_campaigns" %}
     <div class="actions follow-up">
-      {% if active_send.state == "paused" and not life.paused_by_window %}
+      {% if active_send.state == "paused" and not life.paused_by_window and not sending_held %}
         <form method="post" action="{% url 'campaign_action' campaign.slug 'resume' %}" class="inline" id="resume-form">
           {% csrf_token %}<input type="hidden" name="job" value="{{ active_send.pk }}">
           <button type="submit" class="small">{% icon "play" %}{% translate "Resume sending" %}</button>

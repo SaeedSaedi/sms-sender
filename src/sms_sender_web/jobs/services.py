@@ -33,11 +33,69 @@ class JobConflict(Exception):
     """The action can't be done right now. `code` picks the Persian message:
     busy, no_test_number, send_active, test_active, not_approved,
     settings_changed, not_decidable, not_scheduled, send_on_its_way, not_needed,
-    requeue_while_sending."""
+    requeue_while_sending, held."""
 
     def __init__(self, code: str, detail: str = ""):
         super().__init__(detail or code)
         self.code = code
+
+
+# ---------- the hold on all sending (an admin's emergency stop) ----------
+
+def held():
+    """The system settings while all sending is held, else None."""
+    from ..system.models import SystemSettings
+
+    current = SystemSettings.load()
+    return current if current.sending_held_at else None
+
+
+def _refuse_while_held() -> None:
+    if held():
+        raise JobConflict("held")
+
+
+def hold_sending(user) -> int:
+    """Hold all sending: a running send pauses within a heartbeat (marked
+    `result.held`), a running test SMS is cancelled, a waiting one too, and
+    nothing new starts until the hold is lifted. The campaign-DB folder gets
+    the hold's marker, so the CLI there refuses to send too. Returns how many
+    sends were running or waiting. Raises OSError when the marker can't be
+    written (the dashboard's hold stands; the CLI wouldn't see it)."""
+    from sms_sender.sharing import write_hold
+
+    from ..system.models import SystemSettings
+
+    with transaction.atomic():
+        current = SystemSettings.load()
+        if not current.sending_held_at:
+            current.sending_held_at, current.sending_held_by = timezone.now(), user
+            current.save(update_fields=["sending_held_at", "sending_held_by"])
+        for test in Job.objects.filter(kind=Job.Kind.TEST, state__in=ACTIVE):
+            cancel(test)
+        sends = Job.objects.filter(kind=Job.Kind.SEND, state__in=(Job.State.QUEUED, Job.State.RUNNING)).count()
+    write_hold(django_settings.SMS_SENDER_DB_DIR, by=user.get_username())
+    return sends
+
+
+def release_sending(user) -> int:
+    """Lift the hold: the sends it paused go on (nobody gets an SMS twice:
+    each run continues from its campaign DB), and new ones may start.
+    Returns how many were resumed."""
+    from sms_sender.sharing import clear_hold
+
+    from ..system.models import SystemSettings
+
+    with transaction.atomic():
+        current = SystemSettings.load()
+        current.sending_held_at, current.sending_held_by = None, None
+        current.save(update_fields=["sending_held_at", "sending_held_by"])
+        resumed = [job for job in Job.objects.filter(kind=Job.Kind.SEND, state=Job.State.PAUSED)
+                   if (job.result or {}).get("held")]
+        for job in resumed:
+            resume(job)
+    clear_hold(django_settings.SMS_SENDER_DB_DIR)
+    return len(resumed)
 
 
 def settings_hash(campaign: Campaign) -> str:
@@ -192,6 +250,7 @@ def request_test(campaign: Campaign, user, *, parts: int | None = None) -> Job:
     phone = test_phone_of(user)
     if not phone:
         raise JobConflict("no_test_number")
+    _refuse_while_held()
     with transaction.atomic():
         if Job.objects.filter(campaign=campaign, kind=Job.Kind.SEND, state__in=ACTIVE).exists():
             raise JobConflict("send_active")
@@ -230,6 +289,7 @@ def start_send(campaign: Campaign, user, *, at=None, smoke_test: bool = False) -
     cost per SMS goes along, for the credit estimate. `at`: start then
     instead (the worker leaves it queued until that time). `smoke_test`:
     send to one recipient first, and stop if that SMS doesn't go out."""
+    _refuse_while_held()
     test = approval(campaign)
     if test is None:
         latest = latest_test(campaign)
@@ -265,6 +325,7 @@ def unschedule(job: Job) -> Job:
 
 def start_now(job: Job) -> Job:
     """A scheduled send starts now instead of at its time."""
+    _refuse_while_held()
     if not Job.objects.filter(pk=job.pk, state=Job.State.QUEUED, kind=Job.Kind.SEND).update(not_before=None):
         raise JobConflict("not_scheduled")
     job.refresh_from_db()
@@ -295,6 +356,7 @@ def pause(job: Job) -> Job:
 def resume(job: Job) -> Job:
     """Queue a paused job again. The run reconciles `unknown` rows first,
     then continues from the campaign DB: nobody is sent twice."""
+    _refuse_while_held()
     Job.objects.filter(pk=job.pk, state=Job.State.PAUSED).update(
         state=Job.State.QUEUED, control="", finished_at=None,
     )

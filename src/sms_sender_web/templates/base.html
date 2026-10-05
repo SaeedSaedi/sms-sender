@@ -1,4 +1,4 @@
-{% load static i18n roles ui %}<!doctype html>
+{% load static i18n fa roles ui %}<!doctype html>
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="utf-8">
@@ -40,6 +40,9 @@
     </header>
     {% if sandbox %}
       <div class="sandbox-banner" role="region" aria-label="{% translate "Sandbox" %}">{% icon "info" %}<span>{% translate "Sandbox: Kavenegar and the short-link service are simulated, and nothing is sent." %}</span></div>
+    {% endif %}
+    {% if sending_held %}
+      <div class="hold-banner" role="region" aria-label="{% translate "All sending is held" %}" id="hold-banner">{% icon "pause" %}<span>{% translate "All sending is held" %}{% if sending_held.sending_held_by %} · <bdi dir="ltr">{{ sending_held.sending_held_by.get_username }}</bdi>{% endif %} · <span class="num">{{ sending_held.sending_held_at|jalali }}</span>. {% translate "No SMS goes out until an admin lifts the hold on the service status page." %}</span></div>
     {% endif %}
     <main id="main" class="page" tabindex="-1">
       {% block breadcrumbs %}{% endblock %}

@@ -16,6 +16,11 @@
 {% if not worker_alive %}
   <div class="callout callout-error" role="alert">{% icon "circle-alert" %}<p>{% translate "Worker" %}: {% translate "Not running: jobs wait until it starts." %} <a href="{% url 'status' %}">{% translate "Service status" %}</a></p></div>
 {% endif %}
+{% if credit_warning.refused %}
+  <div class="callout callout-error" role="alert" id="credit-warning">{% icon "circle-alert" %}<p>{% translate "Kavenegar refused the account check, so no send can start. Check the key and the account." %} <a href="{% url 'status' %}">{% translate "Service status" %}</a></p></div>
+{% elif credit_warning %}
+  <div class="callout callout-warning" id="credit-warning">{% icon "triangle-alert" %}<p>{% translate "Kavenegar credit is low" %}: <span class="num">{{ credit_warning.credit|fa_number }}</span> {% translate "rials" %}, {% translate "under the warning level of" %} <span class="num">{{ credit_warning.floor|fa_number }}</span>. {% translate "Top up the account before the next send." %} <span class="muted">({% translate "checked" %} <span class="num">{{ credit_warning.checked_at|jalali }}</span>)</span></p></div>
+{% endif %}
 
 {% if campaigns %}
 <ul class="figures overview" aria-label="{% translate "Stages" %}">

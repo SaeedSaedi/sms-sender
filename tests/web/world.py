@@ -93,6 +93,8 @@ PAGES: dict[str, tuple[str, str | None]] = {
     "templates": ("/templates/", "viewer"),
     "template.new": ("/templates/new/", "operator"),
     "status": ("/status/", "viewer"),
+    "status.admin": ("/status/", "admin"),  # the hold on all sending
+    "numbers": ("/numbers/", "operator"),
     "help": ("/help/", "viewer"),
     "account": ("/account/", "operator"),
     "password": ("/password/", "operator"),

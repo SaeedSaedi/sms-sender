@@ -3028,3 +3028,147 @@ msgstr "کمپین هم‌نام آن در خط فرمان سوابقی دارد
 
 msgid "A system admin reads sms-sender.toml, and each profile chosen becomes a draft campaign with its own message and sending settings. Nothing is sent."
 msgstr "مدیر سامانه فایل sms-sender.toml را می‌خواند و هر پروفایلی که انتخاب شود به یک کمپین پیش‌نویس با پیام و تنظیمات ارسال خودش تبدیل می‌شود. هیچ پیامکی ارسال نمی‌شود."
+
+msgid "All sending is held"
+msgstr "همه ارسال‌ها متوقف است"
+
+msgid "No SMS goes out until an admin lifts the hold on the service status page."
+msgstr "تا مدیر سامانه توقف سراسری را در صفحه وضعیت سرویس‌ها برندارد، هیچ پیامکی ارسال نمی‌شود."
+
+msgid "Hold all sending"
+msgstr "توقف سراسری ارسال‌ها"
+
+msgid "Held"
+msgstr "متوقف"
+
+msgid "Not held"
+msgstr "فعال"
+
+msgid "Nothing is sent: sends on their way paused, test SMS were cancelled, and new ones are refused, here and from the CLI on this folder."
+msgstr "هیچ پیامکی ارسال نمی‌شود: ارسال‌های در جریان در توقف موقت‌اند، پیامک‌های آزمایشی لغو شده‌اند و ارسال تازه پذیرفته نمی‌شود، چه در داشبورد و چه از خط فرمان روی همین پوشه."
+
+msgid "Lift the hold? The sends it paused continue from where they stopped, and new sends can start."
+msgstr "توقف سراسری برداشته شود؟ ارسال‌هایی که متوقف شده بودند از همان جایی که ماندند ادامه می‌یابند و ارسال تازه هم ممکن می‌شود."
+
+msgid "Lift the hold"
+msgstr "برداشتن توقف سراسری"
+
+msgid "For an emergency: sends on their way pause within seconds and wait, test SMS are cancelled, and no send starts, here or from the CLI on this folder, until the hold is lifted. Nobody gets an SMS twice."
+msgstr "برای شرایط اضطراری: ارسال‌های در جریان در چند ثانیه موقتاً متوقف می‌شوند و منتظر می‌مانند، پیامک‌های آزمایشی لغو می‌شوند و تا برداشتن توقف هیچ ارسالی آغاز نمی‌شود، نه در داشبورد و نه از خط فرمان روی همین پوشه. هیچ‌کس پیامکی را دو بار دریافت نمی‌کند."
+
+#, python-format
+msgid "Hold all sending? %(n)s sends on their way or waiting stop, and no SMS goes out until the hold is lifted."
+msgstr "همه ارسال‌ها متوقف شوند؟ %(n)s ارسال در جریان یا در انتظار متوقف می‌شود و تا برداشتن توقف هیچ پیامکی ارسال نمی‌شود."
+
+#, python-format
+msgid "The hold is lifted. Sends it paused continue: %(n)s."
+msgstr "توقف سراسری برداشته شد. ارسال‌هایی که متوقف شده بودند ادامه می‌یابند: %(n)s."
+
+msgid "Sending is held on the dashboard, but the CLI's folder couldn't be marked: tell whoever sends from the command line. The details are in the system log."
+msgstr "ارسال‌ها در داشبورد متوقف شدند، اما پوشه خط فرمان علامت‌گذاری نشد: به کسی که از خط فرمان ارسال می‌کند خبر دهید. جزئیات در گزارش سامانه ثبت شده است."
+
+#, python-format
+msgid "All sending is held. Sends on their way pause within seconds: %(n)s."
+msgstr "همه ارسال‌ها متوقف شدند. ارسال‌های در جریان در چند ثانیه موقتاً متوقف می‌شوند: %(n)s."
+
+msgid "All sending held"
+msgstr "توقف سراسری ارسال‌ها"
+
+msgid "Hold on sending lifted"
+msgstr "برداشتن توقف سراسری ارسال‌ها"
+
+msgid "{count} sends stopped"
+msgstr "{count} ارسال متوقف شد"
+
+msgid "{count} sends continued"
+msgstr "{count} ارسال ادامه یافت"
+
+msgid "All sending is held by an admin. It can start again once the hold is lifted."
+msgstr "مدیر سامانه همه ارسال‌ها را متوقف کرده است. پس از برداشتن توقف سراسری می‌توان دوباره شروع کرد."
+
+msgid "Paused by the hold on all sending. It continues by itself when an admin lifts the hold."
+msgstr "با توقف سراسری ارسال‌ها موقتاً متوقف شده است. وقتی مدیر سامانه توقف را بردارد، خودبه‌خود ادامه می‌یابد."
+
+msgid "What every campaign recorded for one number, the CLI's campaigns too. Nothing is sent or changed."
+msgstr "آنچه هر کمپین، از جمله کمپین‌های خط فرمان، درباره یک شماره ثبت کرده است. چیزی ارسال یا تغییر داده نمی‌شود."
+
+msgid "That isn't a mobile number. Write it like 09121234567."
+msgstr "این شماره موبایل نیست. آن را مانند ۰۹۱۲۱۲۳۴۵۶۷ بنویسید."
+
+msgid "The number isn't kept in the address or the access log; each lookup is recorded in the activity log."
+msgstr "شماره در نشانی صفحه یا گزارش دسترسی ثبت نمی‌شود؛ هر جست‌وجو در سابقه فعالیت‌ها ثبت می‌شود."
+
+msgid "SMS accepted"
+msgstr "پیامک پذیرفته‌شده"
+
+msgid "Campaigns that sent to it"
+msgstr "کمپین‌هایی که به آن ارسال کرده‌اند"
+
+msgid "Toward the frequency cap"
+msgstr "شمارش در سقف ارسال"
+
+msgid "It got more than one SMS from one campaign:"
+msgstr "از یک کمپین بیش از یک پیامک دریافت کرده است:"
+
+msgid "No campaign has this number"
+msgstr "هیچ کمپینی این شماره را ندارد"
+
+msgid "No campaign sent it an SMS or has it in a list."
+msgstr "هیچ کمپینی به آن پیامک نفرستاده یا آن را در فهرستی ندارد."
+
+msgid "On the suppression list:"
+msgstr "در فهرست عدم ارسال:"
+
+msgid "every campaign"
+msgstr "همه کمپین‌ها"
+
+msgid "Its record in each campaign"
+msgstr "سابقه آن در هر کمپین"
+
+msgid "Sent"
+msgstr "زمان ارسال"
+
+msgid "Test SMS only"
+msgstr "فقط پیامک آزمایشی"
+
+msgid "A call isn't settled yet"
+msgstr "نتیجه یک درخواست هنوز روشن نیست"
+
+msgid "test"
+msgstr "آزمایشی"
+
+msgid "Number looked up across campaigns"
+msgstr "جست‌وجوی شماره در کمپین‌ها"
+
+msgid "Kavenegar refused the account check, so no send can start. Check the key and the account."
+msgstr "کاوه‌نگار بررسی حساب را نپذیرفت، پس هیچ ارسالی آغاز نمی‌شود. کلید و حساب را بررسی کنید."
+
+msgid "Kavenegar credit is low"
+msgstr "اعتبار کاوه‌نگار کم است"
+
+msgid "under the warning level of"
+msgstr "کمتر از سطح هشدار"
+
+msgid "Top up the account before the next send."
+msgstr "پیش از ارسال بعدی، حساب را شارژ کنید."
+
+msgid "checked"
+msgstr "بررسی‌شده در"
+
+msgid "Credit warning"
+msgstr "هشدار اعتبار"
+
+msgid "When Kavenegar's credit is under this level, the campaign list says so, and the notification targets hear it once each time it drops under. The worker checks it every 15 minutes."
+msgstr "وقتی اعتبار کاوه‌نگار کمتر از این مقدار باشد، فهرست کمپین‌ها هشدار می‌دهد و مقصدهای اعلان‌ها هر بار که اعتبار به زیر آن برسد یک بار باخبر می‌شوند. اجراکننده کارها هر ۱۵ دقیقه آن را بررسی می‌کند."
+
+msgid "Warn under (rials)"
+msgstr "هشدار در کمتر از (ریال)"
+
+msgid "Empty: no warning. A send still checks its own estimate against the credit before anything goes out."
+msgstr "خالی: بدون هشدار. هر ارسال باز هم پیش از ارسال هر پیامکی، برآورد هزینه خودش را با اعتبار می‌سنجد."
+
+msgid "Write the credit in rials, digits only, or leave it empty for no warning."
+msgstr "اعتبار را به ریال و فقط با رقم بنویسید، یا برای نداشتن هشدار خالی بگذارید."
+
+msgid "credit warning: from {before} to {after}"
+msgstr "هشدار اعتبار: از {before} به {after}"

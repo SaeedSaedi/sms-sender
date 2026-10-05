@@ -61,11 +61,14 @@ ACTION_LABELS = {
     "campaign_purged": _("Campaign and its records deleted"),
     "campaign_adopted": _("CLI campaign brought to the dashboard"),
     "campaign_imported": _("Campaign made from a CLI profile"),
+    "sending_held": _("All sending held"),
+    "sending_released": _("Hold on sending lifted"),
     "job_requested": _("Update requested"),
     "job_paused": _("Paused"),
     "job_resumed": _("Resumed"),
     "job_cancelled": _("Cancelled"),
     "phone_revealed": _("Phone number shown"),
+    "number_looked_up": _("Number looked up across campaigns"),
     "report_downloaded": _("Report downloaded"),
 }
 # Which download, for "report_downloaded".
@@ -111,6 +114,11 @@ def describe(event) -> str:
         cap = d["frequency_cap"]
         return format_html(gettext_now("frequency cap: from {before} to {after}"),
                            before=_who(cap.get("before", "")), after=_who(cap.get("after", "")))
+    if event.action == "system_settings_changed" and d.get("credit_floor"):
+        floor = d["credit_floor"]
+        shown = {k: fa_number(v) if isinstance(v, int) else "—" for k, v in floor.items()}
+        return format_html(gettext_now("credit warning: from {before} to {after}"),
+                           before=shown.get("before", "—"), after=shown.get("after", "—"))
     if event.action == "api_called":
         return format_html("{} · {}", _who(d.get("path", "")), fa_number(d.get("rows", 0)))
     if event.action == "conversions_imported":
@@ -126,6 +134,10 @@ def describe(event) -> str:
         return format_html(gettext_now("backup {name}"), name=_who(d.get("backup", "")))
     if event.action == "campaign_duplicated":
         return format_html(gettext_now("from {source}"), source=_who(d.get("source", "")))
+    if event.action == "sending_held" and d.get("sends") is not None:
+        return format_html(gettext_now("{count} sends stopped"), count=fa_number(d["sends"]))
+    if event.action == "sending_released":
+        return format_html(gettext_now("{count} sends continued"), count=fa_number(d.get("resumed", 0)))
     if event.action == "campaign_imported":
         return format_html(gettext_now("from profile {profile}"), profile=_who(d.get("profile", "")))
     if event.action == "segment_switched":
@@ -149,7 +161,7 @@ def describe(event) -> str:
         return format_html(gettext_now("{count} numbers"), count=fa_number(d.get("count", 0)))
     if event.action == "report_downloaded":
         return str(DOWNLOADS.get(d.get("kind"), d.get("kind", "")))
-    if event.action in ("suppression_removed", "test_number_changed", "phone_revealed"):
+    if event.action in ("suppression_removed", "test_number_changed", "phone_revealed", "number_looked_up"):
         return _who(fa_digits(mask_phone(d.get("phone", "")))) if d.get("phone") else ""
     if event.action in ("job_requested", "job_paused", "job_resumed", "job_cancelled"):
         return str(Job.Kind(d["kind"]).label) if d.get("kind") in Job.Kind.values else ""
