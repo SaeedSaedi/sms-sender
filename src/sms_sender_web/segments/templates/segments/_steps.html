@@ -1,0 +1,9 @@
+{% load i18n fa ui %}
+<ol class="stepper stepper-3" aria-label="{% translate "Steps" %}">
+  {% for n, label in segment_steps %}
+    <li class="{% if n < step %}is-done{% elif n == step %}is-current{% else %}is-todo{% endif %}"{% if n == step %} aria-current="step"{% endif %}>
+      <span class="stepper-n" aria-hidden="true">{% if n < step %}{% icon "check" %}{% else %}{{ n|fa_number }}{% endif %}</span>
+      <span class="stepper-label">{{ label }}{% if n < step %}<span class="visually-hidden"> ({% translate "Done" %})</span>{% endif %}</span>
+    </li>
+  {% endfor %}
+</ol>

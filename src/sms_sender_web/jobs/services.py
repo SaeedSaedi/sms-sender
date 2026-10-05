@@ -45,6 +45,13 @@ def settings_hash(campaign: Campaign) -> str:
     approved = {key: s.get(key) for key in APPROVED_SETTINGS}
     if approved.get("links"):
         approved["links"] = {k: v for k, v in approved["links"].items() if k != "expiry_days"}
+    # A replaced segment file is another list. (Only once it has been: older
+    # approvals keep their hash.)
+    from ..segments.models import Segment
+
+    version = Segment.objects.filter(slug=s.get("segment")).values_list("version", flat=True).first()
+    if version:
+        approved["segment_version"] = version
     return hashlib.sha256(json.dumps(approved, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 

@@ -34,6 +34,31 @@ def clean_slug(slug: str) -> str:
     return slug
 
 
+class ReplaceForm(forms.Form):
+    """Just the file: what an upload checks."""
+    file = forms.FileField()
+
+    def clean(self):
+        data = super().clean()
+        upload = data.get("file")
+        if upload is None:
+            return data
+        if Path(upload.name).suffix.lower() not in (".csv", ".txt"):
+            self.add_error("file", _("Upload a CSV or TXT file. In Excel, use “Save as” → “CSV UTF-8”."))
+            return data
+        if upload.size > files.MAX_BYTES:
+            self.add_error("file", UPLOAD_ERRORS["too_big"])
+            return data
+        raw = upload.read()
+        try:
+            data["table"] = files.parse(raw)
+        except files.UploadError as e:
+            self.add_error("file", UPLOAD_ERRORS[e.code])
+            return data
+        data["raw"] = raw
+        return data
+
+
 class UploadForm(forms.Form):
     name = forms.CharField(max_length=200, required=False)
     slug = forms.CharField(max_length=64, required=False)

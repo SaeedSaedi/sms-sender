@@ -26,6 +26,9 @@ class Segment(models.Model):
     user_id_column = models.CharField(max_length=200, blank=True)
     token_columns = models.JSONField(default=list, blank=True)
     summary = models.JSONField(default=dict, blank=True)
+    # Raised each time the file is replaced: approvals of campaigns using
+    # this segment cover the list as it was (jobs.services.settings_hash).
+    version = models.PositiveIntegerField(default=0)
     uploaded_by = models.ForeignKey(
         django_settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
         related_name="+",

@@ -1116,6 +1116,13 @@ class StateStore:
         """Whether an SMS may have gone out to anyone in this campaign."""
         return self._conn().execute(_MAY_HAVE_SENT_SQL, MAY_HAVE_SENT).fetchone() is not None
 
+    def segment_may_have_sent(self, segment: str) -> bool:
+        """Whether an SMS may have gone out to anyone who came with `segment`."""
+        marks = ", ".join("?" * len(MAY_HAVE_SENT))
+        return self._conn().execute(
+            f"SELECT 1 FROM recipients WHERE segment = ? AND status IN ({marks}) LIMIT 1", (segment, *MAY_HAVE_SENT),
+        ).fetchone() is not None
+
     def counts(self) -> dict[str, int]:
         rows = self._conn().execute(
             "SELECT status, COUNT(*) AS n FROM recipients GROUP BY status"

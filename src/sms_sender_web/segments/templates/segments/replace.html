@@ -1,0 +1,31 @@
+{% extends "base.html" %}{% load i18n ui %}
+{% block title %}{% translate "Replace the file" %} · {{ segment.name }}{% endblock %}
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="{% translate "Breadcrumb" %}"><ol>
+  <li><a href="{% url 'segment_list' %}">{% translate "Segments" %}</a></li>
+  <li><a href="{% url 'segment_detail' segment.slug %}"><bdi>{{ segment.name }}</bdi></a></li>
+  <li aria-current="page">{% translate "Replace the file" %}</li>
+</ol></nav>
+{% endblock %}
+{% block content %}
+<section class="card medium">
+  <h1>{% translate "Replace the file" %}</h1>
+  <p>{% translate "The new file goes through the columns step again. Until then, campaigns can't use this segment." %}</p>
+  {% if used_by %}
+    <div class="callout callout-warning">{% icon "triangle-alert" %}
+      <p>{% translate "These campaigns use it and will need a new test SMS:" %} {% for campaign in used_by %}<a href="{% url 'campaign_detail' campaign.slug %}"><bdi>{{ campaign.name }}</bdi></a>{% if not forloop.last %}، {% endif %}{% endfor %}</p>
+    </div>
+  {% endif %}
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <label for="id_file">{% translate "File" %}</label>
+    <div class="file-field">
+      <input id="id_file" name="file" type="file" class="file-input" accept=".csv,.txt,text/csv,text/plain" required{% aria form.file %}>
+      <label for="id_file" class="button secondary file-button" aria-hidden="true">{% icon "file-up" %}{% translate "Choose a file" %}</label>
+      <span class="file-name" aria-live="polite" data-empty="{% translate "No file chosen" %}">{% translate "No file chosen" %}</span>
+    </div>
+    {% field_errors form.file %}
+    <button type="submit">{% icon "upload" %}{% translate "Upload" %}</button>
+  </form>
+</section>
+{% endblock %}
