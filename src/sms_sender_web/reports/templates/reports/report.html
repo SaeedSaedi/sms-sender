@@ -30,12 +30,13 @@
       <li class="badge status-{{ status }}">{{ status|status_label }} <span class="num">{{ n|fa_number }}</span></li>
     {% endif %}{% endwith %}{% endfor %}
   </ul>
+  <p class="hint"><a href="{% url 'help' %}#statuses">{% translate "What does each status mean?" %}</a></p>
   {% if delivery %}
     <h3>{% translate "Delivery of accepted SMS" %}</h3>
     <ul class="badges">
       {% for label, n in delivery %}<li class="badge">{{ label }} <span class="num">{{ n|fa_number }}</span></li>{% endfor %}
     </ul>
-    <p class="hint">{% translate "Kavenegar reports delivery only for 48 hours after sending." %}</p>
+    <p class="hint">{% translate "Kavenegar reports delivery only for 48 hours after sending." %} <a href="{% url 'help' %}#delivery">{% translate "What does each delivery status mean?" %}</a></p>
   {% endif %}
 </section>
 

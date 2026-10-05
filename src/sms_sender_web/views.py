@@ -29,6 +29,7 @@ _SECTIONS = {
     "users": "users", "audit_log": "activity", "my_account": "account", "password_change": "account",
     "template_list": "templates", "template_new": "templates", "template_edit": "templates",
     "analytics": "analytics", "campaign_duplicate": "campaigns", "api_tokens": "api", "system_settings": "system", "backups": "backups",
+    "help": "help",
 }
 
 

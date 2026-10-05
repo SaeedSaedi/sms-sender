@@ -949,3 +949,18 @@ details.schedule .field-grid { max-inline-size: 24rem; }
 }
 .token-buttons { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-block-end: var(--s-2); }
 .token-buttons button { margin: 0; }
+
+/* ---------- the help page (plan 05, P6) ---------- */
+
+.toc { margin-block-end: var(--s-5); padding-block: var(--s-4); }
+.toc ul { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-5); margin: 0; padding: 0; list-style: none; }
+.toc a { display: inline-block; min-block-size: 1.5rem; }
+.help { scroll-margin-block-start: var(--s-4); }
+.help-steps { margin: 0; padding-inline-start: var(--s-6); list-style-type: persian; }
+.help-steps li + li { margin-block-start: var(--s-3); }
+.help-steps p { margin: 0; color: var(--text-2); }
+.terms { display: grid; gap: var(--s-3); margin: 0; }
+.terms > div { display: grid; grid-template-columns: minmax(8rem, 12rem) 1fr; gap: var(--s-1) var(--s-4); align-items: baseline; }
+.terms dt { font-weight: 650; }
+.terms dd { margin: 0; color: var(--text-2); }
+@media (max-width: 640px) { .terms > div { grid-template-columns: 1fr; } }

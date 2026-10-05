@@ -2,14 +2,18 @@ from collections import defaultdict
 
 from django.shortcuts import render
 
+from sms_sender.window import DEFAULT_WINDOW
+
 from ..accounts.decorators import requires
 from ..campaigns.lifecycle import (
     AWAITING, CANCELLED, COMPLETED, PAUSED, SCHEDULED, SENDING, STOPPED, lifecycle,
 )
 from ..campaigns.present import say
-from ..campaigns.terms import CLI_CAMPAIGN, FOLLOWUPS, NEXT_STEP, STAGES, stop_reason
+from ..campaigns.terms import CLI_CAMPAIGN, FOLLOWUPS, NEXT_STEP, STAGES, fill, stop_reason
 from ..jobs.models import Campaign, Job
 from ..jobs.worker import worker_alive
+from ..system.models import SystemSettings
+from . import help as guide
 from .campaigns import CampaignSummary, list_campaigns
 from .terms import STATUS_ORDER
 
@@ -78,4 +82,21 @@ def home(request):
         "tiles": [(STAGES[stage], n, stage) for stage, n in tiles.items()],
         "attention": attention,
         "worker_alive": worker_alive(),
+    })
+
+
+@requires("view_campaigns")
+def help_page(request):
+    """The short in-app help: the steps, the rules every send keeps, what each
+    status and button means, and the roles."""
+    start, _sep, end = (SystemSettings.load().default_send_window or DEFAULT_WINDOW).partition("-")
+    return render(request, "dashboard/help.html", {
+        "steps": guide.steps(),
+        "rules": [fill(rule, {"start": start, "end": end}) for rule in guide.RULES],
+        "statuses": guide.statuses(),
+        "deliveries": guide.deliveries(),
+        "actions": guide.ACTIONS,
+        "stops": guide.STOPS,
+        "roles": guide.roles(),
+        "two_step": guide.TWO_STEP,
     })

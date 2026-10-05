@@ -11,6 +11,7 @@
   {% endif %}
   {% if user|can:"view_campaigns" %}
     <li><a href="{% url 'status' %}"{% if nav_section == "status" %} aria-current="true"{% endif %}>{% icon "activity" %}<span>{% translate "Service status" %}</span></a></li>
+    <li><a href="{% url 'help' %}"{% if nav_section == "help" %} aria-current="true"{% endif %}>{% icon "circle-question-mark" %}<span>{% translate "Help" %}</span></a></li>
   {% endif %}
 </ul>
 {% if user|can:"manage_users" or user|can:"view_audit_log" or user|can:"manage_settings" %}

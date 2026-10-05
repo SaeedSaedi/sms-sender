@@ -1,0 +1,76 @@
+{% extends "base.html" %}{% load i18n ui %}
+{% block title %}{% translate "Help" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{% translate "Help" %}</h1>
+    <p class="page-meta">{% translate "How a campaign goes, what each status means, and the rules that keep anyone from getting an SMS twice." %}</p>
+  </div>
+</header>
+
+<nav class="card toc" aria-label="{% translate "On this page" %}">
+  <ul>
+    <li><a href="#steps">{% translate "Steps" %}</a></li>
+    <li><a href="#rules">{% translate "Rules every send keeps" %}</a></li>
+    <li><a href="#statuses">{% translate "Status" %}</a></li>
+    <li><a href="#delivery">{% translate "Delivery" %}</a></li>
+    <li><a href="#actions">{% translate "Buttons" %}</a></li>
+    <li><a href="#stops">{% translate "When sending stops" %}</a></li>
+    <li><a href="#roles">{% translate "Roles" %}</a></li>
+  </ul>
+</nav>
+
+<section class="card step help" id="steps" aria-labelledby="steps-title">
+  <h2 id="steps-title">{% icon "list-checks" %}{% translate "A campaign's five steps" %}</h2>
+  <ol class="help-steps">
+    {% for name, text in steps %}<li><strong>{{ name }}</strong><p>{{ text }}</p></li>{% endfor %}
+  </ol>
+</section>
+
+<section class="card step help" id="rules" aria-labelledby="rules-title">
+  <h2 id="rules-title">{% icon "shield-check" %}{% translate "Rules every send keeps" %}</h2>
+  <ul class="plain">
+    {% for rule in rules %}<li>{{ rule }}</li>{% endfor %}
+  </ul>
+</section>
+
+<section class="card step help" id="statuses" aria-labelledby="statuses-title">
+  <h2 id="statuses-title">{% icon "users" %}{% translate "Status" %}</h2>
+  <p>{% translate "The outcome of handing each recipient's SMS to Kavenegar." %}</p>
+  <dl class="terms">
+    {% for status, label, text in statuses %}<div><dt><span class="badge status-{{ status }}">{{ label }}</span></dt><dd>{{ text }}</dd></div>{% endfor %}
+  </dl>
+</section>
+
+<section class="card step help" id="delivery" aria-labelledby="delivery-title">
+  <h2 id="delivery-title">{% icon "inbox" %}{% translate "Delivery" %}</h2>
+  <p>{% translate "Whether an accepted SMS reached the phone, as Kavenegar reports it." %}</p>
+  <dl class="terms">
+    {% for label, text in deliveries %}<div><dt>{{ label }}</dt><dd>{{ text }}</dd></div>{% endfor %}
+  </dl>
+</section>
+
+<section class="card step help" id="actions" aria-labelledby="actions-title">
+  <h2 id="actions-title">{% icon "play" %}{% translate "Buttons" %}</h2>
+  <dl class="terms">
+    {% for label, text in actions %}<div><dt>{{ label }}</dt><dd>{{ text }}</dd></div>{% endfor %}
+  </dl>
+</section>
+
+<section class="card step help" id="stops" aria-labelledby="stops-title">
+  <h2 id="stops-title">{% icon "pause" %}{% translate "When sending stops" %}</h2>
+  <dl class="terms">
+    {% for label, text in stops %}<div><dt>{{ label }}</dt><dd>{{ text }}</dd></div>{% endfor %}
+  </dl>
+</section>
+
+<section class="card step help" id="roles" aria-labelledby="roles-title">
+  <h2 id="roles-title">{% icon "user-cog" %}{% translate "Roles" %}</h2>
+  <dl class="terms">
+    {% for label, text in roles %}<div><dt>{{ label }}</dt><dd>{{ text }}</dd></div>{% endfor %}
+  </dl>
+  <p class="hint">{{ two_step }}</p>
+</section>
+
+<p class="muted">{% translate "Something unclear, or a send that won't continue? Ask a system admin." %}</p>
+{% endblock %}

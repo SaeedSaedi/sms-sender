@@ -21,14 +21,14 @@
   <div class="table-wrap" tabindex="0" role="region" aria-label="{% translate "API tokens" %}">
     <table class="table-stack">
       <thead><tr>
-        <th scope="col">{% translate "Name" %}</th><th scope="col">{% translate "Token" %}</th>
+        <th scope="col">{% translate "Name" %}</th><th scope="col">{% translate "API token" %}</th>
         <th scope="col">{% translate "Issued" %}</th><th scope="col">{% translate "Last used" %}</th><th scope="col"></th>
       </tr></thead>
       <tbody>
       {% for t in tokens %}
         <tr>
           <th scope="row"><bdi>{{ t.name }}</bdi></th>
-          <td data-label="{% translate "Token" %}"><code dir="ltr">{{ t.prefix }}…</code></td>
+          <td data-label="{% translate "API token" %}"><code dir="ltr">{{ t.prefix }}…</code></td>
           <td data-label="{% translate "Issued" %}">{{ t.created_at|jalali }}{% if t.created_by %} · {{ t.created_by.get_username|ltr }}{% endif %}</td>
           <td data-label="{% translate "Last used" %}">{% if t.last_used_at %}{{ t.last_used_at|jalali }}{% else %}—{% endif %}</td>
           <td data-label="">

@@ -53,6 +53,7 @@
       <li class="badge status-{{ status }}">{{ status|status_label }} <span class="num">{{ n|fa_number }}</span></li>
     {% endif %}{% endwith %}{% endfor %}
   </ul>
+  <p class="hint"><a href="{% url 'help' %}#statuses">{% translate "What does each status mean?" %}</a></p>
   {% if user|can:"update_campaigns" %}
     <div class="actions follow-up">
       <form method="post" action="{% url 'campaign_action' campaign.slug 'reconcile' %}" class="inline" id="reconcile-form">
