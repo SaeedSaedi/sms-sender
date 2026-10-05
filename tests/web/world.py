@@ -86,6 +86,7 @@ PAGES: dict[str, tuple[str, str | None]] = {
     "campaign.draft": ("/campaigns/draft-1/", "operator"),
     "report": ("/reports/completed/", "viewer"),
     "analytics": ("/analytics/", "viewer"),
+    "api.tokens": ("/api-tokens/", "admin"),
     "templates": ("/templates/", "viewer"),
     "template.new": ("/templates/new/", "operator"),
     "status": ("/status/", "viewer"),

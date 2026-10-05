@@ -13,11 +13,14 @@
     <li><a href="{% url 'status' %}"{% if nav_section == "status" %} aria-current="true"{% endif %}>{% icon "activity" %}<span>{% translate "Service status" %}</span></a></li>
   {% endif %}
 </ul>
-{% if user|can:"manage_users" or user|can:"view_audit_log" %}
+{% if user|can:"manage_users" or user|can:"view_audit_log" or user|can:"manage_settings" %}
   <p class="nav-group">{% translate "Administration" %}</p>
   <ul class="nav-list">
     {% if user|can:"manage_users" %}
       <li><a href="{% url 'users' %}"{% if nav_section == "users" %} aria-current="true"{% endif %}>{% icon "user-cog" %}<span>{% translate "Users" %}</span></a></li>
+    {% endif %}
+    {% if user|can:"manage_settings" %}
+      <li><a href="{% url 'api_tokens' %}"{% if nav_section == "api" %} aria-current="true"{% endif %}>{% icon "lock" %}<span>{% translate "API tokens" %}</span></a></li>
     {% endif %}
     {% if user|can:"view_audit_log" %}
       <li><a href="{% url 'audit_log' %}"{% if nav_section == "activity" %} aria-current="true"{% endif %}>{% icon "history" %}<span>{% translate "Activity log" %}</span></a></li>

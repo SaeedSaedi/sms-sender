@@ -2331,3 +2331,63 @@ msgstr "{n} گیرنده به یک گروه مخاطبان تازه تبدیل �
 
 msgid "{segment}: {count}"
 msgstr "{segment}: {count}"
+
+msgid "API token issued"
+msgstr "صدور توکن API"
+
+msgid "API token revoked"
+msgstr "باطل کردن توکن API"
+
+msgid "API tokens"
+msgstr "توکن‌های API"
+
+msgid "Attribution API called"
+msgstr "فراخوانی API انتساب"
+
+msgid "Copy the token now: it's shown only this once. Only a fingerprint of it is kept."
+msgstr "توکن را همین حالا کپی کنید: فقط همین یک بار نمایش داده می‌شود و تنها اثر انگشتی از آن نگه داشته می‌شود."
+
+msgid "For the company's own systems to read attribution: which recipient each link's r belongs to, by user ID, with delivery and clicks. Never a phone number. Every call is recorded in the activity log."
+msgstr "برای سامانه‌های خود شرکت، جهت خواندن انتساب: مقدار r هر لینک به کدام گیرنده تعلق دارد، با شناسه کاربر، وضعیت تحویل و کلیک‌ها. هرگز شماره تلفن. هر فراخوانی در سابقه فعالیت‌ها ثبت می‌شود."
+
+msgid "Issue"
+msgstr "صدور"
+
+msgid "Issue a token"
+msgstr "صدور توکن"
+
+msgid "Issue one for each system that reads attribution."
+msgstr "برای هر سامانه‌ای که انتساب را می‌خواند یک توکن صادر کنید."
+
+msgid "Issued"
+msgstr "صادرشده"
+
+msgid "Last used"
+msgstr "آخرین استفاده"
+
+msgid "Name the system that will use the token."
+msgstr "نام سامانه‌ای را که از توکن استفاده می‌کند بنویسید."
+
+msgid "No tokens yet"
+msgstr "هنوز توکنی نیست"
+
+msgid "Revoke"
+msgstr "باطل کردن"
+
+msgid "Revoke this token? Systems using it can't read attribution any more."
+msgstr "این توکن باطل شود؟ سامانه‌هایی که از آن استفاده می‌کنند دیگر نمی‌توانند انتساب را بخوانند."
+
+msgid "Revoked"
+msgstr "باطل‌شده"
+
+msgid "Send it as “Authorization: Bearer <token>” to /api/v1/campaigns/ and /api/v1/campaigns/<short name>/attribution/."
+msgstr "آن را به صورت «Authorization: Bearer <token>» به /api/v1/campaigns/ و /api/v1/campaigns/<short name>/attribution/ بفرستید."
+
+msgid "The token is revoked. Calls with it are refused from now on."
+msgstr "توکن باطل شد. از این پس فراخوانی‌ها با آن پذیرفته نمی‌شود."
+
+msgid "Token"
+msgstr "توکن"
+
+msgid "Which system uses it"
+msgstr "کدام سامانه از آن استفاده می‌کند"

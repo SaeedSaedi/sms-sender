@@ -377,6 +377,12 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
     Each download records `report_downloaded`, with the filters (never a number).
   - `/status/` asks Kavenegar (`account_info` / `account_config`) and Shlink (`health`) live, on every view.
   - Worker liveness is `jobs.WorkerBeat`: written every idle loop and with each job heartbeat. `worker_alive()` means seen within 60 s.
+- **The attribution API (`api/`, plan 05 decision 8):**
+  - Read only: `GET /api/v1/campaigns/` and `/api/v1/campaigns/<slug>/attribution/?page=N`. The rows are `clicks.attribution_rows`, 1,000 a page, never a phone number.
+  - `api_view` makes a view `@login_not_required`, CSRF-exempt, never cached and GET only. It checks `Authorization: Bearer <token>` on every call: 401 with `WWW-Authenticate`, else the view.
+  - Tokens (`api.tokens`): `smsk_` + 43 random characters, shown once. Only the SHA-256 is stored (`ApiToken.digest`), with its first 10 characters as `prefix`. They're revoked, never deleted.
+  - Admins (`manage_settings`) issue and revoke them on `/api-tokens/`.
+  - Every call records `api_called` with `username="api:<token name>"`.
 - **Sandbox (`jobs/sandbox.py`, `SMS_SENDER_SANDBOX=1`):**
   - `Engine.sender()`, `Engine.link_client()` and `Engine.runner()` return `SandboxKavenegar` / `SandboxShlink`. `make_runner(make_sender=SandboxKavenegar)` builds the simulated sender, so no API key is read and no request is made. It reports each call to `on_attempt` like the real one (accepted / rejected / unknown), so `check-sends` works on sandbox campaigns.
   - `settings.DATA_DIR` becomes `<data>/sandbox`, the app DB included. A worker not in sandbox mode reads another DB and can't see a sandbox job.

@@ -51,6 +51,7 @@ where = ["src"]
 sms_sender_web = [
     "templates/**/*",
     "accounts/templates/**/*",
+    "api/templates/**/*",
     "audit/templates/**/*",
     "campaigns/templates/**/*",
     "reports/templates/**/*",

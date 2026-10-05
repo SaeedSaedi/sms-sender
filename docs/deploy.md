@@ -103,6 +103,18 @@ public internet.
 
 The containers call out to `api.kavenegar.com` and the Shlink host over HTTPS.
 
+### The attribution API
+
+The company's backend can read attribution over the same address:
+`GET /api/v1/campaigns/` and `GET /api/v1/campaigns/<slug>/attribution/?page=N`
+(JSON, 1,000 rows a page).
+- Each call needs `Authorization: Bearer <token>`.
+- An admin issues tokens on «توکن‌های API» (API tokens) in the dashboard. A token is shown once; only its SHA-256 is stored, so it can't be recovered from the database. It can be revoked there.
+- The answers never hold a phone number: `r`, user ID, segment, short link, accepted at, delivery and clicks.
+- Every call is recorded in the activity log, with the token's name.
+
+Give the backend NetBird access to the dashboard's port like a person's. The API is read only and sends nothing.
+
 ## First start
 
 ```bash
