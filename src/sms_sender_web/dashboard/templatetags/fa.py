@@ -17,7 +17,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 
 from ...privacy import mask_phone as _mask_phone
-from ..terms import DELIVERY_STATUS, SUBMISSION_STATUS
+from ..terms import DELIVERY_STATUS, STATUS_TONE, SUBMISSION_STATUS
 
 register = template.Library()
 
@@ -89,6 +89,12 @@ def mask_phone(value) -> str:
 @register.filter
 def status_label(status: str) -> str:
     return SUBMISSION_STATUS.get(status, status)
+
+
+@register.filter
+def status_tone(status: str) -> str:
+    """success / info / warning / danger / neutral, for bars and legends."""
+    return STATUS_TONE.get(status, "neutral")
 
 
 @register.filter

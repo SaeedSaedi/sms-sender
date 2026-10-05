@@ -37,6 +37,8 @@ def test_only_what_applies_shows(world, open_as):
     expect(value).to_be_hidden()
     expect(column).to_be_visible()
     expect(page.get_by_label(fa("Pattern"), exact=True)).to_be_hidden()
+    # token3 isn't in the template's text: it waits with the other unused ones.
+    page.get_by_text(fa("Tokens the template's text doesn't use")).click()
     source(page, "token3", "The short link")
     page.get_by_label(fa("A pattern, when the text has part of the address")).check()
     expect(page.get_by_label(fa("Pattern"), exact=True)).to_be_visible()

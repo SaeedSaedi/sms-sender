@@ -464,7 +464,23 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - **Engine:** `jobs/engine.Engine` builds the CLI's runner from `Campaign.settings` (`make_runner(reporter=JobReporter, install_signal_handlers=False)`); tests swap in fakes. The approval test isn't part of a send job; it becomes its own dashboard step.
   - **Scheduler:** `Worker.schedule` queues delivery updates while sent rows are under 48 h old, and click updates for 14 days.
   - **One worker process only** (with its two lanes). Test DBs are files, not shared-memory SQLite (`settings_test`), because the heartbeat and lane threads write concurrently.
-- **Design system ([app.css](src/sms_sender_web/static/css/app.css), plan 05 P1):**
+- **Design system v2 ([app.css](src/sms_sender_web/static/css/app.css), the review's R3):** an operations console, calm and status-first. It's built on v1 (P1, below), and v1's class names still work.
+  - **Shell:** a deep-navy full-height sidebar (`--nav-*` tokens). Its groups are: SMS sending; reports and monitoring; administration. Help sits by the user. The active item is `[aria-current]`, any value.
+  - **`.figures`** is a stat strip: one panel whose items share the width (`flex: 1 1 8rem`), so a short row never leaves a lonely box. Clickable figures are `ul.figures > li > a.figure-link` with `.figure-label` / `.figure-value`, never links inside a `<dl>`.
+  - **Status at a glance:**
+    - `.statusbar` holds one `<span class="sb-<tone>" style="flex-grow: N">` per status (`status|status_tone`, `dashboard/terms.STATUS_TONE`), `aria-hidden`;
+    - beside it, `.legend` gives every status's name and count, so the numbers are always in text.
+  - **Campaign page** (`_live.html`): `.work`, with `.work-main` (stage, stepper, current step, history as a `.timeline`) and `.work-side` (what it sends; recipients). The ids the poll and the tests use stay: `#live-status`, `#stage`, `#stepper`, `#current-step`, `#recipients-step`, `#history`.
+  - **Report tabs** (`[data-tabs]`, app.js `setupTabs`): `role=tablist` links to panels (`[data-tab-panel]`).
+    - Without a script every panel shows. With one, a panel at a time, arrow keys mirrored for RTL.
+    - `#recipients`, or any anchor inside a panel, opens that panel.
+    - Django tests see the whole page; browser tests click the tab first.
+  - **Messages** (`ui/messages.html`): errors and warnings stay on the page (`.messages`). Success and information are `.toasts` that leave after 8 s, held while pointed at or focused.
+  - **Forms:** `.form-section` for a form in sections (title and help beside the fields). Fieldset legends read as titles inside the box.
+  - **Other parts:** `.tabs` / `.segmented-tabs`, `.toolbar`, `.timeline`, `.health-grid` / `.health-state` (status page), `.auth-card` (sign-in), `.chip` (meta).
+  - **Overview** (`dashboard/views.home`): tabs (all, in progress, needs attention, ended), stage tiles that filter (`?stage=`), a search by name, short name or template (`?q=`, nothing personal), 50 to a page, at most 5 attention items with "show all".
+  - **Settings:** when the template's text is in the library, only the tokens it uses show (`campaigns/_token_row.html`). The rest fold under "the tokens the text doesn't use"; a filled one stays in view.
+- **Design system v1 ([app.css](src/sms_sender_web/static/css/app.css), plan 05 P1):**
   - **Basics:**
     - Plain CSS, no build step. Logical properties only, so the layout mirrors for RTL.
     - Tokens are custom properties, with a dark mode under `prefers-color-scheme`.

@@ -37,3 +37,16 @@ def field_errors(field, alert: bool = True):
     """A field's errors under it, with the id its input points to. `alert`:
     announce them at once (off when an error summary comes first)."""
     return {"field": field, "alert": alert}
+
+
+@register.filter
+def problems(messages) -> list:
+    """Errors and warnings: they stay on the page until dealt with."""
+    return [m for m in messages if m.level_tag in ("error", "warning")]
+
+
+@register.filter
+def notices(messages) -> list:
+    """Success and information: shown for a moment above the page."""
+    return [m for m in messages if m.level_tag not in ("error", "warning")]
+

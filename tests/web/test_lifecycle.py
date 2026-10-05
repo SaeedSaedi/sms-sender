@@ -144,9 +144,9 @@ def test_notes_and_results_read_in_persian(world):
 
 def test_the_overview_counts_stages_and_lists_what_needs_attention(world, operator_client):
     html = operator_client.get("/").content.decode()
-    tiles = html.split('class="figures overview"')[1].split("</dl>")[0]
-    assert '<dt>متوقف با خطا</dt><dd class="num">۱</dd>' in tiles
-    assert '<dt>در انتظار تأیید</dt><dd class="num">۱</dd>' in tiles
+    tiles = html.split('class="figures overview"')[1].split("</ul>")[0]
+    assert '<span class="figure-label">متوقف با خطا</span><span class="figure-value num">۱</span>' in tiles
+    assert '<span class="figure-label">در انتظار تأیید</span><span class="figure-value num">۱</span>' in tiles
     attention = html.split('class="card step attention"')[1].split("</section>")[0]
     assert "کاوه‌نگار خطای ۴۱۸ برگرداند" in attention  # the stopped one, with its reason
     assert "وضعیت ۱ گیرنده نامعلوم است" in attention  # the finished one's leftovers

@@ -1,36 +1,42 @@
 {% load i18n roles ui %}{% if not in_drawer %}<a class="brand" href="{% url 'home' %}">{% icon "message-square-text" %}<span>{% translate "SMS campaigns" %}</span></a>{% endif %}
+{% if user|can:"view_campaigns" %}
+<p class="nav-group">{% translate "SMS sending" %}</p>
 <ul class="nav-list">
-  {% if user|can:"view_campaigns" %}
-    <li><a href="{% url 'home' %}"{% if nav_section == "campaigns" %} aria-current="true"{% endif %}>{% icon "megaphone" %}<span>{% translate "Campaigns" %}</span></a></li>
-    <li><a href="{% url 'segment_list' %}"{% if nav_section == "segments" %} aria-current="true"{% endif %}>{% icon "users" %}<span>{% translate "Segments" %}</span></a></li>
-    <li><a href="{% url 'template_list' %}"{% if nav_section == "templates" %} aria-current="true"{% endif %}>{% icon "file-text" %}<span>{% translate "Templates" %}</span></a></li>
-    <li><a href="{% url 'analytics' %}"{% if nav_section == "analytics" %} aria-current="true"{% endif %}>{% icon "chart-column" %}<span>{% translate "Analytics" %}</span></a></li>
-  {% endif %}
+  <li><a href="{% url 'home' %}"{% if nav_section == "campaigns" %} aria-current="true"{% endif %}>{% icon "megaphone" %}<span>{% translate "Campaigns" %}</span></a></li>
+  <li><a href="{% url 'segment_list' %}"{% if nav_section == "segments" %} aria-current="true"{% endif %}>{% icon "users" %}<span>{% translate "Segments" %}</span></a></li>
+  <li><a href="{% url 'template_list' %}"{% if nav_section == "templates" %} aria-current="true"{% endif %}>{% icon "file-text" %}<span>{% translate "Templates" %}</span></a></li>
   {% if user|can:"add_suppression" %}
     <li><a href="{% url 'suppression' %}"{% if nav_section == "suppression" %} aria-current="true"{% endif %}>{% icon "ban" %}<span>{% translate "Suppression list" %}</span></a></li>
   {% endif %}
-  {% if user|can:"view_campaigns" %}
-    <li><a href="{% url 'status' %}"{% if nav_section == "status" %} aria-current="true"{% endif %}>{% icon "activity" %}<span>{% translate "Service status" %}</span></a></li>
-    <li><a href="{% url 'help' %}"{% if nav_section == "help" %} aria-current="true"{% endif %}>{% icon "circle-question-mark" %}<span>{% translate "Help" %}</span></a></li>
-  {% endif %}
 </ul>
+<p class="nav-group">{% translate "Reports and monitoring" %}</p>
+<ul class="nav-list">
+  <li><a href="{% url 'analytics' %}"{% if nav_section == "analytics" %} aria-current="true"{% endif %}>{% icon "chart-column" %}<span>{% translate "Analytics" %}</span></a></li>
+  <li><a href="{% url 'status' %}"{% if nav_section == "status" %} aria-current="true"{% endif %}>{% icon "activity" %}<span>{% translate "Service status" %}</span></a></li>
+</ul>
+{% endif %}
 {% if user|can:"manage_users" or user|can:"view_audit_log" or user|can:"manage_settings" %}
   <p class="nav-group">{% translate "Administration" %}</p>
   <ul class="nav-list">
     {% if user|can:"manage_users" %}
       <li><a href="{% url 'users' %}"{% if nav_section == "users" %} aria-current="true"{% endif %}>{% icon "user-cog" %}<span>{% translate "Users" %}</span></a></li>
     {% endif %}
+    {% if user|can:"view_audit_log" %}
+      <li><a href="{% url 'audit_log' %}"{% if nav_section == "activity" %} aria-current="true"{% endif %}>{% icon "history" %}<span>{% translate "Activity log" %}</span></a></li>
+    {% endif %}
     {% if user|can:"manage_settings" %}
       <li><a href="{% url 'backups' %}"{% if nav_section == "backups" %} aria-current="true"{% endif %}>{% icon "download" %}<span>{% translate "Backups" %}</span></a></li>
       <li><a href="{% url 'system_settings' %}"{% if nav_section == "system" %} aria-current="true"{% endif %}>{% icon "sliders-horizontal" %}<span>{% translate "System settings" %}</span></a></li>
       <li><a href="{% url 'api_tokens' %}"{% if nav_section == "api" %} aria-current="true"{% endif %}>{% icon "lock" %}<span>{% translate "API tokens" %}</span></a></li>
     {% endif %}
-    {% if user|can:"view_audit_log" %}
-      <li><a href="{% url 'audit_log' %}"{% if nav_section == "activity" %} aria-current="true"{% endif %}>{% icon "history" %}<span>{% translate "Activity log" %}</span></a></li>
-    {% endif %}
   </ul>
 {% endif %}
 <div class="nav-user">
+  {% if user|can:"view_campaigns" %}
+  <ul class="nav-list">
+    <li><a href="{% url 'help' %}"{% if nav_section == "help" %} aria-current="true"{% endif %}>{% icon "circle-question-mark" %}<span>{% translate "Help" %}</span></a></li>
+  </ul>
+  {% endif %}
   <div class="who"><span class="avatar" aria-hidden="true">{{ user.get_username|slice:":1" }}</span><span><bdi dir="ltr">{{ user.get_username }}</bdi> · {{ user|role|role_label }}</span></div>
   <div class="links">
     <a href="{% url 'my_account' %}"{% if nav_section == "account" %} aria-current="true"{% endif %}>{% translate "My account" %}</a>

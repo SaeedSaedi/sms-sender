@@ -43,3 +43,28 @@ DELIVERY_FILTERS = (
     ("expired", _("Beyond the status window")),
 )
 CLICK_FILTERS = (("yes", _("Clicked")), ("no", _("Didn't click")))
+
+# How a status reads at a glance (the overview's bars and legends): done,
+# on its way, needs a look, failed, or left out on purpose.
+STATUS_TONE = {
+    "sent": "success",
+    "pending": "info",
+    "in_flight": "info",
+    "failed_retriable": "warning",
+    "unknown": "warning",
+    "needs_review": "warning",
+    "capped": "warning",
+    "failed_permanent": "danger",
+    "invalid": "danger",
+    "suppressed": "neutral",
+    "cancelled": "neutral",
+}
+
+# The campaign list's tabs.
+LIST_VIEWS = {
+    "all": _("All"),
+    "active": _("In progress"),
+    "attention": _("Needs attention"),
+    "finished": _("Ended"),
+}
+

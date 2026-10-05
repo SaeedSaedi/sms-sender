@@ -18,16 +18,47 @@
   {% endfor %}
 </ol>
 
+<div class="work">
+<div class="work-main">
 <section class="card step current-step" id="current-step">
   {% include stage_template %}
 </section>
 
-<section class="card step" id="message">
+{% if history %}
+<section class="card step" id="history" aria-labelledby="history-title">
+  <h2 id="history-title">{% icon "history" %}{% translate "Jobs" %}</h2>
+  <ol class="timeline">
+  {% for row in history %}{% with job=row.job %}
+    <li id="job-{{ job.pk }}">
+      <span class="timeline-dot tone-{% if job.state == 'done' %}success{% elif job.state == 'failed' %}danger{% elif job.state == 'paused' %}warning{% elif job.state == 'running' or job.state == 'queued' %}info{% else %}neutral{% endif %}" aria-hidden="true"></span>
+      <div class="timeline-head">{{ job.get_kind_display }} <span class="pill pill-{% if job.state == 'done' %}success{% elif job.state == 'failed' %}danger{% elif job.state == 'paused' %}warning{% elif job.state == 'running' or job.state == 'queued' %}info{% else %}neutral{% endif %}">{{ job.get_state_display }}</span></div>
+      <div class="timeline-meta"><span class="num">{{ job.created_at|jalali }}</span>{% if job.requested_by %} · {{ job.requested_by.username|ltr }}{% endif %}{% if job.finished_at %} · {% translate "Finished" %} <span class="num">{{ job.finished_at|jalali }}</span>{% endif %}</div>
+      <div class="timeline-body">
+        {% if row.result %}{{ row.result }}
+        {% elif job.kind == "send" and job.result %}{% translate "Accepted" %} {{ job.result.sent|default:0|fa_number }} · {% translate "Cost" %} {{ job.result.cost|default:0|fa_number }} {% translate "rials" %}
+        {% elif job.kind == "test" and job.result.cost %}{% translate "Cost" %} {{ job.result.cost|fa_number }} {% translate "rials" %}
+        {% endif %}
+        {% if row.notes %}
+          <details class="job-notes">
+            <summary>{% translate "Details" %}</summary>
+            <ul class="plain">{% for line in row.notes %}<li>{{ line }}</li>{% endfor %}</ul>
+          </details>
+        {% endif %}
+      </div>
+    </li>
+  {% endwith %}{% endfor %}
+  </ol>
+</section>
+{% endif %}
+</div>
+
+<aside class="work-side" aria-label="{% translate "About this campaign" %}">
+<section class="card side-card" id="message" aria-labelledby="message-title">
   <div class="card-header">
-    <h2>{% icon "message-square-text" %}{% translate "What this campaign sends" %}</h2>
+    <h2 id="message-title">{% icon "message-square-text" %}{% translate "What this campaign sends" %}</h2>
     {% if user|can:"edit_campaigns" and not settings_locked %}<a class="button secondary small" href="{% url 'campaign_settings' campaign.slug %}">{% icon "settings" %}{% translate "Settings" %}</a>{% endif %}
   </div>
-  <dl class="pairs">
+  <dl class="pairs stacked">
     <dt>{% translate "Segment" %}</dt><dd>{% if segment %}<a href="{% url 'segment_detail' segment.slug %}"><bdi>{{ segment.name }}</bdi></a>{% else %}—{% endif %}</dd>
     <dt>{% translate "Template" %}</dt><dd>{% if campaign.settings.template %}{{ campaign.settings.template|ltr }}{% else %}—{% endif %}</dd>
     {% for name, value, column in tokens %}
@@ -46,11 +77,12 @@
 </section>
 
 {% if summary %}
-<section class="card step" id="recipients-step">
-  <h2>{% icon "users" %}{% translate "Recipients" %}</h2>
-  <ul class="badges">
+<section class="card side-card" id="recipients-step" aria-labelledby="recipients-title">
+  <h2 id="recipients-title">{% icon "users" %}{% translate "Recipients" %}</h2>
+  <div class="statusbar" aria-hidden="true">{% for status in status_order %}{% with n=summary.counts|get:status %}{% if n %}<span class="sb-{{ status|status_tone }}" style="flex-grow: {{ n }}"></span>{% endif %}{% endwith %}{% endfor %}</div>
+  <ul class="legend">
     {% for status in status_order %}{% with n=summary.counts|get:status %}{% if n %}
-      <li class="badge status-{{ status }}">{{ status|status_label }} <span class="num">{{ n|fa_number }}</span></li>
+      <li class="sb-{{ status|status_tone }}">{{ status|status_label }} <span class="num">{{ n|fa_number }}</span></li>
     {% endif %}{% endwith %}{% endfor %}
   </ul>
   <p class="hint"><a href="{% url 'help' %}#statuses">{% translate "What does each status mean?" %}</a></p>
@@ -72,45 +104,6 @@
   {% endif %}
 </section>
 {% endif %}
-
-{% if history %}
-<section class="step" id="history">
-  <h2>{% translate "Jobs" %}</h2>
-  <div class="table-wrap">
-    <table class="table-stack">
-      <thead>
-        <tr>
-          <th scope="col">{% translate "Job" %}</th>
-          <th scope="col">{% translate "State" %}</th>
-          <th scope="col">{% translate "Requested" %}</th>
-          <th scope="col">{% translate "Finished" %}</th>
-          <th scope="col">{% translate "Result" %}</th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for row in history %}{% with job=row.job %}
-        <tr id="job-{{ job.pk }}">
-          <th scope="row">{{ job.get_kind_display }}</th>
-          <td data-label="{% translate "State" %}">{{ job.get_state_display }}</td>
-          <td data-label="{% translate "Requested" %}">{{ job.created_at|jalali }}{% if job.requested_by %} · {{ job.requested_by.username|ltr }}{% endif %}</td>
-          <td data-label="{% translate "Finished" %}">{% if job.finished_at %}{{ job.finished_at|jalali }}{% else %}—{% endif %}</td>
-          <td data-label="{% translate "Result" %}">
-            {% if row.result %}{{ row.result }}
-            {% elif job.kind == "send" and job.result %}{% translate "Accepted" %} {{ job.result.sent|default:0|fa_number }} · {% translate "Cost" %} {{ job.result.cost|default:0|fa_number }} {% translate "rials" %}
-            {% elif job.kind == "test" and job.result.cost %}{% translate "Cost" %} {{ job.result.cost|fa_number }} {% translate "rials" %}
-            {% else %}—{% endif %}
-            {% if row.notes %}
-              <details class="job-notes">
-                <summary>{% translate "Details" %}</summary>
-                <ul class="plain">{% for line in row.notes %}<li>{{ line }}</li>{% endfor %}</ul>
-              </details>
-            {% endif %}
-          </td>
-        </tr>
-      {% endwith %}{% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
-{% endif %}
+</aside>
+</div>
 </div>

@@ -10,7 +10,7 @@
 <header class="page-header">
   <div>
     <h1><bdi>{{ campaign.name }}</bdi></h1>
-    <p class="page-meta">{{ campaign.slug|copyable }} · {% translate "Segment" %}: {% if segment %}<a href="{% url 'segment_detail' segment.slug %}"><bdi>{{ segment.name }}</bdi></a>{% else %}—{% endif %} · {% translate "Template" %}: {% if campaign.settings.template %}{{ campaign.settings.template|copyable }}{% else %}—{% endif %}</p>
+    <p class="page-meta"><span class="chip">{{ campaign.slug|copyable }}</span>{% if campaign.settings.template %}<span class="chip">{% icon "file-text" %}{{ campaign.settings.template|ltr }}</span>{% endif %}{% if segment %}<span class="chip">{% icon "users" %}<bdi>{{ segment.name }}</bdi></span>{% endif %}</p>
   </div>
   <div class="page-actions">
     {% if user|can:"edit_campaigns" and not settings_locked %}<a class="button secondary" href="{% url 'campaign_settings' campaign.slug %}">{% icon "settings" %}{% translate "Settings" %}</a>{% endif %}
