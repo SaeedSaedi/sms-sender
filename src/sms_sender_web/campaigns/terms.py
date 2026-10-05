@@ -65,7 +65,21 @@ CONFLICTS = {
     "not_scheduled": _("This send isn't waiting for a set time any more."),
     "send_on_its_way": _("A send is on its way. Change the list after it ends."),
     "not_needed": _("Nothing has gone out yet, so the settings can change as they are."),
+    "requeue_while_sending": _("A send is on its way. Queue recipients again after it ends."),
 }
+
+# Queueing a status again (views.campaign_requeue): what it means, said
+# with the number before anyone confirms.
+REQUEUE_CONFIRM = {
+    "failed_permanent": _("{n} recipients Kavenegar rejected go back in the queue. Fix the cause first (the template, a token), or they'll be rejected again."),
+    "unknown": _("{n} recipients may already have the SMS. Queued without checking, they can get a second one; “Reconcile with Kavenegar” checks first."),
+    "needs_review": _("{n} recipients may already have the SMS: Kavenegar listed more than one message. Queued again, they can get a second one."),
+    "suppressed": _("{n} recipients are on the suppression list. The next send leaves them out again unless they're taken off it first."),
+    "invalid": _("{n} numbers came with two different user IDs. Queue them again only after fixing the IDs at the source."),
+    "cancelled": _("{n} cancelled recipients go back in the queue for the next send."),
+    "sent": _("{n} recipients already got this SMS. Each gets a second one with the next send. Everything is backed up first."),
+}
+REQUEUED = _("{n} recipients are back in the queue. They go out with the next send.")
 
 TOKEN_ISSUES = {
     "too_long": _("At most {max} characters; this is {length}."),

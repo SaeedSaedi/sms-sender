@@ -27,7 +27,7 @@ _ADDS = {
         "add_suppression",
     },
     ADMIN: {
-        "requeue_review",       # needs_review → queue again (may send a duplicate)
+        "requeue_review",       # queue again what may have it or was held back (may send a duplicate)
         "change_sent_message",  # continue a campaign with another message, after a backup
         "remove_suppression",
         "delete_campaign_data",

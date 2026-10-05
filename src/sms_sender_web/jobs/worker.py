@@ -32,7 +32,7 @@ from sms_sender.clicks import sync_clicks
 from sms_sender.delivery import FINAL, WINDOW_SEC, sync_delivery
 from sms_sender.input_loader import InputError
 from sms_sender.locking import RunLock, RunLockError
-from sms_sender.reconcile import reconcile_unknown
+from sms_sender.reconcile import DEFAULT_MIN_AGE_SEC, REQUEUE_NOT_FOUND, reconcile_unknown
 from sms_sender.state import CampaignMismatchError
 from sms_sender.window import DEFAULT_WINDOW, now_tehran, parse_window
 
@@ -279,7 +279,12 @@ class Worker:
     def _reconcile(self, job: Job):
         try:
             with RunLock(campaign_db(job.campaign)):
-                summary = reconcile_unknown(self.engine.state(job.campaign), self.engine.sender(job.campaign))
+                summary = reconcile_unknown(
+                    self.engine.state(job.campaign), self.engine.sender(job.campaign),
+                    # The CLI's --min-age and --requeue-not-found/--review-not-found.
+                    min_age_sec=float(job.params.get("min_age_sec", DEFAULT_MIN_AGE_SEC)),
+                    requeue_not_found=bool(job.params.get("requeue_not_found", REQUEUE_NOT_FOUND)),
+                )
         except RunLockError as e:
             return Job.State.FAILED, {}, f"the campaign is busy: {e}"
         return Job.State.DONE, dataclasses.asdict(summary), ""

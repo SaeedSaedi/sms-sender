@@ -460,11 +460,13 @@ class StateStore:
         return self._move_claimable(phones, SUPPRESSED, "on the opt-out list")
 
     def reset_status(self, from_status: str) -> int:
-        """Promote rows in `from_status` back to pending. Returns rows changed."""
+        """Promote rows in `from_status` back to pending. Returns rows changed.
+        Input rows that weren't a number (`INVALID:<raw>`, kept as
+        failed_permanent for export-failed) stay: there's nobody to send to."""
         with self._tx() as conn:
             cur = conn.execute(
                 "UPDATE recipients SET status=?, last_error=NULL, status_code=NULL "
-                "WHERE status=?",
+                "WHERE status=? AND phone NOT LIKE 'INVALID:%'",
                 (PENDING, from_status),
             )
             return cur.rowcount

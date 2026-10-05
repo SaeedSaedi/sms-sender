@@ -32,6 +32,7 @@ from sms_sender.clicks import (
 from sms_sender.delivery import STATUS_NAMES
 from sms_sender.input_loader import SLUG_RE
 from sms_sender.phone import InvalidPhoneError, normalize
+from sms_sender.sendcheck import check_sends
 from sms_sender.sender import HaltError, SendError
 from sms_sender.shortlink import ShlinkError
 from sms_sender.state import DELIVERY_GROUPS, SENT, UNCHECKED, RecipientFilter, StateStore
@@ -49,6 +50,11 @@ from ..jobs.worker import last_seen, worker_alive
 
 PAGE = 100
 MATCHING = _("{n} recipients match these filters.")
+SENDS_OK = _("Nobody got it twice: {sms} SMS to {recipients} recipients, test SMS apart ({tests}).")
+SENDS_TWICE = _("{n} recipients got it more than once.")
+SENDS_MAYBE = _("{n} recipients may have got it twice: a call isn't settled yet. Reconciling with Kavenegar settles it.")
+SENDS_UNRECORDED = _("{n} SMS from before calls were recorded can't be checked.")
+TWICE_SHOWN = 20
 EVERYONE = _("{n} recipients in this campaign.")
 
 
@@ -115,6 +121,7 @@ def report(request, slug: str):
         number = 1
     rows = [] if query_invalid else store.recipients_page(limit=PAGE, offset=(number - 1) * PAGE, where=where)
     counts = store.display_counts()
+    sends = check_sends(store)
     segments, campaign_clicks = click_report(store)
     stored = store.get_meta("settings")
     last_run = store.get_meta("last_run")
@@ -135,6 +142,16 @@ def report(request, slug: str):
         "filters": filters,
         "filter_query": urlencode(filters),
         "matching": say(MATCHING if filters else EVERYONE, {"n": total}),
+        "sends": sends,
+        "sends_line": (
+            say(SENDS_TWICE, {"n": len(sends.twice)}) if sends.twice
+            else say(SENDS_MAYBE, {"n": len(sends.maybe_twice)}) if sends.maybe_twice
+            else say(SENDS_OK, {"sms": sends.sms, "recipients": sends.recipients, "tests": sends.test_sms})
+        ),
+        "sends_maybe_line": say(SENDS_MAYBE, {"n": len(sends.maybe_twice)}) if sends.twice and sends.maybe_twice else "",
+        "sends_unrecorded": say(SENDS_UNRECORDED, {"n": sends.unrecorded}) if sends.unrecorded else "",
+        "twice": [(p.phone, len(p.message_ids)) for p in sends.twice[:TWICE_SHOWN]],
+        "twice_more": max(0, len(sends.twice) - TWICE_SHOWN),
         "delivery": _delivery_rows(store.delivery_counts()),
         "total_cost": store.total_cost(),
         "average_cost": store.average_cost(),

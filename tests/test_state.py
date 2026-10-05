@@ -139,6 +139,18 @@ def test_may_have_sent_follows_what_could_have_gone_out(tmp_path):
     assert s.may_have_sent()
 
 
+def test_a_reset_leaves_input_rows_that_werent_numbers(tmp_path):
+    """They're kept as failed_permanent for export-failed; queued, they'd
+    count as waiting with nobody to send to."""
+    s = make(tmp_path)
+    s.upsert_pending([("09120000001", "09120000001")])
+    s.claim("09120000001")
+    s.mark_failed("09120000001", 411, "[411] invalid receptor", permanent=True)
+    s.record_invalid("not-a-number", "invalid_phone")
+    assert s.reset_status(FAILED_PERMANENT) == 1
+    assert s.counts() == {PENDING: 1, FAILED_PERMANENT: 1}
+
+
 def test_claim_transitions_atomically(tmp_path):
     s = make(tmp_path)
     s.upsert_pending([("09123456789", "09123456789")])

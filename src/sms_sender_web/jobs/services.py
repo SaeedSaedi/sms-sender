@@ -12,7 +12,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from sms_sender.locking import RunLock, RunLockError
-from sms_sender.state import StateStore
+from sms_sender.state import (
+    CANCELLED, FAILED_PERMANENT, INVALID, NEEDS_REVIEW, SENT, SUPPRESSED, UNKNOWN, StateStore,
+)
 
 from ..accounts.models import test_phone_of
 from ..accounts.roles import can
@@ -30,7 +32,8 @@ APPROVED_SETTINGS = ("segment", "template", "tokens", "token_columns", "value_ma
 class JobConflict(Exception):
     """The action can't be done right now. `code` picks the Persian message:
     busy, no_test_number, send_active, test_active, not_approved,
-    settings_changed, not_decidable, not_scheduled, send_on_its_way, not_needed."""
+    settings_changed, not_decidable, not_scheduled, send_on_its_way, not_needed,
+    requeue_while_sending."""
 
     def __init__(self, code: str, detail: str = ""):
         super().__init__(detail or code)
@@ -116,6 +119,43 @@ def unlock_message(campaign: Campaign, user) -> tuple[str, list[int]]:
         campaign.unlocked_at, campaign.unlocked_by = timezone.now(), user
         campaign.save(update_fields=["unlocked_at", "unlocked_by"])
     return backup.path.name, superseded
+
+
+# Who may put each status back in the queue (the CLI's reset --status;
+# spec 4.12, plan 05 decision 2). Rejected: an operator. What may already
+# have the SMS, or was held back on purpose: an admin. Sent: an admin, after
+# a backup. (Not sent rows are in the queue already.)
+REQUEUE = {
+    FAILED_PERMANENT: "update_campaigns",
+    UNKNOWN: "requeue_review",
+    NEEDS_REVIEW: "requeue_review",
+    SUPPRESSED: "requeue_review",
+    INVALID: "requeue_review",
+    CANCELLED: "requeue_review",
+    SENT: "requeue_review",
+}
+
+
+def requeue(campaign: Campaign, status: str) -> tuple[int, str | None]:
+    """Put a status's recipients back in the queue, for the next send.
+    Refused while a send is on its way; holds the run lock. `sent`: each of
+    them gets a second SMS, so everything is backed up first (a failed
+    backup changes nothing). Returns (rows, backup name)."""
+    if status not in REQUEUE:
+        raise ValueError(status)
+    if Job.objects.filter(campaign=campaign, kind=Job.Kind.SEND, state__in=ACTIVE).exists():
+        raise JobConflict("requeue_while_sending")
+    db = campaign_db(campaign)
+    if not db.exists():
+        return 0, None
+    backup = None
+    if status == SENT:
+        backup = make_backup(Path(django_settings.DATA_DIR), django_settings.BACKUP_DIR, keep=None).path.name
+    try:
+        with RunLock(db):
+            return StateStore(db).reset_status(status), backup
+    except RunLockError as e:
+        raise JobConflict("busy") from e
 
 
 def latest_test(campaign: Campaign) -> Job | None:
@@ -218,14 +258,14 @@ def start_now(job: Job) -> Job:
     return job
 
 
-def enqueue(campaign: Campaign, kind: str, user=None) -> Job:
+def enqueue(campaign: Campaign, kind: str, user=None, params: dict | None = None) -> Job:
     """Queue a job, unless the campaign already has one of this kind that
     isn't finished — then that one is returned."""
     with transaction.atomic():
         existing = Job.objects.filter(campaign=campaign, kind=kind, state__in=ACTIVE).first()
         if existing is not None:
             return existing
-        return Job.objects.create(campaign=campaign, kind=kind, requested_by=user)
+        return Job.objects.create(campaign=campaign, kind=kind, requested_by=user, params=params or {})
 
 
 def pause(job: Job) -> Job:

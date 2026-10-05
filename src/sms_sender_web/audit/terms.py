@@ -8,6 +8,7 @@ from django.utils.translation import gettext_lazy as _
 
 from ..accounts.terms import ROLE_LABELS
 from ..campaigns.terms import SETTING_NAMES
+from ..dashboard.terms import SUBMISSION_STATUS
 from ..jobs.models import Job
 from ..dashboard.templatetags.fa import fa_digits, fa_number, jalali
 from ..privacy import mask_phone
@@ -44,6 +45,7 @@ ACTION_LABELS = {
     "campaign_duplicated": _("Campaign duplicated"),
     "segment_switched": _("Campaign moved to another segment"),
     "message_unlocked": _("Message opened for a change, after a backup"),
+    "recipients_requeued": _("Recipients queued again"),
     "job_requested": _("Update requested"),
     "job_paused": _("Paused"),
     "job_resumed": _("Resumed"),
@@ -86,6 +88,9 @@ def describe(event) -> str:
         return _who(d.get("segment", ""))
     if event.action in ("template_saved", "template_deleted"):
         return _who(d.get("name", ""))
+    if event.action == "recipients_requeued":
+        return format_html(gettext_now("{status}: {count}"), status=SUBMISSION_STATUS.get(d.get("status"), d.get("status", "")),
+                           count=fa_number(d.get("count", 0)))
     if event.action == "message_unlocked":
         return format_html(gettext_now("backup {name}"), name=_who(d.get("backup", "")))
     if event.action == "campaign_duplicated":
