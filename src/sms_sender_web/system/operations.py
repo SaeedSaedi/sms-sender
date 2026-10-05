@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from django.conf import settings as django_settings
@@ -13,11 +13,15 @@ from django.db import transaction
 
 from sms_sender.locking import RunLock
 from sms_sender.state import StateStore
+from sms_sender.window import TEHRAN
 
 from ..backup import MANIFEST, list_backups, make_backup, verify
 from ..jobs.engine import campaign_db
 from ..jobs.models import Campaign, Job
 from ..jobs.services import ACTIVE
+
+
+OVERDUE_AFTER = timedelta(hours=2)
 
 
 @dataclass(frozen=True)
@@ -126,8 +130,35 @@ def last_backup() -> datetime | None:
 
 
 def stamp(name: str) -> datetime | None:
-    """A backup folder's UTC stamp as a moment (manifests may be missing)."""
+    """A backup folder's UTC stamp as a moment (manifests may be missing).
+    A second backup in the same second carries "-2": the same moment."""
     try:
-        return datetime.strptime(name, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+        return datetime.strptime(name.split("-")[0], "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
     except ValueError:
         return None
+
+
+def newest_backup_at() -> datetime | None:
+    """When the newest complete backup was made, from its folder's name."""
+    found = list_backups(django_settings.BACKUP_DIR)
+    return stamp(found[-1].name) if found else None
+
+
+def scheduled_moment(now: datetime, hour: int) -> datetime:
+    """The latest moment the daily backup was due by: today at `hour`,
+    Tehran time, or yesterday's if that's still ahead."""
+    local = now.astimezone(TEHRAN)
+    moment = local.replace(hour=hour, minute=0, second=0, microsecond=0)
+    return moment if moment <= local else moment - timedelta(days=1)
+
+
+def backup_due(now: datetime, hour: int | None, newest: datetime | None) -> bool:
+    """The daily backup is on and hasn't run since it was last due. One
+    missed while the Mac slept runs as soon as the worker is back."""
+    return hour is not None and (newest is None or newest < scheduled_moment(now, hour))
+
+
+def backup_overdue(now: datetime, hour: int | None, newest: datetime | None) -> bool:
+    """Due for over two hours: the worker isn't running, or the backup
+    keeps failing (the worker's log says why). For the status page."""
+    return backup_due(now - OVERDUE_AFTER, hour, newest) and backup_due(now, hour, newest)

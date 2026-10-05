@@ -73,6 +73,10 @@
   <dl class="pairs">
     <dt>{% translate "Version" %}</dt><dd><bdi dir="ltr">{{ version }}</bdi></dd>
     <dt>{% translate "Last backup" %}</dt><dd>{% if last_backup %}{{ last_backup|jalali }}{% else %}{% translate "None yet" %}{% endif %}{% if user|can:"manage_settings" %} · <a href="{% url 'backups' %}">{% translate "Backups" %}</a>{% endif %}</dd>
+    <dt>{% translate "Daily backup" %}</dt><dd id="backup-schedule">{% if backup_at %}{{ backup_at|fa_digits|ltr }} · {{ backup_keep }}{% else %}{% translate "Off" %}{% endif %}{% if backup_overdue %} · <strong class="warn">{% translate "overdue" %}</strong>{% endif %}</dd>
+    {% if allowlist %}
+    <dt>{% translate "Restricted sending" %}</dt><dd id="restricted-sending">{% if allowlist.invalid %}{% translate "Set wrongly: nothing is sent." %}{% else %}{% translate "SMS go only to:" %} {% for phone in allowed_numbers %}{{ phone|mask_phone|fa_digits|ltr }}{% if not forloop.last %}، {% endif %}{% endfor %}{% endif %}</dd>
+    {% endif %}
   </dl>
 </section>
 </div>

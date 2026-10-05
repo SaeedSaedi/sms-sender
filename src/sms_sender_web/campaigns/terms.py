@@ -27,6 +27,9 @@ STOP_REASONS = {
     "input_unreadable": _("The segment's file couldn't be read."),
     "crashed": _("The run stopped on an unexpected error. The details are in the system log."),
     "given_up": _("The worker stopped during this job {attempts} times, so it was given up."),
+    "recipients_not_allowed": _("Restricted sending: {count} recipients aren't allowed numbers, so nothing was sent. Until it's lifted, only the numbers in SMS_SENDER_ALLOWED_NUMBERS get SMS."),
+    "test_number_not_allowed": _("Restricted sending: your number for test SMS isn't an allowed number, so the test SMS wasn't sent."),
+    "allowlist_invalid": _("Restricted sending is set wrongly: SMS_SENDER_ALLOWED_NUMBERS holds something that isn't a phone number, so nothing is sent."),
 }
 _GENERIC_STOP = _("A check before sending failed.")
 
@@ -150,6 +153,7 @@ CHECK_PROBLEMS = {
     "columns_missing": _("A column the tokens use isn't in the segment's file."),
     "nobody_to_send": _("Nobody is left to send to."),
     "bad_destination": _("The short link's address isn't allowed."),
+    "allowlist_invalid": _("Restricted sending is set wrongly: SMS_SENDER_ALLOWED_NUMBERS holds something that isn't a phone number, so nothing is sent."),
 }
 
 # The check's lines (present.checklist).
@@ -168,6 +172,9 @@ CHECKLIST = {
     "window_closed": _("Closed now: a test SMS or a send waits for it to open."),
     "recipients": _("Recipients"),
     "to_send": _("{n} to send."),
+    "restricted": _("Restricted sending"),
+    "restricted_ok": _("Every recipient is an allowed number."),
+    "restricted_blocks": _("{n} recipients aren't allowed numbers: the test SMS works, but the send would be refused."),
 }
 CHECK_STATES = {"ok": _("Done:"), "warn": _("Warning:"), "fail": _("Problem:")}
 

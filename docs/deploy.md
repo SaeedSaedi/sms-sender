@@ -20,7 +20,10 @@ state lives there. The containers run as uid 1000 (`app`).
 **Run exactly one worker.** The design assumes one. A second would run jobs
 side by side with the first, and a job that finds its campaign DB busy
 fails. (The lock on each campaign DB still keeps two processes from
-sending the same campaign.) Don't scale `worker`.
+sending the same campaign.) Don't scale `worker`. A worker that starts while
+another one is alive on the same data waits up to two minutes for it, then
+exits with code 2 (Compose restarts it). One that stopped cleanly signs off,
+so an upgrade's new worker starts at once.
 
 ## Build
 
@@ -57,6 +60,7 @@ values.
 | `WEB_PORT` | no | Host port for it. Default `8000`. |
 | `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY` | no | Outbound proxy to Kavenegar and Shlink, if the host needs one. |
 | `SMS_SENDER_SANDBOX` | never in production | `1`: Kavenegar and Shlink are simulated and nothing is sent. For drills, see [Sandbox drills](#sandbox-drills). |
+| `SMS_SENDER_ALLOWED_NUMBERS` | no; only on purpose | Restricted sending: SMS go only to these numbers (comma-separated), from the dashboard and the CLI. A value that isn't a phone number stops all sending. Every page shows a banner while it's set. |
 | `DJANGO_DEBUG` | never in production | |
 
 Secrets (`DJANGO_SECRET_KEY`, both API keys) live only in `.env` or your
@@ -200,8 +204,13 @@ docker compose exec -T web python manage.py verify_backup
 
 `verify_backup` re-checks the newest one, or a path you give it.
 
-Schedule it on the host, e.g. at 00:30 UTC (04:00 in Tehran, outside the
-sending hours):
+The worker also backs up once a day by itself, at the hour an admin sets on
+the backups page (default 09:00 Tehran, keeping the newest 14; it can be
+turned off there). One missed while the worker was down runs when it's back.
+The backups page and the status page say when it's overdue, and the
+notification targets hear when it fails. Prefer your own schedule? Turn the
+worker's off and use cron on the host, e.g. at 00:30 UTC (04:00 in Tehran,
+outside the sending hours). Both prune to their own count, so don't run both.
 
 ```cron
 30 0 * * * cd /srv/sms-sender && docker compose exec -T web python manage.py backup --keep 14 && docker compose exec -T web python manage.py verify_backup

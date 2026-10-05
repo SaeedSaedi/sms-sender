@@ -356,6 +356,38 @@ body.has-nav .topbar { display: none; }
   font-weight: 700;
   text-align: center;
 }
+/* Restricted sending (plan 06, D7): SMS go only to the numbers allowed in .env. */
+.restricted-banner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--s-2);
+  padding: .4rem var(--s-4);
+  background: var(--primary-soft);
+  border-block-end: 1px solid var(--border);
+  color: var(--primary);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-align: center;
+}
+/* Where it runs (plan 06): your Mac's real data, or its sandbox. */
+.env-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  inline-size: fit-content;
+  margin: 0;
+  padding: .15rem .65rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.env-badge::before { content: ""; inline-size: .45rem; block-size: .45rem; border-radius: 50%; background: currentColor; }
+.env-badge[data-env="real"] { background: var(--primary-soft); color: var(--primary); border-color: var(--border); }
+.env-badge[data-env="sandbox"] { background: var(--warning-soft); color: var(--warning); border-color: var(--warning-border); }
+.sidebar .env-badge, .drawer .env-badge { margin: calc(-1 * var(--s-2)) var(--s-2) var(--s-4); }
 /* All sending is held (an admin's emergency stop): on every page until lifted. */
 .hold-banner {
   display: flex;

@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 from base64 import b32encode
+from datetime import timedelta
 from urllib.parse import quote
 
 import segno
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
-from django.contrib.auth.views import PasswordChangeView
+from django.conf import settings
+from django.contrib.auth.views import LoginView, PasswordChangeView
 from django.core.exceptions import ValidationError
 from django.db.models import Max
 from django.http import Http404
@@ -29,6 +31,38 @@ from .decorators import forbidden, requires
 from .forms import CodeForm, NewUserForm, TestPhoneForm
 from .models import Profile, ask_to_change_password, must_change_password
 from .roles import ROLES, can, needs_two_factor, role_of, set_role
+
+
+# Decision D5 (plan 06): on your Mac, a sign-in from the Mac itself may last
+# 30 days instead of 8 hours. Elsewhere, sessions stay at 8 hours.
+REMEMBER_FOR = timedelta(days=30)
+LOOPBACK = frozenset({"127.0.0.1", "::1"})
+
+
+def can_remember(request) -> bool:
+    """Running locally (sms-dashboard), and asked from the Mac itself."""
+    return settings.LOCAL and request.META.get("REMOTE_ADDR") in LOOPBACK
+
+
+def remembered(request) -> bool:
+    """This sign-in asked to be remembered, and may be."""
+    return request.method == "POST" and bool(request.POST.get("remember")) and can_remember(request)
+
+
+class SignIn(LoginView):
+    """Django's sign-in, plus "keep me signed in on this Mac" (D5). The
+    second step still follows for operators and admins; once it's passed,
+    the session lasts 30 days."""
+    redirect_authenticated_user = True
+
+    def get_context_data(self, **kwargs):
+        return {**super().get_context_data(**kwargs), "can_remember": can_remember(self.request)}
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        if remembered(self.request):
+            self.request.session.set_expiry(REMEMBER_FOR)
+        return response
 
 
 def _next(request) -> str:

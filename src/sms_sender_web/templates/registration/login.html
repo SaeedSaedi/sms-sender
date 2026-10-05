@@ -16,6 +16,9 @@
     <label for="id_password">{% translate "Password" %}</label>
     <input id="id_password" name="password" type="password" dir="ltr"
            autocomplete="current-password" required>
+    {% if can_remember %}
+      <label class="check"><input type="checkbox" name="remember" value="1"> {% translate "Keep me signed in on this Mac for 30 days" %}</label>
+    {% endif %}
     <input type="hidden" name="next" value="{{ next }}">
     <button type="submit" class="block">{% translate "Log in" %}</button>
   </form>

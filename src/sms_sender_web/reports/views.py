@@ -24,6 +24,7 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_POST
 
+from sms_sender.allowlist import allowlist
 from sms_sender.conversions import ConversionFileError, import_conversions, read_rows
 from sms_sender.clicks import (
     ATTRIBUTION_HEADER,
@@ -52,6 +53,7 @@ from ..jobs.sandbox import read_outbox
 from ..jobs.worker import last_seen, worker_alive
 from ..segments import files as segment_files
 from ..system import credit, operations
+from ..system.models import SystemSettings
 from ..segments.audience import make_audience, suggest_slug
 from ..segments.forms import UPLOAD_ERRORS, clean_slug
 from ..segments.models import Segment
@@ -475,6 +477,8 @@ def status(request):
         shlink = {"problem": "unreachable", "code": e.status}
 
     outbox = read_outbox() if django_settings.SANDBOX else []
+    system = SystemSettings.load()
+    allowed = None if django_settings.SANDBOX else allowlist()
     sends = Job.objects.filter(kind=Job.Kind.SEND, state__in=(Job.State.QUEUED, Job.State.RUNNING)).count()
     return render(request, "reports/status.html", {
         "hold_confirm": _(
@@ -489,5 +493,11 @@ def status(request):
         "queue": operations.queue(),
         "version": operations.version(),
         "last_backup": operations.last_backup(),
+        "backup_at": None if system.backup_hour is None else f"{system.backup_hour:02d}:00",
+        "backup_keep": say(_("keeps the newest {n}"), {"n": system.backup_keep}),
+        "backup_overdue": operations.backup_overdue(dj_timezone.now(), system.backup_hour,
+                                                    operations.newest_backup_at()),
+        "allowlist": allowed,
+        "allowed_numbers": sorted(allowed.numbers) if allowed is not None else [],
         "checked_at": dj_timezone.now(),
     })

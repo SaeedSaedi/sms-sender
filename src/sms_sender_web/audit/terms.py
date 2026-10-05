@@ -89,6 +89,8 @@ def describe(event) -> str:
     """One short Persian line about an event's details ("" when none)."""
     d = event.detail or {}
     target = d.get("target")
+    if event.action == "login" and d.get("remembered"):
+        return gettext_now("kept signed in on this Mac for 30 days")
     if event.action == "role_changed":
         return format_html(
             gettext_now("{who}: from {before} to {after}"), who=_who(target),
@@ -114,6 +116,10 @@ def describe(event) -> str:
         cap = d["frequency_cap"]
         return format_html(gettext_now("frequency cap: from {before} to {after}"),
                            before=_who(cap.get("before", "")), after=_who(cap.get("after", "")))
+    if event.action == "system_settings_changed" and d.get("backups"):
+        change = d["backups"]
+        return format_html(gettext_now("daily backup: from {before} to {after}"),
+                           before=_who(change.get("before", "")), after=_who(change.get("after", "")))
     if event.action == "system_settings_changed" and d.get("credit_floor"):
         floor = d["credit_floor"]
         shown = {k: fa_number(v) if isinstance(v, int) else "—" for k, v in floor.items()}

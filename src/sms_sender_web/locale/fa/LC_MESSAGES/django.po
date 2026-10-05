@@ -2449,9 +2449,6 @@ msgstr "پشتیبان‌گیری و حذف"
 msgid "Back up now"
 msgstr "پشتیبان‌گیری هم‌اکنون"
 
-msgid "Back up now, or let DevOps schedule them (docs/deploy.md)."
-msgstr "هم‌اکنون پشتیبان بگیرید، یا زمان‌بندی آن را به DevOps بسپارید (docs/deploy.md)."
-
 #, python-format
 msgid "Backed up: %(name)s."
 msgstr "نسخه پشتیبان گرفته شد: %(name)s."
@@ -3172,3 +3169,81 @@ msgstr "ارسال متوقف است"
 
 msgid "Sending is on"
 msgstr "ارسال برقرار است"
+
+msgid "Local · sandbox"
+msgstr "محلی · شبیه‌سازی"
+
+msgid "Local · real"
+msgstr "محلی · واقعی"
+
+msgid "Keep me signed in on this Mac for 30 days"
+msgstr "تا ۳۰ روز در همین مک وارد بمانم"
+
+msgid "kept signed in on this Mac for 30 days"
+msgstr "تا ۳۰ روز در همین مک وارد می‌ماند"
+
+msgid "Every recipient is an allowed number."
+msgstr "همه گیرنده‌ها شماره مجاز دارند."
+
+msgid "{n} recipients aren't allowed numbers: the test SMS works, but the send would be refused."
+msgstr "{n} گیرنده جزو شماره‌های مجاز نیستند: پیامک آزمایشی فرستاده می‌شود، اما ارسال پذیرفته نمی‌شود."
+
+msgid "Daily backup"
+msgstr "پشتیبان‌گیری روزانه"
+
+msgid "The daily backup is overdue: the worker isn't running, or the backup keeps failing. The details are in the worker's log."
+msgstr "پشتیبان‌گیری روزانه عقب افتاده است: یا اجراکننده کارها روشن نیست، یا پشتیبان‌گیری پیاپی شکست می‌خورد. جزئیات در گزارش اجراکننده کارها است."
+
+msgid "The worker backs up once a day at this hour (Tehran time), and keeps the newest ones. One missed while the computer slept runs as soon as the worker is back. On a Mac, keep this folder in Time Machine."
+msgstr "اجراکننده کارها هر روز در این ساعت (به وقت تهران) یک نسخه پشتیبان می‌گیرد و تازه‌ترین نسخه‌ها را نگه می‌دارد. اگر رایانه در آن ساعت خواب باشد، همین که اجراکننده کارها دوباره روشن شود، پشتیبان گرفته می‌شود. روی مک، این پوشه را در Time Machine نگه دارید."
+
+msgid "At (Tehran time)"
+msgstr "ساعت (به وقت تهران)"
+
+msgid "Off"
+msgstr "خاموش"
+
+msgid "Keep the newest"
+msgstr "تعداد نسخه‌های نگه‌داشته"
+
+msgid "Choose an hour, or off, and keep 1 to 90 backups."
+msgstr "یک ساعت یا «خاموش» را انتخاب کنید و بین ۱ تا ۹۰ نسخه نگه دارید."
+
+msgid "Saved. The worker backs up at that hour every day."
+msgstr "ذخیره شد. اجراکننده کارها هر روز در آن ساعت پشتیبان می‌گیرد."
+
+msgid "Back up now; the daily backup makes the next one by itself."
+msgstr "اکنون یک نسخه پشتیبان بگیرید؛ نسخه بعدی را پشتیبان‌گیری روزانه خودش می‌سازد."
+
+msgid "daily backup: from {before} to {after}"
+msgstr "پشتیبان‌گیری روزانه: از {before} به {after}"
+
+msgid "keeps the newest {n}"
+msgstr "تازه‌ترین {n} نسخه نگه داشته می‌شود"
+
+msgid "overdue"
+msgstr "عقب افتاده"
+
+msgid "SMS go only to:"
+msgstr "پیامک فقط به این شماره‌ها می‌رود:"
+
+msgid "Set wrongly: nothing is sent."
+msgstr "درست تنظیم نشده: هیچ پیامکی فرستاده نمی‌شود."
+
+msgid "Restricted sending"
+msgstr "ارسال محدود"
+
+msgid "Restricted sending is set wrongly: no SMS goes out until SMS_SENDER_ALLOWED_NUMBERS in .env holds only phone numbers."
+msgstr "ارسال محدود درست تنظیم نشده است: تا وقتی در SMS_SENDER_ALLOWED_NUMBERS چیزی جز شماره تلفن هست، هیچ پیامکی فرستاده نمی‌شود."
+
+msgid "Restricted sending: SMS go only to the allowed numbers, from the dashboard and the command line alike."
+msgstr "ارسال محدود: پیامک‌ها، چه از داشبورد و چه از خط فرمان، فقط به شماره‌های مجاز فرستاده می‌شوند."
+
+msgid "Restricted sending: {count} recipients aren't allowed numbers, so nothing was sent. Until it's lifted, only the numbers in SMS_SENDER_ALLOWED_NUMBERS get SMS."
+msgstr "ارسال محدود: {count} گیرنده جزو شماره‌های مجاز نیستند، پس چیزی فرستاده نشد. تا این محدودیت برداشته نشود، فقط شماره‌های SMS_SENDER_ALLOWED_NUMBERS پیامک می‌گیرند."
+
+msgid "Restricted sending: your number for test SMS isn't an allowed number, so the test SMS wasn't sent."
+msgstr "ارسال محدود: شماره شما برای پیامک آزمایشی جزو شماره‌های مجاز نیست، پس پیامک آزمایشی فرستاده نشد."
+
+msgid "Restricted sending is set wrongly: SMS_SENDER_ALLOWED_NUMBERS holds something that isn't a phone number, so nothing is sent."
+msgstr "ارسال محدود درست تنظیم نشده است: در SMS_SENDER_ALLOWED_NUMBERS چیزی هست که شماره تلفن نیست، پس هیچ پیامکی فرستاده نمی‌شود."

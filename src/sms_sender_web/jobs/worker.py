@@ -16,6 +16,10 @@
 - When idle, it queues delivery updates while Kavenegar still answers
   (48 h) and click updates for recent campaigns, and asks Kavenegar for the
   account's credit every 15 minutes (system/credit.py).
+- Once a day, at the hour set in the system settings, it backs the data
+  folder up (plan 06, L1), in a thread of its own.
+- Run exactly one per data folder: `run_worker` waits while another one is
+  alive (`other_worker`), and fails if it stays.
 """
 from __future__ import annotations
 
@@ -38,7 +42,8 @@ from sms_sender.delivery import FINAL, WINDOW_SEC, sync_delivery
 from sms_sender.input_loader import InputError
 from sms_sender.locking import RunLock, RunLockError
 from sms_sender.reconcile import DEFAULT_MIN_AGE_SEC, REQUEUE_NOT_FOUND, reconcile_unknown
-from sms_sender.sharing import write_heartbeat
+from sms_sender.notify import notify_text
+from sms_sender.sharing import clear_heartbeat, foreign_worker, write_heartbeat
 from sms_sender.state import CampaignMismatchError
 from sms_sender.window import DEFAULT_WINDOW, now_tehran, parse_window
 
@@ -63,6 +68,10 @@ ALIVE_WITHIN = timedelta(seconds=60)
 DELIVERY_EVERY = timedelta(minutes=15)
 CLICKS_EVERY = timedelta(hours=1)
 CLICKS_FOR = timedelta(days=14)
+# A daily backup that failed is tried again this much later.
+BACKUP_RETRY = timedelta(hours=1)
+BACKUP_FAILED = ("sms-sender: the daily backup failed ({error}), so nothing was kept. It's tried "
+                 "again in an hour; the details are in the worker's log.")
 
 # Why a running send was stopped; a later reason only wins if it's stronger.
 # An operator's pause outranks the hold: lifting the hold doesn't resume it.
@@ -179,6 +188,9 @@ class Worker:
         self.max_attempts = max_attempts
         self.stop = stop or threading.Event()
         self._next_schedule = None
+        self._backup: threading.Thread | None = None
+        self._backup_retry_at: datetime | None = None
+        self._backup_failing = False
 
     def beat(self) -> None:
         WorkerBeat.objects.update_or_create(worker_id=self.id, defaults={"seen_at": timezone.now()})
@@ -250,12 +262,25 @@ class Worker:
                 self.beat()
                 self.schedule()
                 self.resume_when_window_opens()
+                self.back_up_if_due()
             except Exception:  # noqa: BLE001 — keep the worker alive
                 logger.exception("worker_error", extra={"worker": self.id})
             self.stop.wait(poll_sec)
         for lane in lanes:
             lane.join()  # each lets its job requeue itself (shutdown) first
+        if self._backup is not None:
+            self._backup.join()  # a half-made backup would only be thrown away
+        self.sign_off()
         logger.info("worker_stopped", extra={"worker": self.id})
+
+    def sign_off(self) -> None:
+        """A clean stop: this worker is no longer alive, so the next one (an
+        upgrade's, or the Mac's after Docker's) can start at once."""
+        try:
+            WorkerBeat.objects.filter(worker_id=self.id).delete()
+        except Exception:  # noqa: BLE001 — a stale beat only delays the next start
+            logger.exception("worker_error", extra={"worker": self.id})
+        clear_heartbeat(django_settings.SMS_SENDER_DB_DIR, self.id)
 
     def _lane(self, name: str, kinds: tuple[str, ...], poll_sec: float) -> None:
         try:
@@ -473,6 +498,47 @@ class Worker:
         else:
             credit.check_now(sender)
 
+    def back_up_if_due(self, now: datetime | None = None) -> threading.Thread | None:
+        """Start the daily backup when it's due (system settings), in a
+        thread of its own, so the heartbeat goes on while it copies."""
+        from ..system import operations
+        from ..system.models import SystemSettings
+
+        now = now or timezone.now()
+        if self._backup is not None and self._backup.is_alive():
+            return None
+        if self._backup_retry_at is not None and now < self._backup_retry_at:
+            return None
+        current = SystemSettings.load()
+        if not operations.backup_due(now, current.backup_hour, operations.newest_backup_at()):
+            return None
+        self._backup = threading.Thread(
+            target=self._daily_backup, args=(current.backup_keep, list(current.notify_targets or [])),
+            name="daily-backup",
+        )
+        self._backup.start()
+        return self._backup
+
+    def _daily_backup(self, keep: int, targets: list[str]) -> None:
+        """The backup itself; it doesn't touch the app DB (only copies it)."""
+        from pathlib import Path
+
+        from ..backup import make_backup
+
+        try:
+            result = make_backup(Path(django_settings.DATA_DIR), django_settings.BACKUP_DIR, keep=keep)
+        except Exception as e:  # noqa: BLE001 — tried again later, and announced
+            logger.exception("backup_failed", extra={"worker": self.id})
+            self._backup_retry_at = timezone.now() + BACKUP_RETRY
+            if not self._backup_failing:  # once until one succeeds
+                self._backup_failing = True
+                for target in targets:
+                    notify_text(target, BACKUP_FAILED.format(error=type(e).__name__))  # never raises
+        else:
+            self._backup_retry_at, self._backup_failing = None, False
+            logger.info("backup_made", extra={"backup": result.path.name, "files": result.files,
+                                              "pruned": len(result.pruned)})
+
     def _enqueue_if_due(self, campaign: Campaign, kind: str, every: timedelta) -> None:
         jobs = Job.objects.filter(campaign=campaign, kind=kind)
         if jobs.filter(state__in=ACTIVE).exists():
@@ -491,3 +557,35 @@ def last_seen() -> "datetime | None":
 def worker_alive() -> bool:
     seen = last_seen()
     return seen is not None and seen >= timezone.now() - ALIVE_WITHIN
+
+
+def _process_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # someone else's process
+    return True
+
+
+def other_worker(worker_id: str | None = None) -> str | None:
+    """Another worker alive on this data folder, in a sentence; None when
+    there's none. Run exactly one: two would race each other for the sends,
+    and from another kernel (Docker Desktop's VM) not even the run lock keeps
+    them apart. `worker_id`: the one asking (default: this process)."""
+    me = worker_id or f"{socket.gethostname()}:{os.getpid()}"
+    foreign = foreign_worker(django_settings.SMS_SENDER_DB_DIR)
+    if foreign is not None:
+        return (f"a worker in another VM or on another machine ({foreign.get('worker') or '?'}) "
+                f"is using {django_settings.SMS_SENDER_DB_DIR}")
+    host = me.rpartition(":")[0]
+    for beat in WorkerBeat.objects.filter(seen_at__gte=timezone.now() - ALIVE_WITHIN).exclude(worker_id=me):
+        name, _, pid = beat.worker_id.rpartition(":")
+        if name == host and pid.isdigit():
+            if _process_alive(int(pid)):
+                return f"worker {beat.worker_id} is running on this machine (process {pid})"
+            continue  # it ended without signing off
+        age = int((timezone.now() - beat.seen_at).total_seconds())
+        return f"worker {beat.worker_id} (another machine or container) was alive {age} s ago"
+    return None

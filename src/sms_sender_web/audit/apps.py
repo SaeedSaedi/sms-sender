@@ -16,7 +16,12 @@ class AuditConfig(AppConfig):
         from .record import record
 
         def logged_in(sender, request, user, **kwargs):
-            record("login", request=request, user=user)
+            from ..accounts.views import remembered
+
+            if request is not None and remembered(request):
+                record("login", request=request, user=user, remembered=True)  # for 30 days (D5)
+            else:
+                record("login", request=request, user=user)
 
         def logged_out(sender, request, user, **kwargs):
             if user is not None:

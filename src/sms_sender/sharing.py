@@ -57,6 +57,17 @@ def write_heartbeat(folder: Path | str, worker: str) -> None:
         tmp.unlink(missing_ok=True)
 
 
+def clear_heartbeat(folder: Path | str, worker: str) -> None:
+    """A clean stop: the heartbeat goes with the worker that wrote it, so a
+    CLI on another kernel needn't wait for it to grow stale."""
+    path = Path(folder) / HEARTBEAT
+    try:
+        if json.loads(path.read_text(encoding="utf-8")).get("worker") == worker:
+            path.unlink()
+    except (OSError, ValueError, AttributeError):
+        pass
+
+
 def foreign_worker(folder: Path | str, *, now: float | None = None) -> dict | None:
     """A live dashboard worker on another kernel using this folder, or None."""
     try:

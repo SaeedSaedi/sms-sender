@@ -1,4 +1,5 @@
 {% load i18n roles ui %}{% if not in_drawer %}<a class="brand" href="{% url 'home' %}">{% icon "message-square-text" %}<span>{% translate "SMS campaigns" %}</span></a>{% endif %}
+{% include "ui/env_badge.html" %}
 {% if user|can:"view_campaigns" %}
 <p class="nav-group">{% translate "SMS sending" %}</p>
 <ul class="nav-list">

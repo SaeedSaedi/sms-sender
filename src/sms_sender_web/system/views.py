@@ -5,6 +5,7 @@ import logging
 
 from django.contrib import messages
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods, require_POST
 
@@ -171,12 +172,46 @@ def sending_hold(request):
     return redirect("status")
 
 
+BACKUP_HOURS, BACKUP_KEEP = range(24), range(1, 91)  # what the schedule form accepts
+
+
+def _backup_schedule(request, current: SystemSettings) -> str:
+    """The worker's daily backup: its hour (Tehran time, or off) and how
+    many to keep. An error, or ""."""
+    hour = request.POST.get("backup_hour", "").strip()
+    keep = _number(request.POST, "backup_keep", BACKUP_KEEP)
+    if (hour != "off" and _number(request.POST, "backup_hour", BACKUP_HOURS) is None) or keep is None:
+        return _("Choose an hour, or off, and keep 1 to 90 backups.")
+    before = _schedule_text(current)
+    current.backup_hour = None if hour == "off" else _number(request.POST, "backup_hour", BACKUP_HOURS)
+    current.backup_keep, current.updated_by = keep, request.user
+    current.save()
+    after = _schedule_text(current)
+    if after != before:
+        record("system_settings_changed", request=request, backups={"before": before, "after": after})
+    return ""
+
+
+def _schedule_text(current: SystemSettings) -> str:
+    if current.backup_hour is None:
+        return "off"
+    return f"{current.backup_hour:02d}:00/{current.backup_keep}"
+
+
 @requires("manage_settings")
 @require_http_methods(["GET", "POST"])
 def backups(request):
     """Back up now, and check a backup (the server's `manage.py backup` and
-    `verify_backup`). Restoring stays an operations procedure: it needs
-    both services stopped (docs/deploy.md)."""
+    `verify_backup`); and the worker's daily backup. Restoring stays an
+    operations procedure: it needs both services stopped (docs/deploy.md)."""
+    current = SystemSettings.load()
+    if request.method == "POST" and request.POST.get("action") == "schedule":
+        error = _backup_schedule(request, current)
+        if error:
+            messages.error(request, error)
+        else:
+            messages.success(request, _("Saved. The worker backs up at that hour every day."))
+        return redirect("backups")
     if request.method == "POST":
         if request.POST.get("action") == "create":
             try:
@@ -199,4 +234,10 @@ def backups(request):
                 else:
                     messages.success(request, _("%(name)s is whole: every file matches its fingerprint.") % {"name": name})
         return redirect("backups")
-    return render(request, "system/backups.html", {"backups": operations.backups()})
+    newest = operations.newest_backup_at()
+    return render(request, "system/backups.html", {
+        "backups": operations.backups(),
+        "settings": current,
+        "hours": [(h, f"{h:02d}:00") for h in BACKUP_HOURS],
+        "overdue": operations.backup_overdue(timezone.now(), current.backup_hour, newest),
+    })

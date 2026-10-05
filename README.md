@@ -560,12 +560,63 @@ internal, multi-user tool built with Django and HTMX. So far it has:
 It works on phones (the menu moves into a drawer, tables become cards), by
 keyboard and with screen readers. It follows the system's dark mode.
 
-The campaign pages hand their work to the worker (`docker compose up`
-starts it next to the web app), and the pages follow it as it runs.
+The campaign pages hand their work to the worker, and the pages follow it
+as it runs. On a Mac, `./sms-dashboard start` runs both (below); on a server,
+Docker Compose does (`docker compose up`).
+
+### Run it on your Mac
+
+`./sms-dashboard` runs the dashboard natively, without Docker: gunicorn on
+127.0.0.1 and the worker, kept going by one small supervisor. On one Mac,
+the CLI and the worker share the run lock and SQLite's locks, which Docker
+Desktop's VM can't.
+
+```bash
+python -m venv .venv && .venv/bin/pip install -e ".[web]"   # once
+.venv/bin/python manage.py createsuperuser                 # once: your account
+
+./sms-dashboard start            # http://127.0.0.1:8000 on data/, and opens the browser
+./sms-dashboard status
+./sms-dashboard logs -f          # logs/dashboard.log
+./sms-dashboard stop             # a send lets its requests in flight finish, then waits
+./sms-dashboard upgrade          # after git pull: a backup, stop, install, start again
+./sms-dashboard install-agent    # start at login, and again after a crash (launchd)
+./sms-dashboard start --sandbox  # http://127.0.0.1:8001 on data/sandbox/: nothing is sent
+```
+
+The sandbox has its own users: create them with
+`SMS_SENDER_SANDBOX=1 .venv/bin/python manage.py createsuperuser`.
+- **It won't share the data folder.** It refuses to start while a Docker
+  container has `data/` mounted (stop it: `docker compose stop`), or while a
+  worker in another VM has a fresh heartbeat there. The worker itself waits
+  while another one is alive, and gives up after two minutes.
+- **On start** it takes a backup first when the app DB needs migrating, then
+  migrates and collects the static files.
+- **Which data a page is on** shows under the name: «محلی · واقعی» or
+  «محلی · شبیه‌سازی».
+- **Keep me signed in:** on the Mac itself, the sign-in page offers 30 days
+  instead of 8 hours. Operators and admins still give their code once. It's
+  never offered from another machine, nor on a server.
+- **Daily backups:** the worker backs up `data/` once a day, at the hour set
+  on «نسخه‌های پشتیبان» (09:00 Tehran by default), keeping the newest 14, in
+  `data/backups/` (`SMS_SENDER_BACKUP_DIR` moves them). Time Machine covers
+  them; they hold phone numbers, so keep that disk encrypted. To restore
+  one: `./sms-dashboard stop`, then `.venv/bin/python manage.py
+  restore_backup data/backups/<time>`. It puts back what's missing, and
+  replaces a file only when you name it with `--replace`. Then start again.
+- **Restricted sending:** with `SMS_SENDER_ALLOWED_NUMBERS=09xxxxxxxxx`
+  (comma-separated) in `.env`, no SMS goes to any other number, from the
+  dashboard or the CLI. A run with anyone else in its queue is refused
+  before anything is sent, and a test SMS goes only to an allowed number.
+  Every page shows a banner while it's on. Remove the line and restart to
+  lift it.
+- **A proxy for Kavenegar or Shlink** goes in `.env` (`HTTPS_PROXY`): under
+  launchd, your shell's variables aren't there.
 
 ### Sandbox: try everything without sending
 
-Set `SMS_SENDER_SANDBOX=1` in `.env`, then run `docker compose up -d`. Both
+Run `./sms-dashboard start --sandbox`. With Docker, set
+`SMS_SENDER_SANDBOX=1` in `.env`, then run `docker compose up -d`; both
 services read `.env`. In sandbox mode:
 - Kavenegar and the short-link service are simulated, and no request leaves
   the machine.
@@ -582,7 +633,8 @@ services read `.env`. In sandbox mode:
   `data/sandbox/sandbox-outbox.jsonl`. The status page lists the latest ones,
   so you can read exactly what would have gone out.
 
-Remove the line (or set it to `0`) and restart to go back to real sending.
+With Docker, remove the line (or set it to `0`) and restart to go back to
+real sending.
 
 Uploaded lists are kept in `data/segments/`, which git ignores, like every
 other list of phone numbers. Pages show numbers masked (`۰۹۱۲*****۳۴`).
@@ -660,9 +712,7 @@ To let colleagues on NetBird reach it:
 NetBird's access policies decide who can reach the port, and every page
 still needs a login.
 
-Without Docker, run `pip install -e ".[web]"`, then `python manage.py
-migrate`, `python manage.py createsuperuser` and `python manage.py
-runserver`.
+Without Docker, see [Run it on your Mac](#run-it-on-your-mac).
 
 All of the dashboard's Persian text lives in
 `src/sms_sender_web/locale/fa/LC_MESSAGES/django.po`. After editing it, run

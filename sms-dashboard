@@ -1,0 +1,10 @@
+#!/bin/sh
+# The dashboard on this Mac (plan 06): ./sms-dashboard start | stop | status | logs | upgrade
+# It uses this checkout's .venv. Set that up once:
+#   python -m venv .venv && .venv/bin/pip install -e ".[web]"
+cd "$(dirname "$0")" || exit 1
+if [ ! -x .venv/bin/python ]; then
+  echo 'No .venv here yet. Set it up once: python -m venv .venv && .venv/bin/pip install -e ".[web]"' >&2
+  exit 2
+fi
+exec .venv/bin/python -m sms_sender_web.local "$@"

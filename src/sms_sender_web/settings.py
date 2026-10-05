@@ -26,6 +26,11 @@ BASE_DIR = Path(__file__).resolve().parent
 # sent. Everything, the app DB included, lives in data/sandbox/, so sandbox
 # runs never mix with real campaigns. See jobs/sandbox.py.
 SANDBOX = _bool("SMS_SENDER_SANDBOX")
+# Where it runs (plan 06): "local" when `sms-dashboard` runs it on your Mac.
+# Pages then show which data they're on (real or sandbox), and a sign-in from
+# the Mac itself may last 30 days (decision D5). Unset on the server.
+ENVIRONMENT = os.environ.get("SMS_SENDER_ENVIRONMENT", "").strip().lower()
+LOCAL = ENVIRONMENT == "local"
 # The app DB and the campaign DBs (data/db/<campaign>.db) live here.
 DATA_DIR = Path(os.environ.get("SMS_SENDER_DATA_DIR", "data")).resolve()
 if SANDBOX:
@@ -38,6 +43,8 @@ SMS_SENDER_DB_DIR.mkdir(parents=True, exist_ok=True)
 # `manage.py backup` writes here. Keep it off the data volume's disk, or
 # copy it elsewhere (encrypted): it holds phone numbers (docs/deploy.md).
 BACKUP_DIR = Path(os.environ.get("SMS_SENDER_BACKUP_DIR") or DATA_DIR / "backups").resolve()
+if SANDBOX and os.environ.get("SMS_SENDER_BACKUP_DIR"):
+    BACKUP_DIR = BACKUP_DIR / "sandbox"  # its own, or its daily backup would prune the real ones
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
 if not SECRET_KEY:
@@ -165,6 +172,11 @@ SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = _bool("DJANGO_SECURE_COOKIES")
 if _bool("DJANGO_TRUST_PROXY_SSL"):
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_AGE = 8 * 3600
+if SANDBOX:
+    # Its own cookies, so signing in to the sandbox (another port on the same
+    # host) doesn't sign you out of the real dashboard: cookies ignore ports.
+    SESSION_COOKIE_NAME = "sandbox_sessionid"
+    CSRF_COOKIE_NAME = "sandbox_csrftoken"
 SESSION_COOKIE_HTTPONLY = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "same-origin"
