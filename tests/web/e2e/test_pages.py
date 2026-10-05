@@ -1,6 +1,6 @@
 """Every page at phone, tablet and desktop widths, and on desktop in dark
-mode too (plan 05): it fits the window, and axe-core finds no
-accessibility problem.
+mode too (plan 05): it fits the window, axe-core finds no accessibility
+problem, and every control is at least 24 × 24 px (WCAG 2.2 AA, 2.5.8).
 
 baseline.json lists the problems known on 2026-10-04, until they're fixed.
 A new problem fails, and so does a fixed one that's still listed: take it
@@ -14,11 +14,11 @@ from pathlib import Path
 import pytest
 
 from ..world import PAGES, build_world
-from .conftest import axe_violations, overflow
+from .conftest import axe_violations, overflow, small_targets
 
 pytestmark = pytest.mark.e2e
 
-WIDTHS = (360, 390, 768, 1366)
+WIDTHS = (360, 390, 768, 1024, 1366)
 AXE_WIDTHS = (390, 1366)  # layout-dependent rules differ between phone and desktop
 BASELINE = Path(__file__).with_name("baseline.json")
 
@@ -49,6 +49,7 @@ def _found(world, open_as, name: str) -> tuple[set[str], set[str]]:
             too_wide.add(key)
         if width in AXE_WIDTHS:
             problems |= {f"{key}:{v['id']}" for v in axe_violations(page)}
+            problems |= {f"{key}:target-size {t}" for t in small_targets(page)}
         if shots:
             Path(shots).mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(Path(shots) / f"{key}.png"), full_page=True)

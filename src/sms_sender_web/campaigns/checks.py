@@ -44,7 +44,9 @@ class CheckResult:
         return not self.problems
 
 
-def check_campaign(campaign: Campaign) -> CheckResult:
+def check_campaign(campaign: Campaign, loaded=None) -> CheckResult:
+    """`loaded`: the segment already read with the campaign's settings
+    (preview.load_segment), so a page reads it once."""
     s = campaign.settings or {}
     result = CheckResult()
     segment = Segment.objects.filter(slug=s.get("segment"), status=Segment.Status.READY).first()
@@ -57,11 +59,12 @@ def check_campaign(campaign: Campaign) -> CheckResult:
         TokenColumns(columns=dict(s["token_columns"]), value_maps=dict(s.get("value_maps") or {}))
         if s.get("token_columns") else None
     )
-    try:
-        loaded = input_loader.load(segment.path, token_columns, segment.user_id_column or None)
-    except InputError:
-        result.problems.append("columns_missing")
-        return result
+    if loaded is None:
+        try:
+            loaded = input_loader.load(segment.path, token_columns, segment.user_id_column or None)
+        except InputError:
+            result.problems.append("columns_missing")
+            return result
     result.valid = len(loaded.valid)
     result.invalid = dict(Counter(row.key for row in loaded.invalid))
     result.duplicates = loaded.duplicates_collapsed

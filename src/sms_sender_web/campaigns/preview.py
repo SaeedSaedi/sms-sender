@@ -49,23 +49,36 @@ def price_per_part() -> float | None:
     return None
 
 
-def _first_row(settings: dict, segment) -> tuple[dict[str, str], str]:
+def load_segment(settings: dict | None, segment):
+    """The segment's file as a send would read it (its token columns and
+    value maps, its user-ID column), or None when it can't be read. A page
+    that needs it several times reads it once (100,000 rows take ~0.5 s)."""
+    settings = settings or {}
+    if segment is None or not segment.path.exists():
+        return None
+    columns = settings.get("token_columns") or {}
+    token_columns = (
+        TokenColumns(columns=dict(columns), value_maps=dict(settings.get("value_maps") or {})) if columns else None
+    )
+    try:
+        return input_loader.load(segment.path, token_columns, segment.user_id_column or None)
+    except (InputError, OSError):
+        return None
+
+
+def _first_row(settings: dict, segment, loaded=None) -> tuple[dict[str, str], str]:
     """The first valid recipient's token values (translated), and its phone."""
     columns = settings.get("token_columns") or {}
     if not columns or segment is None or not segment.path.exists():
         return {}, ""
-    token_columns = TokenColumns(columns=dict(columns), value_maps=dict(settings.get("value_maps") or {}))
-    try:
-        loaded = input_loader.load(segment.path, token_columns, segment.user_id_column or None)
-    except (InputError, OSError):
-        return {}, ""
-    if not loaded.valid:
+    loaded = loaded if loaded is not None else load_segment(settings, segment)
+    if loaded is None or not loaded.valid:
         return {}, ""
     row = loaded.valid[0]
     return dict(row.tokens), mask_phone(row.phone)
 
 
-def preview_of(settings: dict | None, segment) -> Preview:
+def preview_of(settings: dict | None, segment, loaded=None) -> Preview:
     settings = settings or {}
     name = (settings.get("template") or "").strip()
     template = MessageTemplate.objects.filter(name=name).first() if name else None
@@ -73,7 +86,7 @@ def preview_of(settings: dict | None, segment) -> Preview:
         return Preview(template=name)
 
     values = dict(settings.get("tokens") or {})
-    row, sample = _first_row(settings, segment)
+    row, sample = _first_row(settings, segment, loaded)
     values.update(row)
     links = settings.get("links") or {}
     if links.get("token"):
@@ -128,23 +141,15 @@ class RecipientsPreview:
 
 
 def recipients(settings: dict | None, segment, campaign: str, *, limit: int = 5,
-               phone: str | None = None) -> RecipientsPreview | None:
+               phone: str | None = None, loaded=None) -> RecipientsPreview | None:
     """The first `limit` recipients' messages, or one number's, with the
     link's request. Reads the segment's file; nothing is sent or made."""
     from sms_sender.links import LinkSettings, plan_link
     from sms_sender.phone import InvalidPhoneError, normalize
 
     settings = settings or {}
-    if segment is None or not segment.path.exists():
-        return None
-    columns = settings.get("token_columns") or {}
-    token_columns = (
-        TokenColumns(columns=dict(columns), value_maps=dict(settings.get("value_maps") or {}))
-        if columns else None
-    )
-    try:
-        loaded = input_loader.load(segment.path, token_columns, segment.user_id_column or None)
-    except (InputError, OSError):
+    loaded = loaded if loaded is not None else load_segment(settings, segment)
+    if loaded is None:
         return None
     rows = loaded.valid
     asked, found = "", True

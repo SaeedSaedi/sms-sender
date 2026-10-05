@@ -43,7 +43,7 @@ from .forms import (
 from .lifecycle import CANCELLED, COMPLETED, DRAFT, PAUSED, READY, STOPPED, lifecycle
 from .models import MessageTemplate
 from .present import checklist, notes, result_line, say, send_summary
-from .preview import ROW_CHOICES, preview_of, recipients
+from .preview import ROW_CHOICES, load_segment, preview_of, recipients
 from .terms import (
     CHECK_PROBLEMS, CHECK_STATES, CONFLICTS, COST_EACH, COST_TOTAL, FOLLOWUPS, INVALID_ROWS, LINKS_AT_SEND,
     NEXT_STEP, REQUEUE_CONFIRM, REQUEUED, STAGES, STEPS, stop_reason,
@@ -428,7 +428,10 @@ def _live(request, campaign: Campaign, **preview) -> dict:
     waiting = counts.get("pending", 0) + counts.get("failed_retriable", 0)
     ready = {}
     if life.stage == READY:  # the poll renders this step too, so it's built here
-        ready = {**_check_context(campaign), **_preview_context(request, campaign, **preview)}
+        segment = Segment.objects.filter(slug=campaign.settings.get("segment")).first()
+        loaded = load_segment(campaign.settings, segment)  # one read for the check, the message and the rows
+        ready = {**_check_context(campaign, loaded),
+                 **_preview_context(request, campaign, segment=segment, loaded=loaded, **preview)}
         ready.update(_with_cost("message", ready["message"], ready["check"].to_send))
         ready["checklist"] = checklist(
             ready["check"], ready["message"], campaign.settings,
@@ -494,8 +497,8 @@ def _live(request, campaign: Campaign, **preview) -> dict:
     }
 
 
-def _check_context(campaign: Campaign) -> dict:
-    result = check_campaign(campaign)
+def _check_context(campaign: Campaign, loaded=None) -> dict:
+    result = check_campaign(campaign, loaded)
     return {
         "check": result,
         "check_problems": [CHECK_PROBLEMS[key] for key in result.problems],
@@ -504,17 +507,22 @@ def _check_context(campaign: Campaign) -> dict:
     }
 
 
-def _preview_context(request, campaign: Campaign, *, query: str = "", rows: int = ROW_CHOICES[0]) -> dict:
+def _preview_context(request, campaign: Campaign, *, query: str = "", rows: int = ROW_CHOICES[0],
+                     segment=None, loaded=None) -> dict:
     """The ready step's preview, before any test SMS: the message and, for
     whoever sends, each recipient's message or one number's. Read only:
-    nothing is sent, and no link is made."""
+    nothing is sent, and no link is made. The segment is read once here
+    (or by the caller, who passes it on)."""
     s = campaign.settings
-    segment = Segment.objects.filter(slug=s.get("segment")).first()
-    context = _with_cost("message", preview_of(s, segment))
+    if segment is None:
+        segment = Segment.objects.filter(slug=s.get("segment")).first()
+    if loaded is None:
+        loaded = load_segment(s, segment)
+    context = _with_cost("message", preview_of(s, segment, loaded))
     if can(request.user, "run_campaigns"):
         context.update(
             row_choices=ROW_CHOICES, rows=rows, preview_query=query,
-            recipients=recipients(s, segment, campaign.slug, limit=rows, phone=query or None),
+            recipients=recipients(s, segment, campaign.slug, limit=rows, phone=query or None, loaded=loaded),
         )
     return context
 

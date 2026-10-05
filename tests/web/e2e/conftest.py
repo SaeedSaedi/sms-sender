@@ -138,3 +138,31 @@ def axe_violations(page) -> list[dict]:
 def overflow(page) -> int:
     """How many pixels the page is wider than the window (0: fits)."""
     return page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
+
+
+def small_targets(page) -> list[str]:
+    """Controls smaller than 24 × 24 CSS px (WCAG 2.2 AA, 2.5.8): buttons,
+    fields, selects, summaries and button-like links. Inline links in a
+    sentence are exempt, and so is a checkbox inside its label (the label is
+    the target)."""
+    return page.evaluate(
+        """() => {
+          const out = [];
+          const picked = document.querySelectorAll(
+            'button, select, textarea, summary, a.button, ' +
+            'input:not([type=hidden]):not([type=checkbox]):not([type=radio]), ' +
+            'input[type=checkbox]:not(label input), input[type=radio]:not(label input)');
+          for (const el of picked) {
+            const box = el.getBoundingClientRect();
+            const style = getComputedStyle(el);
+            if (!box.width || !box.height || style.visibility === "hidden") continue;
+            if (el.closest("[hidden], dialog:not([open])")) continue;
+            if (el.classList.contains("visually-hidden") || el.classList.contains("file-input")) continue;
+            if (box.width < 24 || box.height < 24) {
+              const text = (el.innerText || el.value || el.getAttribute("aria-label") || el.name || "").trim().slice(0, 30);
+              out.push(`${el.tagName.toLowerCase()}${el.className ? "." + [...el.classList].join(".") : ""} "${text}" ${Math.round(box.width)}x${Math.round(box.height)}`);
+            }
+          }
+          return out;
+        }"""
+    )

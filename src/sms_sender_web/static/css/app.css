@@ -394,7 +394,7 @@ button.danger-solid:hover, .btn-danger-solid:hover { border-color: var(--danger)
 button.small, a.button.small, label.button.small, .btn-sm { min-block-size: 2.1rem; padding: .25rem .75rem; font-size: var(--fs-sm); }
 
 button.link {
-  min-block-size: 0;
+  min-block-size: 1.5rem;  /* a 24 px target at least (WCAG 2.2, 2.5.8) */
   padding: 0;
   border: 0;
   background: none;
@@ -889,6 +889,9 @@ fieldset.token-row legend { font-size: var(--fs-sm); }
 
 details.subsection { margin-block-start: var(--s-4); }
 details.subsection > summary { cursor: pointer; font-weight: 700; }
+summary { min-block-size: 1.5rem; }  /* a 24 px target at least */
+/* A control alone in a table cell: its label fills the cell, so the target is large. */
+.cell-target { display: inline-flex; align-items: center; justify-content: center; min-inline-size: 2.75rem; min-block-size: 2.75rem; margin: 0; cursor: pointer; }
 details.subsection > summary .icon { margin-inline-end: var(--s-1); }
 details.advanced { margin-block-end: var(--s-5); }
 
