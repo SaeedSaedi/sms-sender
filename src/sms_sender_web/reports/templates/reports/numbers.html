@@ -9,11 +9,13 @@
 </header>
 
 <section class="card medium">
-  <form method="post" class="search" id="number-form" role="search">
+  <form method="post" id="number-form" role="search">
     {% csrf_token %}
     <label for="id_number">{% translate "Mobile number" %}</label>
-    <input id="id_number" name="number" type="text" dir="ltr" inputmode="tel" autocomplete="off" maxlength="32" required value="{{ typed }}"{% if invalid %} aria-invalid="true" aria-describedby="id_number_error"{% endif %}>
-    <button type="submit">{% icon "search" %}{% translate "Find" %}</button>
+    <div class="field-with-button">
+      <input id="id_number" name="number" type="text" dir="ltr" inputmode="tel" autocomplete="off" maxlength="32" required value="{{ typed }}"{% if invalid %} aria-invalid="true" aria-describedby="id_number_error"{% endif %}>
+      <button type="submit">{% icon "search" %}{% translate "Find" %}</button>
+    </div>
   </form>
   {% if invalid %}<div class="field-errors" id="id_number_error" role="alert"><p class="error">{% translate "That isn't a mobile number. Write it like 09121234567." %}</p></div>{% endif %}
   <p class="hint">{% translate "The number isn't kept in the address or the access log; each lookup is recorded in the activity log." %}</p>

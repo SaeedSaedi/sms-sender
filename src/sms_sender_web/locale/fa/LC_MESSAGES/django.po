@@ -3038,12 +3038,6 @@ msgstr "تا مدیر سامانه توقف سراسری را در صفحه وض
 msgid "Hold all sending"
 msgstr "توقف سراسری ارسال‌ها"
 
-msgid "Held"
-msgstr "متوقف"
-
-msgid "Not held"
-msgstr "فعال"
-
 msgid "Nothing is sent: sends on their way paused, test SMS were cancelled, and new ones are refused, here and from the CLI on this folder."
 msgstr "هیچ پیامکی ارسال نمی‌شود: ارسال‌های در جریان در توقف موقت‌اند، پیامک‌های آزمایشی لغو شده‌اند و ارسال تازه پذیرفته نمی‌شود، چه در داشبورد و چه از خط فرمان روی همین پوشه."
 
@@ -3172,3 +3166,9 @@ msgstr "اعتبار را به ریال و فقط با رقم بنویسید، �
 
 msgid "credit warning: from {before} to {after}"
 msgstr "هشدار اعتبار: از {before} به {after}"
+
+msgid "Sending is stopped"
+msgstr "ارسال متوقف است"
+
+msgid "Sending is on"
+msgstr "ارسال برقرار است"

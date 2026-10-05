@@ -17,7 +17,7 @@
               {% translate "If Kavenegar has no record of one, hold it for review instead of queueing it again" %}</label>
           </details>
         </form>
-      {% elif item.action == "send" and approved and user|can:"run_campaigns" %}
+      {% elif item.action == "send" and approved and user|can:"run_campaigns" and not sending_held %}
         <form method="post" action="{% url 'campaign_action' campaign.slug 'send' %}" class="form-actions" id="followup-send"
               data-confirm="{{ send_confirm }}">
           {% csrf_token %}<button type="submit" class="small">{% icon "send" %}{% translate "Send to them again" %}</button>

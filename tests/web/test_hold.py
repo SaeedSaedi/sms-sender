@@ -142,3 +142,21 @@ def test_only_an_admin_holds_and_everyone_sees_it(campaign, admin, verified, mak
     assert [e.action for e in AuditEvent.objects.filter(action__startswith="sending_").order_by("id")] == [
         "sending_held", "sending_released",
     ]
+
+
+def test_the_campaign_steps_say_why_nothing_can_start(settings, tmp_path, verified):
+    """While held, the send, test and resume buttons give way to a note."""
+    from .world import build_world
+
+    settings.SANDBOX = True
+    settings.DATA_DIR = tmp_path
+    settings.SMS_SENDER_DB_DIR = tmp_path / "db"
+    world = build_world(tmp_path)
+    services.hold_sending(world.users["admin"])
+    client = signed_in(world.users["operator"], verified)
+    for slug, button in (("approved", 'id="send-form"'), ("fresh", 'id="test-form"'),
+                         ("halted", 'id="send-form"'), ("scheduled", 'id="start-now-form"')):
+        html = client.get(f"/campaigns/{slug}/").content.decode()
+        assert "held-note" in html and button not in html, slug
+    services.release_sending(world.users["admin"])
+    assert 'id="send-form"' in client.get("/campaigns/approved/").content.decode()

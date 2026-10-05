@@ -9,7 +9,7 @@ import pytest
 from sms_sender_web.jobs import services
 
 from ..world import PHONES, build_world
-from .conftest import axe_violations, fa, overflow, small_targets
+from .conftest import axe_violations, fa, overflow, shot, small_targets
 
 pytestmark = pytest.mark.e2e
 
@@ -31,6 +31,7 @@ def test_an_admin_holds_all_sending_and_lifts_it(world, open_as):
     page.goto(page.url.replace("/status/", "/campaigns/approved/"))
     banner = page.get_by_role("region", name=fa("All sending is held"))
     assert "admin1" in banner.inner_text()
+    shot(page, "hold.banner@1366")
     assert axe_violations(page) == []
 
     page.goto(page.url.replace("/campaigns/approved/", "/status/"))
@@ -49,6 +50,7 @@ def test_an_operator_finds_a_number(world, open_as, width):
         page.get_by_role("button", name=fa("Find"), exact=True).click()
     assert PHONES[0] not in page.url  # it went in a POST
     page.get_by_role("region", name=fa("Its record in each campaign")).wait_for()
+    shot(page, f"numbers.result@{width}")
     assert overflow(page) <= 1
     assert axe_violations(page) == []
     assert small_targets(page) == []

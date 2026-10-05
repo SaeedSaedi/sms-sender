@@ -126,6 +126,15 @@ def sandbox_worker(sandbox):
     thread.join(timeout=30)
 
 
+def shot(page, name: str) -> None:
+    """With E2E_SHOTS set, a full-page screenshot of what a journey reached
+    (pages the scan can't open by address, such as a POST's result)."""
+    folder = os.environ.get("E2E_SHOTS")
+    if folder:
+        Path(folder).mkdir(parents=True, exist_ok=True)
+        page.screenshot(path=str(Path(folder) / f"{name}.png"), full_page=True)
+
+
 def axe_violations(page) -> list[dict]:
     """axe-core's findings on the page as it is now (tests only; never shipped)."""
     page.add_script_tag(path=str(AXE))
