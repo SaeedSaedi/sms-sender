@@ -26,6 +26,8 @@ ACTION_LABELS = {
     "user_deactivated": _("Account deactivated"),
     "user_activated": _("Account activated"),
     "password_changed": _("Password changed"),
+    "password_reset": _("Password reset by an admin"),
+    "audit_exported": _("Activity log downloaded"),
     "segment_uploaded": _("Segment uploaded"),
     "segment_mapped": _("Segment columns chosen"),
     "segment_deleted": _("Segment deleted"),
@@ -94,7 +96,7 @@ def describe(event) -> str:
             gettext_now("{who}, role: {role}"), who=_who(target),
             role=ROLE_LABELS.get(d.get("role"), ROLE_LABELS[None]),
         )
-    if event.action in ("2fa_reset", "user_activated", "user_deactivated"):
+    if event.action in ("2fa_reset", "user_activated", "user_deactivated", "password_reset"):
         return _who(target)
     if event.action in ("segment_uploaded", "segment_deleted", "segment_downloaded", "segment_replaced"):
         return _who(d.get("segment", ""))

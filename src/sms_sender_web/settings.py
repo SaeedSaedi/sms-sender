@@ -85,6 +85,8 @@ MIDDLEWARE = [
     # (spec 4.12); until they do, every page leads to that step.
     "django_otp.middleware.OTPMiddleware",
     "sms_sender_web.accounts.middleware.TwoFactorMiddleware",
+    # Then, when an admin asked for it, a password of their own.
+    "sms_sender_web.accounts.middleware.PasswordChangeMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]

@@ -10,6 +10,7 @@
         <th scope="col">{% translate "Role" %}</th>
         <th scope="col">{% translate "Two-step verification" %}</th>
         <th scope="col">{% translate "Last sign-in" %}</th>
+        <th scope="col">{% translate "Last activity" %}</th>
         <th scope="col">{% translate "Account status" %}</th>
         <th scope="col"><span class="visually-hidden">{% translate "Actions" %}</span></th>
       </tr>
@@ -41,7 +42,8 @@
           {% elif row.needs_two_factor %}<span class="warn">{% translate "Not set up yet" %}</span>
           {% else %}—{% endif %}
         </td>
-        <td data-label="{% translate "Last sign-in" %}">{% if row.user.last_login %}{{ row.user.last_login|jalali }}{% else %}—{% endif %}</td>
+        <td data-label="{% translate "Last sign-in" %}">{% if row.user.last_login %}{{ row.user.last_login|jalali }}{% else %}—{% endif %}{% if row.must_change %}<span class="cell-sub">{% translate "chooses a new password at sign-in" %}</span>{% endif %}</td>
+        <td data-label="{% translate "Last activity" %}">{% if row.last_action %}{{ row.last_action|jalali }}{% else %}—{% endif %}</td>
         <td data-label="{% translate "Account status" %}">{% if row.user.is_active %}<span class="badge pill-success">{% translate "Active" %}</span>{% else %}<span class="badge">{% translate "Deactivated" %}</span>{% endif %}</td>
         <td>
           {% if not row.is_me %}<div class="actions">
@@ -54,6 +56,18 @@
                 <button type="submit" class="small secondary">{% translate "Reset two-step verification" %}</button>
               </form>
             {% endif %}
+            <details class="inline-details">
+              <summary class="button small secondary">{% translate "Reset the password" %}</summary>
+              <form method="post" class="inline" autocomplete="off">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="reset_password">
+                <input type="hidden" name="user" value="{{ row.user.pk }}">
+                <label for="id_reset_{{ row.user.pk }}" class="visually-hidden">{% translate "A temporary password" %}</label>
+                <input id="id_reset_{{ row.user.pk }}" name="password" type="password" dir="ltr" required autocomplete="new-password"
+                       placeholder="{% translate "A temporary password" %}">
+                <button type="submit" class="small">{% translate "Set" %}</button>
+              </form>
+            </details>
             {% if row.user.is_active %}
               <form method="post" class="inline"
                     data-confirm="{% translate "Deactivate this account? The user is signed out and can't sign in until it is activated again." %}">
@@ -96,6 +110,7 @@
       {% for role in roles %}<option value="{{ role }}"{% if form.role.value == role %} selected{% endif %}>{{ role|role_label }}</option>{% endfor %}
     </select>
     {% field_errors form.role %}
+    <label class="check"><input type="checkbox" name="must_change" checked> {% translate "They choose their own password at the first sign-in" %}</label>
     <button type="submit">{% icon "plus" %}{% translate "Create user" %}</button>
   </form>
 </section>

@@ -9,6 +9,7 @@ urlpatterns = [
     path("login/", auth_views.LoginView.as_view(redirect_authenticated_user=True), name="login"),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("activity/", audit_views.audit_log, name="audit_log"),
+    path("activity/export.csv", audit_views.audit_csv, name="audit_csv"),
     path("", include("sms_sender_web.accounts.urls")),
     path("", include("sms_sender_web.campaigns.urls")),
     path("", include("sms_sender_web.reports.urls")),

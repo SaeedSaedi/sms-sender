@@ -275,12 +275,17 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - A passed code cycles the session key.
   - Throttling after wrong codes, and refusing a reused code, come from django-otp.
   - Viewers never see these pages.
+- **Users (admins):**
+  - a temporary password (`reset_password`, checked by the password rules; their sessions end with it);
+  - `Profile.must_change_password`, also offered when creating an account;
+  - `PasswordChangeMiddleware`, after `TwoFactorMiddleware`, sends a flagged person to `/password/` until they choose their own;
+  - last activity, from the activity log.
 - **Activity log (`audit` app):**
   - Call `audit.record.record(action, request=…, campaign=…, **detail)` for anything a person does. `action` must be in `record.ACTIONS`. Give each action a Persian label in `audit/terms.py`, and a line in `describe()` if it has details.
   - Pass `username=` instead of a user for someone who isn't signed in.
   - Sign-in, sign-out and failed sign-in are recorded from Django's signals (`audit/apps.py`). The username tried is recorded, never the password.
   - `ip` is `REMOTE_ADDR`, and no proxy header is trusted. Behind Docker Desktop it is Docker's gateway, not the person's own IP.
-  - Events are append-only. `/activity/` (`view_audit_log`) shows them, 100 to a page.
+  - Events are append-only. `/activity/` (`view_audit_log`) shows them, 100 to a page. It filters by action, person, campaign and period, and `/activity/export.csv` downloads what's filtered (recorded as `audit_exported`). Phone numbers are masked there too.
 - **Persian (spec 4.11):**
   - Templates use `{% translate "English id" %}`, with the Persian in `locale/fa/LC_MESSAGES/django.po`. After any change to the `.po`, recompile with `msgfmt -o django.mo django.po`.
   - `tests/web/test_catalog.py` fails on:
