@@ -2570,3 +2570,48 @@ msgstr "برای حذف، نام کوتاه کمپین را بنویسید:"
 
 msgid "Version"
 msgstr "نسخه"
+
+msgid "Add"
+msgstr "افزودن"
+
+msgid "Add a target"
+msgstr "افزودن مقصد"
+
+msgid "Choose a target from the list."
+msgstr "یک مقصد از فهرست انتخاب کنید."
+
+msgid "Defaults for new campaigns"
+msgstr "پیش‌فرض‌های کمپین تازه"
+
+msgid "Each campaign can still change them. Empty: 08:00-21:00, and no rate limit."
+msgstr "هر کمپین همچنان می‌تواند آن‌ها را تغییر دهد. اگر خالی بماند: ۰۸:۰۰ تا ۲۱:۰۰، بدون محدودیت نرخ."
+
+msgid "It didn't go through; the details are in the system log."
+msgstr "ارسال نشد؛ جزئیات در گزارش سیستم است."
+
+msgid "Notifications"
+msgstr "اعلان‌ها"
+
+msgid "Rate"
+msgstr "نرخ ارسال"
+
+msgid "Remove this target? It won't hear about sends any more."
+msgstr "این مقصد حذف شود؟ دیگر از ارسال‌ها باخبر نمی‌شود."
+
+msgid "Send a test"
+msgstr "ارسال آزمایشی"
+
+msgid "Sent. Check that it arrived."
+msgstr "فرستاده شد. بررسی کنید که رسیده باشد."
+
+msgid "When a send ends or stops, these hear how it went: the CLI's run report, with the campaign's short name. Their addresses hold secrets, so they're shown masked."
+msgstr "وقتی ارسالی پایان یابد یا متوقف شود، این مقصدها از نتیجه آن باخبر می‌شوند: گزارش اجرای خط فرمان، همراه با نام کوتاه کمپین. نشانی آن‌ها رمز دارد، پس پوشیده نمایش داده می‌شوند."
+
+msgid "Write slack:https://hooks.slack.com/…, telegram:<bot token>:<chat id>, or an https:// address."
+msgstr "به شکل slack:https://hooks.slack.com/… یا telegram:<bot token>:<chat id> یا یک نشانی https:// بنویسید."
+
+msgid "slack:<webhook address>, telegram:<bot token>:<chat id>, or an https:// address that takes JSON."
+msgstr "slack:<نشانی webhook>، telegram:<bot token>:<chat id>، یا یک نشانی https:// که JSON می‌پذیرد."
+
+msgid "Write the window as HH:MM-HH:MM, and the rate like 10/s, 60/m or 3600/h."
+msgstr "بازه را به شکل HH:MM-HH:MM و نرخ را مانند ۱۰/s، ۶۰/m یا ۳۶۰۰/h بنویسید."

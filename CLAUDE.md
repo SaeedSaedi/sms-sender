@@ -318,7 +318,10 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - Purge (`campaign_purge`, `delete_campaign_data`, the CLI's `purge`): the typed short name, refused while any of the campaign's jobs is on its way, a backup first, then the DB files deleted under the run lock, and the `Campaign` with them.
   - Adopt (`campaign_adopt`, operators, from the home page): a `Campaign` for a DB the CLI made, its settings from the DB's bound ones. With no segment it's a draft. As it has sent, its message is fixed, so the draft offers the next segment like another round.
   - The status page shows the version, the queue and the last backup.
-- **System settings (`system/`, `/system/`, `manage_settings`):** one `SystemSettings` row. For now it holds the frequency cap, which `Engine.runner` passes to every run and `checks.check_campaign` counts (`capped`, `cap`). Changes are recorded as `system_settings_changed`.
+- **System settings (`system/`, `/system/`, `manage_settings`):** one `SystemSettings` row. Changes are recorded as `system_settings_changed`.
+  - The frequency cap: `Engine.runner` passes it to every run, and `checks.check_campaign` counts it (`capped`, `cap`).
+  - Notification targets (the CLI's `--notify`): `worker._announce` sends each one the run report with `heading=<slug>` when a send ends or stops (not for tests, not on a shutdown requeue). They're secrets: pages and the log only show `notify.redact_target`. There's a "send a test" button (`notify.notify_text`).
+  - Defaults for new campaigns: the window and the rate.
 - **Suppression list (`suppression/`):**
   - A `Suppression` row is a canonical phone, either global (`campaign` null) or for one campaign. Two partial unique constraints keep each number once per scope, because NULLs never collide in a plain UNIQUE.
   - `service.add` and `service.phones_for(campaign)` are the API. `jobs.engine.Engine.runner` passes `phones_for(campaign)` into the runner's `opt_out`, so every send skips them.

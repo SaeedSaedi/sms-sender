@@ -37,6 +37,7 @@ def _summary_to_dict(s: RunSummary) -> dict[str, Any]:
         "unknown": s.unknown,
         "needs_review": s.needs_review,
         "suppressed": s.suppressed,
+        "capped": s.capped,
         "cost": s.cost,
         "halted": s.halted,
         "stopped": s.stopped,
@@ -46,8 +47,10 @@ def _summary_to_dict(s: RunSummary) -> dict[str, Any]:
     }
 
 
-def _build_text(s: RunSummary, error: str | None) -> str:
+def _build_text(s: RunSummary, error: str | None, heading: str | None = None) -> str:
     header = "SMS run halted" if (s.halted or error) else "SMS run finished"
+    if heading:
+        header = f"{header}: {heading}"
     if error:
         return f"{header}: {error}\n\n{format_report(s)}"
     return f"{header}\n\n{format_report(s)}"
@@ -74,9 +77,37 @@ def _post_generic(url: str, summary: RunSummary, error: str | None, timeout: flo
     requests.post(url, json=payload, timeout=timeout).raise_for_status()
 
 
+def valid_target(target: str) -> bool:
+    """A target notify() knows how to reach."""
+    if target.startswith("slack:"):
+        return target[len("slack:"):].startswith(("https://", "http://"))
+    if target.startswith("telegram:"):
+        bot_token, _, chat_id = target[len("telegram:"):].partition(":")
+        return bool(bot_token and chat_id)
+    return target.startswith(("https://", "http://"))
+
+
+def notify_text(target: str, text: str, *, timeout: float = DEFAULT_TIMEOUT) -> bool:
+    """A plain message (a test, say): never raises, like notify()."""
+    try:
+        if target.startswith("slack:"):
+            _post_slack(target[len("slack:"):], text, timeout)
+        elif target.startswith("telegram:"):
+            _post_telegram(target[len("telegram:"):], text, timeout)
+        elif target.startswith(("http://", "https://")):
+            requests.post(target, json={"text": text, "test": True}, timeout=timeout).raise_for_status()
+        else:
+            return False
+    except Exception as e:  # noqa: BLE001 — best-effort
+        logger.warning("notify_failed", extra={"target": redact_target(target), "detail": str(e)})
+        return False
+    logger.info("notify_sent", extra={"target": redact_target(target)})
+    return True
+
+
 def notify(
     target: str | None, summary: RunSummary, *, error: str | None = None,
-    timeout: float = DEFAULT_TIMEOUT,
+    timeout: float = DEFAULT_TIMEOUT, heading: str | None = None,
 ) -> bool:
     """Send a notification. Returns True on success, False on any failure.
 
@@ -87,9 +118,9 @@ def notify(
         return False
     try:
         if target.startswith("slack:"):
-            _post_slack(target[len("slack:"):], _build_text(summary, error), timeout)
+            _post_slack(target[len("slack:"):], _build_text(summary, error, heading), timeout)
         elif target.startswith("telegram:"):
-            _post_telegram(target[len("telegram:"):], _build_text(summary, error), timeout)
+            _post_telegram(target[len("telegram:"):], _build_text(summary, error, heading), timeout)
         elif target.startswith(("http://", "https://")):
             _post_generic(target, summary, error, timeout)
         else:
@@ -98,14 +129,14 @@ def notify(
     except Exception as e:  # noqa: BLE001 — best-effort
         logger.warning(
             "notify_failed",
-            extra={"target": _redact(target), "detail": str(e)},
+            extra={"target": redact_target(target), "detail": str(e)},
         )
         return False
-    logger.info("notify_sent", extra={"target": _redact(target)})
+    logger.info("notify_sent", extra={"target": redact_target(target)})
     return True
 
 
-def _redact(target: str) -> str:
+def redact_target(target: str) -> str:
     """Strip credentials before logging the target.
 
     Slack webhooks and Telegram bot tokens are secrets; we keep just the

@@ -110,7 +110,7 @@ PARITY: dict[str, tuple[Part, ...]] = {
     ),
     "send --rate": (Control("campaign.settings"),),
     "send --frequency-cap": (Control("system", ADMIN, note="for every campaign; off until an admin sets it"),),
-    "send --notify": (Planned("P5", "notifications"),),
+    "send --notify": (Control("system", ADMIN, note="for every campaign's sends, with a test button"),),
     "send --link-url": (Control("campaign.settings"),),
     "send --link-token": (Control("campaign.settings"),),
     "send --link-format": (Control("campaign.settings"),),
