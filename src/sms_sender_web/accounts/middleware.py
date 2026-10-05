@@ -6,6 +6,7 @@ from django.shortcuts import redirect, resolve_url
 from django.urls import reverse
 from django_otp import user_has_device
 
+from .models import must_change_password
 from .roles import needs_two_factor
 
 
@@ -65,3 +66,26 @@ class TwoFactorMiddleware:
             return None
         step = "two_factor" if user_has_device(user, confirmed=True) else "two_factor_setup"
         return _redirect(request, f"{reverse(step)}?next={quote(_shown_page(request))}")
+
+
+class PasswordChangeMiddleware:
+    """An admin asked this person to choose their own password (a new
+    account, or a reset one): after the second step, every page leads to the
+    password change until they do."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        return self.get_response(request)
+
+    def process_view(self, request, view_func, view_args, view_kwargs):
+        user = request.user
+        if not user.is_authenticated or (needs_two_factor(user) and not user.is_verified()):
+            return None
+        match = request.resolver_match
+        if match is not None and match.url_name in EXEMPT | {"password_change"}:
+            return None
+        if not must_change_password(user):
+            return None
+        return _redirect(request, reverse("password_change"))

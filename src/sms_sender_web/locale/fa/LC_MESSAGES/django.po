@@ -2615,3 +2615,48 @@ msgstr "slack:<نشانی webhook>، telegram:<bot token>:<chat id>، یا یک 
 
 msgid "Write the window as HH:MM-HH:MM, and the rate like 10/s, 60/m or 3600/h."
 msgstr "بازه را به شکل HH:MM-HH:MM و نرخ را مانند ۱۰/s، ۶۰/m یا ۳۶۰۰/h بنویسید."
+
+msgid "A temporary password"
+msgstr "یک گذرواژه موقت"
+
+msgid "Activity log downloaded"
+msgstr "دریافت سابقه فعالیت‌ها"
+
+msgid "Choose a password of your own before going on: an admin set this one."
+msgstr "پیش از ادامه، گذرواژه‌ای از آن خودتان انتخاب کنید: این یکی را مدیر تعیین کرده است."
+
+msgid "Download these (CSV)"
+msgstr "دریافت همین‌ها (CSV)"
+
+msgid "Last activity"
+msgstr "آخرین فعالیت"
+
+msgid "Password reset by an admin"
+msgstr "بازنشانی گذرواژه به دست مدیر"
+
+msgid "Period"
+msgstr "بازه زمانی"
+
+msgid "Reset the password"
+msgstr "بازنشانی گذرواژه"
+
+msgid "Set"
+msgstr "تعیین"
+
+msgid "The last day"
+msgstr "روز گذشته"
+
+msgid "The last month"
+msgstr "ماه گذشته"
+
+msgid "The last week"
+msgstr "هفته گذشته"
+
+msgid "The password was reset. Give it to them safely: at their next sign-in, they choose their own."
+msgstr "گذرواژه بازنشانی شد. آن را به شکلی امن به او بدهید: در ورود بعدی، گذرواژه خودش را انتخاب می‌کند."
+
+msgid "They choose their own password at the first sign-in"
+msgstr "در نخستین ورود، گذرواژه خودش را انتخاب کند"
+
+msgid "chooses a new password at sign-in"
+msgstr "در ورود بعدی گذرواژه تازه انتخاب می‌کند"

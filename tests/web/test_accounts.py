@@ -458,7 +458,7 @@ def test_the_activity_log_is_persian(admin_client, viewer):
     assert "تغییر نقش" in html
     assert '<bdi dir="ltr">viewer1</bdi>: از مشاهده‌گر به اپراتور' in html
     assert "۱۴۰۵/" in html  # Solar Hijri, Persian digits
-    assert "role_changed" not in html
+    assert "role_changed" not in re.sub(r'value="[^"]*"', "", html)  # a filter's value, never text
 
 
 def test_the_activity_log_pages_through_old_events(admin_client):

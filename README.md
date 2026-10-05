@@ -425,8 +425,10 @@ sms-sender dry-run --input ./numbers.csv          # parse + normalize only, no A
 A Persian, right-to-left web dashboard for running campaigns. It's an
 internal, multi-user tool built with Django and HTMX. So far it has:
 - sign-in, with two-step verification for operators and admins;
-- the three roles, and a users page for admins;
-- an activity log;
+- the three roles, and a users page for admins: a temporary password that
+  the person replaces at their next sign-in, two-step reset, last activity;
+- an activity log, filtered by action, person, campaign or period, and
+  downloadable;
 - segments: upload a CSV or TXT list (Excel's encodings and separators are
   fine), choose the phone, user-ID and token columns, and see the counts:
   valid, invalid, repeated, missing or conflicting user IDs, and numbers on

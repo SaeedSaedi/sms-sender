@@ -7,7 +7,10 @@ from urllib.parse import quote
 import segno
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.views import PasswordChangeView
+from django.core.exceptions import ValidationError
+from django.db.models import Max
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -19,10 +22,12 @@ from django_otp import login as otp_login
 from django_otp import user_has_device
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
+from ..audit.models import AuditEvent
 from ..audit.record import record
+from ..dashboard.templatetags.fa import fa_digits
 from .decorators import forbidden, requires
 from .forms import CodeForm, NewUserForm, TestPhoneForm
-from .models import Profile
+from .models import Profile, ask_to_change_password, must_change_password
 from .roles import ROLES, can, needs_two_factor, role_of, set_role
 
 
@@ -129,6 +134,8 @@ def users(request):
                 data = new_user_form.cleaned_data
                 created = User.objects.create_user(username=data["username"], password=data["password"])
                 set_role(created, data["role"])
+                if request.POST.get("must_change") == "on":
+                    ask_to_change_password(created)
                 record("user_created", request=request, target=created.username, role=data["role"])
                 messages.success(request, _(
                     "The user was created. Give them the first password safely; "
@@ -156,6 +163,20 @@ def users(request):
                 messages.success(request, _(
                     "Two-step verification was reset. At the next sign-in, they set up their app again."
                 ))
+            elif action == "reset_password":
+                password = request.POST.get("password", "")
+                try:
+                    validate_password(password, target)
+                except ValidationError as error:
+                    messages.error(request, " ".join(fa_digits(m) for m in error.messages))
+                    return redirect("users")
+                target.set_password(password)  # their open sessions end with it
+                target.save(update_fields=["password"])
+                ask_to_change_password(target)
+                record("password_reset", request=request, target=target.username)
+                messages.success(request, _(
+                    "The password was reset. Give it to them safely: at their next sign-in, they choose their own."
+                ))
             elif action in ("deactivate", "activate"):
                 target.is_active = action == "activate"
                 target.save(update_fields=["is_active"])
@@ -165,6 +186,9 @@ def users(request):
             return redirect("users")
 
     rows = []
+    last_action = dict(
+        AuditEvent.objects.filter(user__isnull=False).values("user").annotate(at=Max("at")).values_list("user", "at")
+    )
     for person in User.objects.order_by("username"):
         rows.append({
             "user": person,
@@ -172,6 +196,8 @@ def users(request):
             "needs_two_factor": needs_two_factor(person),
             "two_factor": TOTPDevice.objects.filter(user=person, confirmed=True).exists(),
             "is_me": person == request.user,
+            "last_action": last_action.get(person.pk),
+            "must_change": must_change_password(person),
         })
     return render(request, "accounts/users.html", {
         "rows": rows, "roles": ROLES, "form": new_user_form,
@@ -211,8 +237,12 @@ class PasswordChange(PasswordChangeView):
     template_name = "accounts/password_change.html"
     success_url = reverse_lazy("home")
 
+    def get_context_data(self, **kwargs):
+        return {**super().get_context_data(**kwargs), "required": must_change_password(self.request.user)}
+
     def form_valid(self, form):
         response = super().form_valid(form)
+        ask_to_change_password(self.request.user, ask=False)
         record("password_changed", request=self.request)
         messages.success(self.request, _("Your password was changed."))
         return response

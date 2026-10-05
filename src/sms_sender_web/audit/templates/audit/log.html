@@ -1,7 +1,32 @@
-{% extends "base.html" %}{% load i18n fa %}
+{% extends "base.html" %}{% load ui i18n fa %}
 {% block title %}{% translate "Activity log" %} · {% translate "SMS campaigns" %}{% endblock %}
 {% block content %}
-<header class="page-header"><h1 id="activity-heading">{% translate "Activity log" %}</h1></header>
+<header class="page-header">
+  <h1 id="activity-heading">{% translate "Activity log" %}</h1>
+  <div class="page-actions"><a class="button secondary" href="{% url 'audit_csv' %}{% if filter_query %}?{{ filter_query }}{% endif %}">{% icon "download" %}{% translate "Download these (CSV)" %}</a></div>
+</header>
+<form method="get" class="filters" id="audit-filters">
+  <div class="filter"><label for="id_action">{% translate "Action" %}</label>
+    <select id="id_action" name="action"><option value="">{% translate "All" %}</option>
+      {% for key, label in actions %}<option value="{{ key }}"{% if filters.action == key %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select></div>
+  <div class="filter"><label for="id_user">{% translate "User" %}</label>
+    <select id="id_user" name="user" dir="ltr"><option value="">{% translate "All" %}</option>
+      {% for name in people %}<option value="{{ name }}"{% if filters.user == name %} selected{% endif %}>{{ name }}</option>{% endfor %}
+    </select></div>
+  <div class="filter"><label for="id_campaign">{% translate "Campaign" %}</label>
+    <input id="id_campaign" name="campaign" type="text" dir="ltr" maxlength="64" value="{{ filters.campaign|default:'' }}"></div>
+  <div class="filter"><label for="id_period">{% translate "Period" %}</label>
+    <select id="id_period" name="period"><option value="">{% translate "All" %}</option>
+      <option value="1"{% if filters.period == "1" %} selected{% endif %}>{% translate "The last day" %}</option>
+      <option value="7"{% if filters.period == "7" %} selected{% endif %}>{% translate "The last week" %}</option>
+      <option value="30"{% if filters.period == "30" %} selected{% endif %}>{% translate "The last month" %}</option>
+    </select></div>
+  <div class="form-actions">
+    <button type="submit" class="small secondary">{% icon "sliders-horizontal" %}{% translate "Apply" %}</button>
+    {% if filters %}<a href="{% url 'audit_log' %}">{% translate "Clear the filters" %}</a>{% endif %}
+  </div>
+</form>
 {% if rows %}
 <div class="table-wrap" tabindex="0" role="region" aria-labelledby="activity-heading">
   <table>
@@ -31,9 +56,9 @@
 </div>
 {% if page.has_other_pages %}
 <nav class="pager" aria-label="{% translate "Pages" %}">
-  {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">{% translate "Newer" %}</a>{% endif %}
+  {% if page.has_previous %}<a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page.previous_page_number }}">{% translate "Newer" %}</a>{% endif %}
   <span class="num">{{ page.number|fa_number }} / {{ page.paginator.num_pages|fa_number }}</span>
-  {% if page.has_next %}<a href="?page={{ page.next_page_number }}">{% translate "Older" %}</a>{% endif %}
+  {% if page.has_next %}<a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page.next_page_number }}">{% translate "Older" %}</a>{% endif %}
 </nav>
 {% endif %}
 {% else %}
