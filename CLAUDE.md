@@ -300,6 +300,12 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - `files.summarize` counts with `input_loader.load`, exactly as a send would. Its invalid-row sample is stored masked.
   - The slug follows the CLI's `--segment` rules (`SLUG_RE`). `upload` is reserved, because of `/segments/upload/`.
   - A segment that a `Campaign` names in `settings["segment"]` can't be deleted.
+  - **Actions:**
+    - start a campaign from it (`/campaigns/new/?segment=`);
+    - download the prepared copy (`export_people`, with a BOM, recorded);
+    - replace the file (`segment_replace`).
+  - **Replacing** is refused once any campaign DB may have sent from it (`StateStore.segment_may_have_sent`), or while a send that uses it is on its way. The new file goes through the columns step again. `Segment.version` goes up, and `services.settings_hash` includes it once it's above 0, so campaigns using the segment need a new test SMS and a queued send is withdrawn.
+  - The upload → columns → summary pages share a stepper (`segments/_steps.html`).
 - **Suppression list (`suppression/`):**
   - A `Suppression` row is a canonical phone, either global (`campaign` null) or for one campaign. Two partial unique constraints keep each number once per scope, because NULLs never collide in a plain UNIQUE.
   - `service.add` and `service.phones_for(campaign)` are the API. `jobs.engine.Engine.runner` passes `phones_for(campaign)` into the runner's `opt_out`, so every send skips them.

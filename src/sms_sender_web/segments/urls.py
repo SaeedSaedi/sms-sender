@@ -8,4 +8,6 @@ urlpatterns = [
     path("segments/<slug:slug>/", views.segment_detail, name="segment_detail"),
     path("segments/<slug:slug>/columns/", views.segment_map, name="segment_map"),
     path("segments/<slug:slug>/delete/", views.segment_delete, name="segment_delete"),
+    path("segments/<slug:slug>/download/", views.segment_download, name="segment_download"),
+    path("segments/<slug:slug>/replace/", views.segment_replace, name="segment_replace"),
 ]

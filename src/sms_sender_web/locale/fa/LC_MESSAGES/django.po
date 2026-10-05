@@ -2391,3 +2391,37 @@ msgstr "توکن"
 
 msgid "Which system uses it"
 msgstr "کدام سامانه از آن استفاده می‌کند"
+
+msgid "A send that uses this segment is on its way. Replace the file after it ends."
+msgstr "ارسالی که از این گروه مخاطبان استفاده می‌کند در جریان است. پس از پایان آن فایل را جایگزین کنید."
+
+#, python-format
+msgid "Campaign %(campaigns)s has sent from this segment, so its file stays as it is. For a new list, upload a new segment."
+msgstr "کمپین %(campaigns)s از این گروه مخاطبان ارسال کرده است، پس فایل آن همان می‌ماند. برای فهرستی تازه، گروه مخاطبان جدیدی بارگذاری کنید."
+
+msgid "Download (CSV)"
+msgstr "دریافت (CSV)"
+
+msgid "New campaign with this segment"
+msgstr "کمپین تازه با این گروه مخاطبان"
+
+msgid "Replace the file"
+msgstr "جایگزینی فایل"
+
+msgid "Segment downloaded"
+msgstr "دریافت گروه مخاطبان"
+
+msgid "Segment's file replaced"
+msgstr "جایگزینی فایل گروه مخاطبان"
+
+msgid "Summary"
+msgstr "خلاصه"
+
+msgid "The new file goes through the columns step again. Until then, campaigns can't use this segment."
+msgstr "فایل تازه دوباره از مرحله انتخاب ستون‌ها می‌گذرد. تا آن زمان کمپین‌ها نمی‌توانند از این گروه استفاده کنند."
+
+msgid "These campaigns use it and will need a new test SMS:"
+msgstr "این کمپین‌ها از آن استفاده می‌کنند و به پیامک آزمایشی تازه نیاز خواهند داشت:"
+
+msgid "Only while nobody has been sent from it. The new file goes through the columns step again, and campaigns using this segment need a new test SMS."
+msgstr "فقط پیش از نخستین ارسال از آن. فایل تازه دوباره از مرحله انتخاب ستون‌ها می‌گذرد و کمپین‌هایی که از این گروه استفاده می‌کنند به پیامک آزمایشی تازه نیاز دارند."

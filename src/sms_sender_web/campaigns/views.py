@@ -69,7 +69,7 @@ _ACTIONS = {
 @requires("edit_campaigns")
 @require_http_methods(["GET", "POST"])
 def campaign_new(request):
-    form = NewCampaignForm(request.POST or None)
+    form = NewCampaignForm(request.POST or None, initial={"segment": request.GET.get("segment", "")})
     if request.method == "POST" and form.is_valid():
         d = form.cleaned_data
         segment = d["segment"]

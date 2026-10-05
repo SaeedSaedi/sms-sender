@@ -29,6 +29,8 @@ ACTION_LABELS = {
     "segment_uploaded": _("Segment uploaded"),
     "segment_mapped": _("Segment columns chosen"),
     "segment_deleted": _("Segment deleted"),
+    "segment_downloaded": _("Segment downloaded"),
+    "segment_replaced": _("Segment's file replaced"),
     "suppression_added": _("Added to the suppression list"),
     "suppression_removed": _("Removed from the suppression list"),
     "test_number_changed": _("Test SMS number changed"),
@@ -89,7 +91,7 @@ def describe(event) -> str:
         )
     if event.action in ("2fa_reset", "user_activated", "user_deactivated"):
         return _who(target)
-    if event.action in ("segment_uploaded", "segment_deleted"):
+    if event.action in ("segment_uploaded", "segment_deleted", "segment_downloaded", "segment_replaced"):
         return _who(d.get("segment", ""))
     if event.action in ("template_saved", "template_deleted"):
         return _who(d.get("name", ""))

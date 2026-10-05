@@ -12,7 +12,14 @@
     <h1><bdi>{{ segment.name }}</bdi></h1>
     <p class="page-meta">{{ segment.slug|copyable }} · {{ segment.original_name|ltr }} · {{ segment.uploaded_at|jalali }}{% if segment.uploaded_by %} · {{ segment.uploaded_by.username|ltr }}{% endif %}</p>
   </div>
+  {% if not draft %}
+  <div class="page-actions">
+    {% if user|can:"edit_campaigns" %}<a class="button" href="{% url 'campaign_new' %}?segment={{ segment.slug|urlencode }}">{% icon "plus" %}{% translate "New campaign with this segment" %}</a>{% endif %}
+    {% if user|can:"export_people" %}<a class="button secondary" href="{% url 'segment_download' segment.slug %}">{% icon "download" %}{% translate "Download (CSV)" %}</a>{% endif %}
+  </div>
+  {% endif %}
 </header>
+{% include "segments/_steps.html" %}
 
 {% if draft %}
   <div class="callout callout-warning">
@@ -65,6 +72,18 @@
     {% if summary.invalid > summary.invalid_sample|length %}<p class="hint">{% translate "Only the first rows are shown." %}</p>{% endif %}
   </section>
   {% endif %}
+{% endif %}
+
+{% if user|can:"edit_campaigns" and not draft %}
+  <section class="card step" aria-labelledby="replace-heading">
+    <h2 id="replace-heading">{% icon "file-up" %}{% translate "Replace the file" %}</h2>
+    {% if replace_blocked %}
+      <p class="muted">{{ replace_blocked }}</p>
+    {% else %}
+      <p class="hint">{% translate "Only while nobody has been sent from it. The new file goes through the columns step again, and campaigns using this segment need a new test SMS." %}</p>
+      <p class="form-actions"><a class="button secondary" href="{% url 'segment_replace' segment.slug %}">{% icon "file-up" %}{% translate "Replace the file" %}</a></p>
+    {% endif %}
+  </section>
 {% endif %}
 
 {% if user|can:"edit_campaigns" and not used_by %}

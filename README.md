@@ -417,7 +417,9 @@ internal, multi-user tool built with Django and HTMX. So far it has:
 - segments: upload a CSV or TXT list (Excel's encodings and separators are
   fine), choose the phone, user-ID and token columns, and see the counts:
   valid, invalid, repeated, missing or conflicting user IDs, and numbers on
-  the suppression list;
+  the suppression list. From a segment: start a campaign, download it, or
+  replace its file while nobody has been sent from it (campaigns using it
+  then need a new test SMS);
 - the suppression list: operators add numbers (pasted or from a file),
   admins remove them, and every send leaves them out;
 - campaigns, run from the browser in the spec's stages:
