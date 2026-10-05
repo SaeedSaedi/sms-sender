@@ -179,4 +179,12 @@ def checklist(check, message, settings: dict | None, segment) -> list[ChecklistI
         items.append(ChecklistItem("fail", str(CHECKLIST["recipients"]), str(CHECK_PROBLEMS["nobody_to_send"])))
     elif not problems & {"segment_missing", "more_segment_missing", "columns_missing"}:
         items.append(ChecklistItem("ok", str(CHECKLIST["recipients"]), say(CHECKLIST["to_send"], {"n": check.to_send})))
+    # Restricted sending (plan 06, D7): only allowed numbers get SMS.
+    if "allowlist_invalid" in problems:
+        items.append(ChecklistItem("fail", str(CHECKLIST["restricted"]), str(CHECK_PROBLEMS["allowlist_invalid"])))
+    elif check.not_allowed:
+        items.append(ChecklistItem("warn", str(CHECKLIST["restricted"]),
+                                   say(CHECKLIST["restricted_blocks"], {"n": check.not_allowed})))
+    elif check.not_allowed == 0 and check.to_send:
+        items.append(ChecklistItem("ok", str(CHECKLIST["restricted"]), str(CHECKLIST["restricted_ok"])))
     return items

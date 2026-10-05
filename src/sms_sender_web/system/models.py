@@ -33,6 +33,10 @@ class SystemSettings(models.Model):
     # Warn (the campaign list, the notification targets) when Kavenegar's
     # credit is below this many rials. Empty: no warning.
     credit_floor = models.PositiveBigIntegerField(null=True, blank=True)
+    # The worker's daily backup (plan 06, L1): at this hour, Tehran time,
+    # keeping the newest `backup_keep`. Empty: no daily backup.
+    backup_hour = models.PositiveSmallIntegerField(null=True, blank=True, default=9)
+    backup_keep = models.PositiveSmallIntegerField(default=14)
 
     @classmethod
     def load(cls) -> "SystemSettings":

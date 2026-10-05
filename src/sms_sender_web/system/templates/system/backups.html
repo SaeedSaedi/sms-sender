@@ -13,6 +13,26 @@
     </form>
   </div>
 </header>
+<section class="card" aria-labelledby="schedule-title">
+  <h2 id="schedule-title">{% icon "clock" %}{% translate "Daily backup" %}</h2>
+  {% if overdue %}
+    <div class="callout callout-warning" role="status">{% icon "triangle-alert" %}<p>{% translate "The daily backup is overdue: the worker isn't running, or the backup keeps failing. The details are in the worker's log." %}</p></div>
+  {% endif %}
+  <p class="hint">{% translate "The worker backs up once a day at this hour (Tehran time), and keeps the newest ones. One missed while the computer slept runs as soon as the worker is back. On a Mac, keep this folder in Time Machine." %}</p>
+  <form method="post" id="schedule-form">
+    {% csrf_token %}<input type="hidden" name="action" value="schedule">
+    <div class="field-grid">
+      <div><label for="id_backup_hour">{% translate "At (Tehran time)" %}</label>
+        <select id="id_backup_hour" name="backup_hour">
+          <option value="off"{% if settings.backup_hour is None %} selected{% endif %}>{% translate "Off" %}</option>
+          {% for value, label in hours %}<option value="{{ value }}"{% if settings.backup_hour == value %} selected{% endif %}>{{ label|fa_digits }}</option>{% endfor %}
+        </select></div>
+      <div><label for="id_backup_keep">{% translate "Keep the newest" %}</label>
+        <input id="id_backup_keep" name="backup_keep" type="text" dir="ltr" inputmode="numeric" maxlength="2" value="{{ settings.backup_keep }}"></div>
+    </div>
+    <div class="form-actions"><button type="submit">{% translate "Save" %}</button></div>
+  </form>
+</section>
 <section class="card">
   {% if backups %}
   <div class="table-wrap" tabindex="0" role="region" aria-label="{% translate "Backups" %}">
@@ -36,7 +56,7 @@
     </table>
   </div>
   {% else %}
-  <div class="empty-state">{% icon "download" %}<h2>{% translate "No backups yet" %}</h2><p>{% translate "Back up now, or let DevOps schedule them (docs/deploy.md)." %}</p></div>
+  <div class="empty-state">{% icon "download" %}<h2>{% translate "No backups yet" %}</h2><p>{% translate "Back up now; the daily backup makes the next one by itself." %}</p></div>
   {% endif %}
   <p class="hint">{% translate "Restoring needs both services stopped, so it's done on the server (docs/deploy.md), never from here." %}</p>
 </section>

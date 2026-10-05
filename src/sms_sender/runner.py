@@ -25,6 +25,7 @@ from typing import Callable, Iterator, Protocol, Sequence
 from tqdm import tqdm
 
 from . import input_loader
+from .allowlist import ENV_ALLOWED_NUMBERS
 from .input_loader import InputPart, LoadResult, TokenColumns
 from .links import DEFAULT_WORKERS as DEFAULT_LINK_WORKERS
 from .links import LinkClient, LinkError, LinkSettings, LinkStage
@@ -958,6 +959,7 @@ class Runner:
         """Account check → optional approval test (manual gate) → optional
         smoke test (auto). Raises PreflightError to abort before fan-out.
         Returns the phones still to send and how many the smoke test sent."""
+        self._check_allowlist(phones)
         if self.send_window and phones:
             now = self.clock()
             if not self.send_window.contains(now):
@@ -978,6 +980,34 @@ class Runner:
             # The smoke test consumed phones[0] synchronously.
             return phones[1:], 1
         return phones, 0
+
+    def _check_allowlist(self, phones: list[str]) -> None:
+        """Restricted sending (allowlist.py): refuse before anything is sent,
+        and before any link is made, when the test number or anyone in the
+        queue isn't an allowed number. The sender refuses them too; this
+        says so up front, with the count."""
+        allowed = getattr(self.sender, "allowlist", None)
+        if allowed is None:
+            return
+        if allowed.invalid:
+            raise PreflightError(
+                f"{ENV_ALLOWED_NUMBERS} holds {allowed.invalid} value(s) that aren't phone numbers; "
+                "nothing is sent until it's fixed",
+                "allowlist_invalid", count=allowed.invalid,
+            )
+        if self.approval_test_number and not allowed.allows(self.approval_test_number):
+            raise PreflightError(
+                f"restricted sending: the test number isn't on {ENV_ALLOWED_NUMBERS}",
+                "test_number_not_allowed",
+            )
+        if self.test_only:
+            return
+        outside = sum(1 for phone in phones if not allowed.allows(phone))
+        if outside:
+            raise PreflightError(
+                f"restricted sending: {outside} recipient(s) aren't on {ENV_ALLOWED_NUMBERS}; nothing was sent",
+                "recipients_not_allowed", count=outside,
+            )
 
     def _fan_out(self, phones: list[str]) -> tuple[SendCounts, bool]:
         """Send to every phone across the worker pool. Returns the tallies

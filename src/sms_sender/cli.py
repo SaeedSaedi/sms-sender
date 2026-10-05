@@ -16,6 +16,7 @@ from click.core import ParameterSource
 from dotenv import load_dotenv
 
 from . import input_loader, logging_config
+from .allowlist import ENV_ALLOWED_NUMBERS
 from .config import load_api_key
 from .input_loader import SLUG_RE, InputError, TokenColumns
 from .links import (
@@ -1266,6 +1267,13 @@ def preview(
             click.echo(f"  {k}={v}")
 
     if do_send:
+        if sender.allowlist is not None and not sender.allowlist.allows(phones[0]):
+            click.echo(
+                f"Error: restricted sending: {phones[0]} isn't on {ENV_ALLOWED_NUMBERS} "
+                "(or it holds a value that isn't a phone number). Nothing was sent.",
+                err=True,
+            )
+            sys.exit(2)
         click.echo("\nSending …")
         result = sender.send(phones[0], tokens=row_tokens.get(phones[0]))
         click.echo(f"OK: message_id={result.message_id} status={result.status_code}")

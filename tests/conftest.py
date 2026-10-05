@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from sms_sender.allowlist import ENV_ALLOWED_NUMBERS
 from sms_sender.cli import LOG_FILE_ENV, TEST_NUMBER_ENV
 from sms_sender.config import ENV_API_KEY
 from sms_sender.shortlink import ENV_API_KEY as SHLINK_KEY_ENV
@@ -27,7 +28,8 @@ def _never_the_real_env(monkeypatch, tmp_path):
     """`load_dotenv` never overrides a variable that's already set, even to
     "", so blanking every name in the real `.env` (keys, the test number)
     keeps its values out of every test. A test that needs one sets its own."""
-    for name in _dotenv_names() | {ENV_API_KEY, TEST_NUMBER_ENV}:
+    # Restricted sending too (allowlist.py): off unless a test turns it on.
+    for name in _dotenv_names() | {ENV_API_KEY, TEST_NUMBER_ENV, ENV_ALLOWED_NUMBERS}:
         monkeypatch.setenv(name, "")
     # No test may reach the real Shlink: a dummy key, and a host that
     # can't resolve (.invalid).

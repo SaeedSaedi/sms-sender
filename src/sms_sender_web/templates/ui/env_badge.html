@@ -1,0 +1,1 @@
+{% load i18n %}{% if local %}<p class="env-badge" data-env="{% if sandbox %}sandbox{% else %}real{% endif %}">{% if sandbox %}{% translate "Local · sandbox" %}{% else %}{% translate "Local · real" %}{% endif %}</p>{% endif %}

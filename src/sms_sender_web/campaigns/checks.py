@@ -6,7 +6,10 @@ import time
 from collections import Counter
 from dataclasses import dataclass, field
 
+from django.conf import settings as django_settings
+
 from sms_sender import input_loader
+from sms_sender.allowlist import allowlist
 from sms_sender.input_loader import InputError, TokenColumns
 from sms_sender.links import allowed_domains, destination_issue
 from sms_sender.shortlink import shlink_base_url
@@ -38,6 +41,9 @@ class CheckResult:
     # (a number in two segments counts for the first).
     segments: list[tuple[str, int]] = field(default_factory=list)
     missing_segments: list[str] = field(default_factory=list)  # more segments not ready
+    # Restricted sending (allowlist.py): how many of those to send to aren't
+    # allowed numbers; None while it's off (always, in the sandbox).
+    not_allowed: int | None = None
 
     @property
     def invalid_total(self) -> int:
@@ -102,6 +108,11 @@ def check_campaign(campaign: Campaign, loaded=None) -> CheckResult:
     result.to_send = len(waiting)
     if result.to_send == 0:
         result.problems.append("nobody_to_send")
+    allowed = None if django_settings.SANDBOX else allowlist()
+    if allowed is not None:
+        if allowed.invalid:
+            result.problems.append("allowlist_invalid")  # not even a test SMS would go
+        result.not_allowed = sum(1 for phone in waiting if not allowed.allows(phone))
 
     links = s.get("links")
     if links and destination_issue(links.get("destination", ""), allowed_domains(), shlink_base_url()):

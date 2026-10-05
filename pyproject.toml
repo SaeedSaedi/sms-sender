@@ -43,6 +43,8 @@ e2e = [
 
 [project.scripts]
 sms-sender = "sms_sender.cli:cli"
+# The dashboard on your Mac (plan 06): start, stop, status, logs, upgrade.
+sms-dashboard = "sms_sender_web.local:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -16,12 +16,21 @@ def healthz(request):
 
 
 def sandbox(request) -> dict:
-    """Every page knows whether this is the sandbox, and whether all sending
-    is held, for their banners."""
+    """Every page knows whether this is the sandbox, whether it runs on your
+    Mac, whether all sending is held and whether sending is restricted to
+    allowed numbers, for their badge and banners."""
+    from sms_sender.allowlist import allowlist
+
     from .jobs.services import held
 
-    hold = held() if getattr(request, "user", None) is not None and request.user.is_authenticated else None
-    return {"sandbox": settings.SANDBOX, "sending_held": hold}
+    signed_in = getattr(request, "user", None) is not None and request.user.is_authenticated
+    return {
+        "sandbox": settings.SANDBOX,
+        "local": settings.LOCAL,
+        "sending_held": held() if signed_in else None,
+        # The sandbox sends nothing, so the restriction doesn't bind it.
+        "allowlist": allowlist() if signed_in and not settings.SANDBOX else None,
+    }
 
 
 # Which menu entry a page belongs to, by its URL name.

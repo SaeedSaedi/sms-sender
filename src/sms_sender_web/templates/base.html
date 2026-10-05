@@ -30,6 +30,7 @@
                 aria-label="{% translate "Open the menu" %}">{% icon "menu" %}</button>
       {% endif %}
       <a class="brand" href="{% url 'home' %}">{% icon "message-square-text" %}<span>{% translate "SMS campaigns" %}</span></a>
+      {% include "ui/env_badge.html" %}
       {% if user.is_authenticated and not user|fully_signed_in %}
         <form class="session actions" method="post" action="{% url 'logout' %}">
           {% csrf_token %}
@@ -43,6 +44,9 @@
     {% endif %}
     {% if sending_held %}
       <div class="hold-banner" role="region" aria-label="{% translate "All sending is held" %}" id="hold-banner">{% icon "pause" %}<span>{% translate "All sending is held" %}{% if sending_held.sending_held_by %} · <bdi dir="ltr">{{ sending_held.sending_held_by.get_username }}</bdi>{% endif %} · <span class="num">{{ sending_held.sending_held_at|jalali }}</span>. {% translate "No SMS goes out until an admin lifts the hold on the service status page." %}</span></div>
+    {% endif %}
+    {% if allowlist %}
+      <div class="restricted-banner" role="region" aria-label="{% translate "Restricted sending" %}" id="restricted-banner">{% icon "shield-check" %}<span>{% if allowlist.invalid %}{% translate "Restricted sending is set wrongly: no SMS goes out until SMS_SENDER_ALLOWED_NUMBERS in .env holds only phone numbers." %}{% else %}{% translate "Restricted sending: SMS go only to the allowed numbers, from the dashboard and the command line alike." %}{% endif %}</span></div>
     {% endif %}
     <main id="main" class="page" tabindex="-1">
       {% block breadcrumbs %}{% endblock %}

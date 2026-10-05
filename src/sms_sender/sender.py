@@ -19,6 +19,7 @@ from tenacity import (
     wait_random_exponential,
 )
 
+from .allowlist import ENV_ALLOWED_NUMBERS, Allowlist, allowlist
 from .classifier import Action, classify
 from .redact import redact_secrets
 
@@ -314,6 +315,9 @@ def _network_error(exc: requests.exceptions.RequestException) -> HTTPException:
     return _OutcomeUnknown(redact_secrets(str(exc)))
 
 
+_FROM_ENV = object()
+
+
 class Sender:
     """One Sender per process — the SDK's KavenegarAPI is thread-safe (it's
     a thin wrapper over `requests`, and each call opens its own connection)."""
@@ -321,12 +325,15 @@ class Sender:
     def __init__(
         self, cfg: SenderConfig, sdk: _SDK | None = None, *,
         on_attempt: Callable[[Attempt], None] | None = None,
+        allowed: Allowlist | None | object = _FROM_ENV,
     ):
         self.cfg = cfg
         self._sdk: _SDK = sdk or _KavenegarHTTP(cfg.api_key, cfg.timeout)
         # Audit hook, called once per call to Kavenegar (make_runner records
         # these in the state DB's `attempts` table).
         self._on_attempt = on_attempt
+        # Restricted sending (allowlist.py): the only numbers an SMS may go to.
+        self.allowlist: Allowlist | None = allowlist() if allowed is _FROM_ENV else allowed
 
     def build_params(self, phone: str, tokens: dict[str, str] | None = None) -> dict:
         """Return the exact POST body that would be sent for `phone`. No I/O.
@@ -411,6 +418,10 @@ class Sender:
         without a clear answer — never retried (caller marks it `unknown`).
         Raises SendError once retries of never-sent calls are exhausted.
         """
+        if self.allowlist is not None and not self.allowlist.allows(phone):
+            # Refused before any call, so nothing went out (the row stays
+            # claimable: failed_retriable).
+            raise HaltError(None, f"restricted sending: this number isn't on {ENV_ALLOWED_NUMBERS}")
         retryer = Retrying(
             stop=stop_after_attempt(self.cfg.max_attempts),
             wait=wait_random_exponential(multiplier=1, max=self.cfg.backoff_max),
