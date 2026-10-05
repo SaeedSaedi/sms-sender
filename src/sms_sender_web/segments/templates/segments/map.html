@@ -40,18 +40,18 @@
         <tr>
           <th scope="row">{% translate "Column" %} {{ col.number|fa_number }}{% if col.header %} · <bdi>{{ col.header }}</bdi>{% endif %}</th>
           <td>{% for text, is_phone in col.samples %}{% if is_phone %}<bdi class="sample" dir="ltr">{{ text|fa_digits }}</bdi>{% else %}<bdi class="sample">{{ text }}</bdi>{% endif %}{% empty %}—{% endfor %}</td>
-          <td><input type="radio" name="phone" value="{{ col.value }}"{% if col.value == phone %} checked{% endif %}
-                     aria-label="{% translate "Mobile number" %}: {% translate "Column" %} {{ col.number|fa_number }}"></td>
-          <td><input type="radio" name="user_id" value="{{ col.value }}"{% if col.value == user_id %} checked{% endif %} data-cli="send --user-id-column"
-                     aria-label="{% translate "User ID" %}: {% translate "Column" %} {{ col.number|fa_number }}"></td>
-          <td><input type="checkbox" name="tokens" value="{{ col.value }}"{% if col.value in tokens %} checked{% endif %}
-                     aria-label="{% translate "For a token" %}: {% translate "Column" %} {{ col.number|fa_number }}"></td>
+          <td><label class="cell-target"><input type="radio" name="phone" value="{{ col.value }}"{% if col.value == phone %} checked{% endif %}
+                     aria-label="{% translate "Mobile number" %}: {% translate "Column" %} {{ col.number|fa_number }}"></label></td>
+          <td><label class="cell-target"><input type="radio" name="user_id" value="{{ col.value }}"{% if col.value == user_id %} checked{% endif %} data-cli="send --user-id-column"
+                     aria-label="{% translate "User ID" %}: {% translate "Column" %} {{ col.number|fa_number }}"></label></td>
+          <td><label class="cell-target"><input type="checkbox" name="tokens" value="{{ col.value }}"{% if col.value in tokens %} checked{% endif %}
+                     aria-label="{% translate "For a token" %}: {% translate "Column" %} {{ col.number|fa_number }}"></label></td>
         </tr>
       {% endfor %}
         <tr>
           <th scope="row" colspan="3">{% translate "No user ID column" %}</th>
-          <td><input type="radio" name="user_id" value=""{% if not user_id %} checked{% endif %}
-                     aria-label="{% translate "No user ID column" %}"></td>
+          <td><label class="cell-target"><input type="radio" name="user_id" value=""{% if not user_id %} checked{% endif %}
+                     aria-label="{% translate "No user ID column" %}"></label></td>
           <td></td>
         </tr>
       </tbody>

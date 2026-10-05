@@ -24,6 +24,8 @@ jobs:
           cache: pip
       - run: pip install -e ".[dev,web]"
       - run: pytest
+      # A 100,000-recipient campaign's pages, each within its time budget.
+      - run: pytest -m perf
 
   # Browser tests (pytest -m e2e): the dashboard in Google Chrome, which
   # GitHub's Ubuntu runners have installed; Playwright drives it.

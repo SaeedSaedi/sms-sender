@@ -48,9 +48,10 @@ pytest -k "claim or in_flight"           # by name pattern
 pytest -m e2e                            # browser tests: pip install -e ".[dev,web,e2e]" + Google Chrome
 E2E_SHOTS=/tmp/shots pytest -m e2e       # + a screenshot of every page at every width
 E2E_UPDATE_BASELINE=1 pytest -m e2e tests/web/e2e/test_pages.py   # rewrite baseline.json
+pytest -m perf                           # a 100,000-recipient campaign's pages, each under 2 s
 ```
 
-CI (`.github/workflows/tests.yml`) runs `pytest` on Python 3.10 (the `requires-python` floor) and 3.14 for pushes to `main` and every PR. Code must keep working on 3.10.
+CI (`.github/workflows/tests.yml`) runs `pytest` and `pytest -m perf` on Python 3.10 (the `requires-python` floor) and 3.14, and `pytest -m e2e`, for pushes to `main` and every PR. Code must keep working on 3.10.
 
 `KAVENEGAR_API_KEY` must be set (env or `.env` in cwd) for `send`. Other commands work without it. `SMS_SENDER_TEST_NUMBER` (optional) provides the default phone for `--approval-test`; the `--test-number` flag overrides it. Short links need `SHLINK_API_KEY` (`send --link-url`, `clicks`); `SHLINK_BASE_URL` defaults to `https://kifpool.me/u` and `SMS_SENDER_LINK_DOMAINS` (allowed destinations) to `kifpool.me`. The CLI loads `.env` from the current directory first thing (`cli` group callback), before any option or setting is read; it never overrides a variable that's already set. `tests/conftest.py` blanks every variable named in the real `.env` (it reads names only, never values) and sets a dummy Shlink key with an `.invalid` host. So no test can load a real key or test number, or reach the real Shlink. Keep it that way.
 
@@ -505,7 +506,8 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 - **Browser tests (`tests/web/e2e/`, marker `e2e`, opt-in):**
   - Playwright drives the installed Google Chrome (`channel="chrome"`) against pytest-django's live server, in sandbox mode with the real worker in a thread (`sandbox_worker`).
   - The journey finds everything by its Persian name: `fa("msgid")` is the catalog's text. A redesign that keeps the words keeps the test.
-  - `test_pages.py` opens every page in `tests/web/world.py`'s `PAGES` at 360 / 390 / 768 / 1366 px. It checks for horizontal overflow and runs axe-core (vendored for tests only, MPL-2.0).
+  - `test_pages.py` opens every page in `tests/web/world.py`'s `PAGES` at 360 / 390 / 768 / 1024 / 1366 px. It checks for horizontal overflow, runs axe-core (vendored for tests only, MPL-2.0), and finds controls smaller than 24 × 24 px (`small_targets`, WCAG 2.2 2.5.8; inline links and checkboxes inside their label are exempt).
+  - `test_keyboard.py`: signing in with the keyboard alone, the skip link, and a visible focus ring on everything Tab reaches.
   - Known problems live in `baseline.json`, a ratchet: a new problem fails, and a fixed one still listed fails too.
   - `world.py` builds the made-up dashboard (users, segments, a campaign in every state) for these tests and the parity test.
 - **Packaging:** the image installs the package, not the source tree, so each app's `templates/` must be listed in `[tool.setuptools.package-data]`.

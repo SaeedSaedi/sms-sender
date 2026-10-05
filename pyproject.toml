@@ -66,9 +66,10 @@ sms_sender_web = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Browser tests are opt-in: pytest -m e2e
-addopts = "-q -m 'not e2e'"
+addopts = "-q -m 'not e2e and not perf'"
 markers = [
     "e2e: browser tests in Google Chrome; need the e2e extra (pytest -m e2e)",
+    "perf: a 100,000-recipient campaign's pages, timed (pytest -m perf)",
 ]
 # Used by pytest-django (the `web` extra); without it the dashboard tests skip.
 DJANGO_SETTINGS_MODULE = "sms_sender_web.settings_test"
