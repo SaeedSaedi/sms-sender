@@ -15,6 +15,7 @@
   <div class="page-actions">
     {% if user|can:"edit_campaigns" and not settings_locked %}<a class="button secondary" href="{% url 'campaign_settings' campaign.slug %}">{% icon "settings" %}{% translate "Settings" %}</a>{% endif %}
     {% if summary %}<a class="button secondary" href="{% url 'report' campaign.slug %}">{% icon "chart-column" %}{% translate "Report" %}</a>{% endif %}
+    {% if user|can:"edit_campaigns" %}<a class="button secondary" href="{% url 'campaign_duplicate' campaign.slug %}" data-cli="sms-sender --config, sms-sender --profile">{% icon "copy" %}{% translate "Duplicate" %}</a>{% endif %}
   </div>
 </header>
 {% include "campaigns/_live.html" %}

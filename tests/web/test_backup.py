@@ -143,6 +143,16 @@ def test_old_backups_are_pruned_only_after_a_good_one(data, tmp_path, monkeypatc
     assert sorted(p.name for p in dest.iterdir()) == names  # no partial left, none pruned
 
 
+def test_a_backup_before_a_risky_change_removes_none(data, tmp_path):
+    """The dashboard's own backup (an admin changing a sent message) must
+    never cut the scheduled ones short."""
+    dest = tmp_path / "backups"
+    for day in range(3):
+        make_backup(data, dest, keep=2, now=T0 + timedelta(days=day))
+    result = make_backup(data, dest, keep=None, now=T0 + timedelta(days=5))
+    assert result.pruned == () and len(backups.list_backups(dest)) == 3
+
+
 @pytest.mark.django_db
 def test_the_commands(data, tmp_path, settings, capsys):
     settings.DATA_DIR = data

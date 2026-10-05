@@ -10,6 +10,7 @@
 {% else %}
   <div class="sms-bubble" dir="auto">{{ preview.text }}</div>
   <p class="num sms-length">{{ preview.length }}</p>
+  {% if preview_cost %}<p class="hint num" id="preview-cost">{{ preview_cost }}</p>{% endif %}
   {% if preview.sample %}<p class="hint">{% translate "With the values of" %} {{ preview.sample|fa_digits|ltr }}</p>{% endif %}
   {% if preview.has_link %}<p class="hint">{% translate "The link's code here is an example." %}</p>{% endif %}
   {% for problem in preview.problems %}<div class="callout callout-error">{% icon "circle-alert" %}<p>{{ problem }}</p></div>{% endfor %}

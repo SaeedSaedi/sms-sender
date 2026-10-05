@@ -85,14 +85,25 @@ def lifecycle(campaign, jobs: list[Job] | None = None) -> Lifecycle:
             .order_by("-created_at", "-id")
         )
     test = next((j for j in jobs if j.kind == Job.Kind.TEST), None)
-    # A withdrawn send (unscheduled, or refused before it began) sent nothing.
+    # A withdrawn send (unscheduled, or refused before it began) sent nothing;
+    # a superseded one gave way to a changed message. Neither decides the stage.
     send = next(
-        (j for j in jobs if j.kind == Job.Kind.SEND and not (j.result or {}).get("withdrawn")), None,
+        (j for j in jobs if j.kind == Job.Kind.SEND
+         and not ((j.result or {}).get("withdrawn") or (j.result or {}).get("superseded"))),
+        None,
     )
     test_failed = bool(test and test.state == Job.State.FAILED)
+    # A finished send for other settings than the current ones belongs to an
+    # earlier round: the list changed since (another segment), or the message
+    # did (by an admin, or because nothing had gone out). The campaign starts
+    # again from the check and the test SMS.
+    earlier_round = (
+        send is not None and send.state not in ACTIVE and bool(send.settings_hash)
+        and send.settings_hash != settings_hash(campaign)
+    )
 
     # A send decides the stage, unless a newer test SMS came after it.
-    if send is not None and (test is None or send.created_at >= test.created_at):
+    if send is not None and not earlier_round and (test is None or send.created_at >= test.created_at):
         if send.state == Job.State.QUEUED:
             return Lifecycle(SCHEDULED if _scheduled(send) else SENDING, test, send, test_failed)
         if send.state == Job.State.RUNNING:

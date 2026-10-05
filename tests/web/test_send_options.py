@@ -160,7 +160,7 @@ def test_cancelling_the_schedule_cancels_no_one(world, verified):
 def test_the_settings_wait_while_a_send_is_scheduled(world, verified):
     client = signed_in(world.users["operator"], verified)
     campaign = world.campaigns["scheduled"]
-    assert services.settings_locked(campaign) == "waiting"
+    assert services.settings_locked(campaign) == "scheduled"
     assert client.get("/campaigns/scheduled/settings/").status_code == 302
     client.post("/campaigns/scheduled/settings/", {"segment": "vip", "template": "other"})
     campaign.refresh_from_db()
@@ -199,9 +199,9 @@ def test_the_engine_passes_the_smoke_test_on(world):
 
 def test_the_send_step_says_what_happens(world, verified):
     html = signed_in(world.users["operator"], verified).get("/campaigns/approved/").content.decode()
-    # Three recipients still wait in the world's approved campaign.
-    assert 'data-confirm="۳ گیرنده این پیامک را دریافت می‌کنند.' in html
-    assert "ساخت ۳ لینک تا حدود ۱ دقیقه طول می‌کشد" in html
+    # All six wait in the world's approved campaign.
+    assert 'data-confirm="۶ گیرنده این پیامک را دریافت می‌کنند.' in html
+    assert "ساخت ۶ لینک تا حدود ۱ دقیقه طول می‌کشد" in html
     assert 'name="when" value="later"' in html and 'placeholder="۱۴' in html  # today, Solar Hijri
 
 
@@ -257,3 +257,58 @@ def test_the_live_part_keeps_the_check_after_a_failed_test(world, verified):
     )
     html = signed_in(world.users["operator"], verified).get("/campaigns/fresh/live/").content.decode()
     assert 'id="check-form"' in html and 'class="sms-bubble"' in html and 'class="row-text"' in html
+
+
+# ---------- the check, as a checklist ----------
+
+def test_the_check_reads_as_a_checklist(world, verified):
+    html = signed_in(world.users["operator"], verified).get("/campaigns/fresh/").content.decode()
+    checks = html.split('id="checklist"')[1].split("</ul>")[0]
+    assert checks.count('class="check-ok"') == 6 and "check-fail" not in checks
+    assert "مشتریان ویژه" in checks and "۶ شماره معتبر." in checks
+    assert '<bdi dir="ltr">coin-price</bdi>' in checks  # an identifier keeps its characters
+    assert '<bdi dir="ltr">https://kifpool.me/wallet</bdi>' in checks
+    assert "۶ گیرنده برای ارسال." in checks
+    assert '<span class="visually-hidden">انجام شد:</span>' in checks  # not by colour alone
+
+
+def test_each_finding_has_its_line():
+    from sms_sender_web.campaigns.checks import CheckResult
+    from sms_sender_web.campaigns.preview import Preview
+    from sms_sender_web.campaigns.present import checklist
+
+    settings = {"template": "coin-price", "links": {"token": "token20", "destination": "https://evil.example/x"}}
+    check = CheckResult(problems=["bad_destination", "nobody_to_send"], valid=3, window_open=False)
+    message = Preview(template="coin-price", known=True, problems=["The text uses %token2, but nothing fills it."])
+    states = {item.label: item.state for item in checklist(check, message, settings, None)}
+    assert states == {
+        "گروه مخاطبان": "ok", "قالب پیامک": "ok", "متغیرهای قالب": "fail", "لینک کوتاه": "fail",
+        "بازه مجاز ارسال (به وقت تهران)": "warn", "گیرندگان": "fail",
+    }
+    unknown = checklist(CheckResult(), Preview(template="other"), {"template": "other"}, None)
+    assert [(i.label, i.state) for i in unknown][1] == ("قالب پیامک", "warn")  # can't be previewed
+    assert "متغیرهای قالب" not in {i.label for i in unknown}  # nothing to tell without the text
+    missing = checklist(CheckResult(problems=["segment_missing"]), None, {}, None)
+    assert [(i.label, i.state) for i in missing][0] == ("گروه مخاطبان", "fail")
+    assert "گیرندگان" not in {i.label for i in missing}
+
+
+# ---------- what it will cost, before the test SMS ----------
+
+def test_the_cost_is_estimated_from_the_latest_test_sms(world, verified):
+    from sms_sender_web.dashboard.templatetags.fa import fa_number
+
+    client = signed_in(world.users["operator"], verified)
+    # The world's tests cost 3,020 rials for a two-part message: 1,510 a part.
+    html = client.get("/campaigns/fresh/").content.decode()
+    each, total = fa_number(3020), fa_number(6 * 3020)
+    assert f"حدود {each} ریال برای هر گیرنده و {total} ریال برای {fa_number(6)} گیرنده" in html
+    assert f"حدود {each} ریال برای هر گیرنده" in client.get("/campaigns/fresh/settings/").content.decode()
+
+    # A test SMS records its message's parts, for the next estimates.
+    client.post("/campaigns/fresh/test/")
+    assert send_job("fresh") is None and Job.objects.get(campaign__slug="fresh").params["parts"] == 2
+
+    # Before any test whose parts are known, there's no guess.
+    Job.objects.filter(kind=Job.Kind.TEST).delete()
+    assert "ریال برای هر گیرنده" not in client.get("/campaigns/fresh/").content.decode()

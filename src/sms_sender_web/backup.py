@@ -116,12 +116,14 @@ def _copy_db(src: Path, out: Path, name: str) -> dict[str, int]:
 
 
 def make_backup(
-    data_dir: Path, dest: Path, *, keep: int = 14, now: datetime | None = None,
+    data_dir: Path, dest: Path, *, keep: int | None = 14, now: datetime | None = None,
 ) -> BackupResult:
     """Back up `data_dir` into `dest/<UTC time>/`, then keep only the
-    newest `keep` backups. Raises BackupError, leaving no partial backup
-    and pruning nothing, if any file can't be copied whole."""
-    if keep < 1:
+    newest `keep` backups (None: remove none, for a backup taken before a
+    risky change, which mustn't cut the scheduled ones short). Raises
+    BackupError, leaving no partial backup and pruning nothing, if any file
+    can't be copied whole."""
+    if keep is not None and keep < 1:
         raise BackupError("keep at least one backup")
     now = now or datetime.now(timezone.utc)
     name = now.strftime(STAMP)
@@ -152,7 +154,8 @@ def make_backup(
     except BaseException:
         shutil.rmtree(partial, ignore_errors=True)
         raise
-    return BackupResult(final, len(files), sum(f["bytes"] for f in files), prune(dest, keep))
+    pruned = prune(dest, keep) if keep is not None else ()
+    return BackupResult(final, len(files), sum(f["bytes"] for f in files), pruned)
 
 
 def list_backups(dest: Path) -> list[Path]:

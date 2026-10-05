@@ -124,6 +124,21 @@ def test_upsert_is_idempotent(tmp_path):
     assert n2 == 0
 
 
+def test_may_have_sent_follows_what_could_have_gone_out(tmp_path):
+    """The rule that fixes a campaign's message: rejected and not-sent rows
+    don't count; an in-flight, unknown or sent one does."""
+    s = make(tmp_path)
+    s.upsert_pending([("09120000001", "09120000001"), ("09120000002", "09120000002")])
+    assert not s.may_have_sent()
+    s.claim("09120000001")
+    s.mark_failed("09120000001", 411, "[411] invalid receptor", permanent=True)
+    assert not s.may_have_sent()
+    s.claim("09120000002")
+    assert s.may_have_sent()  # in flight: Kavenegar may have it
+    s.mark_unknown("09120000002", "read timed out")
+    assert s.may_have_sent()
+
+
 def test_claim_transitions_atomically(tmp_path):
     s = make(tmp_path)
     s.upsert_pending([("09123456789", "09123456789")])

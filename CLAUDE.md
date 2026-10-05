@@ -309,11 +309,29 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - The flow: check (`checks.check_campaign`: read only, no API, never creates the campaign DB) → test SMS (`Job.Kind.TEST`) → approval (`services.decide_test`) → send (`services.start_send`).
   - A test job runs the runner with `test_only=True`: prepare, window, account checks, the test SMS's own link, then the approval test to the requester's `Profile.test_phone`. It stops there, without recording a "last run".
   - A send needs `services.approval(campaign)`: the latest test, approved, with the same `settings_hash`. The hash covers `APPROVED_SETTINGS` (segment, template, tokens, token columns, value maps, links without expiry). It doesn't cover the window, rate or workers. The send gets the test's `cost_per_sms` for the credit estimate.
-  - **Settings lock** (`services.settings_locked`): `started` once a send has begun, `waiting` while one is queued or scheduled (cancel the schedule first). The page and its POST both refuse.
+  - **Settings lock** (`services.settings_locked(campaign, user)`):
+    - `scheduled` while a send waits for its time (cancel the schedule first);
+    - `started` once an SMS *may have gone out* (`StateStore.may_have_sent`: a `sent`, `in_flight`, `unknown` or `needs_review` row; the same rule as `bind_campaign`);
+    - `waiting` while a send is on its way and nothing has gone out yet.
+
+    A send that failed before sending anything locks nothing, so a wrong template can still be fixed. The page and its POST both refuse.
+  - **Rounds:** a finished send whose `settings_hash` isn't the campaign's current one belongs to an earlier round (`lifecycle`). The campaign then starts again from the check and the test SMS. Three ways lead there:
+    - **Another segment** (`campaign_segment`, operators): only `segment`, `input` and `user_id_column` change, and only to a ready segment that has every column the tokens use. Offered in the completed and cancelled steps. The campaign DB skips anyone already sent; rows of the old list that aren't in the new input wait.
+    - **An admin's changed message** (`campaign_unlock`, capability `change_sent_message`, the CLI's `--allow-settings-change`). It needs the typed short name, then `services.unlock_message`:
+      - a full backup first (`make_backup(keep=None)`, which prunes nothing); if it fails, nothing changes;
+      - a paused send is superseded (`CANCELLED`, `result.superseded`, nobody cancelled);
+      - `Campaign.unlocked_at` / `unlocked_by` are set.
+
+      Until a send starts after it (`message_unlocked`), the settings are open to admins only, with a warning. New test and send jobs carry `params.allow_settings_change`, and the worker passes it to the runner, so `bind_campaign` accepts the change.
+    - **A changed setting while nothing has gone out.**
+
+    The lifecycle skips withdrawn and superseded sends.
+  - **Duplicate** (`campaign_duplicate`, the dashboard's presets: the CLI's `--config` / `--profile`): a new campaign with a deep copy of the settings, and a suggested short name from `forms.free_slug` (coin-price-7 → coin-price-8; CLI DBs count as taken). No tests, approvals or sends are copied.
   - **Approval guard:** on a send's first claim (`attempts == 1`), the worker compares its `settings_hash` with the campaign's. A mismatch sends nothing: the job is withdrawn (`CANCELLED`, `result` `{"withdrawn": True, "stop_reason": "not_approved"}`, `started_at` cleared), and the campaign is back at the test SMS. A send without the hash never runs, so tests that queue one directly give it `services.settings_hash(campaign)`.
   - **Scheduling:** `services.start_send(campaign, user, at=…, smoke_test=…)`. `Job.not_before` keeps a queued send from being claimed until then. `forms.parse_when` reads a Solar Hijri date and an HH:MM Tehran time (Persian digits work). It refuses a Gregorian-looking year (≥ 1900), the past, and more than `SCHEDULE_MAX_DAYS` (30) ahead. A wrong one comes back on the page with what was typed. `unschedule` withdraws the send (`result.withdrawn`, nobody cancelled); `start_now` clears `not_before`. The lifecycle skips withdrawn sends.
   - **Smoke test:** `params.smoke_test` → `Engine.runner(smoke_test=)` → the CLI's `--smoke-test`.
-  - **Ready step:** `_live()` adds the check, the message and `preview.recipients` whenever the stage is READY, so the poll renders the same step. Only `run_campaigns` gets each recipient's message and the number search. The search is a POST to `campaign_preview` (no number ever goes in a URL), answered with the `#recipients-preview` fragment for HTMX. Viewers see the message only.
+  - **Cost before the test:** a test job records its message's `params.parts` (from the template library). `preview.price_per_part()` is the latest such test's `cost_per_sms` divided by its parts. The previews show `parts × price` per recipient, and the total in the ready step, as an estimate.
+  - **Ready step:** `_live()` adds the check (as `present.checklist`: one ✓ / ⚠ / ✗ line per finding, its state also in hidden text), the message and `preview.recipients` whenever the stage is READY, so the poll renders the same step. Only `run_campaigns` gets each recipient's message and the number search. The search is a POST to `campaign_preview` (no number ever goes in a URL), answered with the `#recipients-preview` fragment for HTMX. Viewers see the message only.
   - `services.JobConflict.code` picks the Persian message in `campaigns/terms.CONFLICTS`.
   - The live part (`_live.html`) polls `/campaigns/<slug>/live/` every 3 s with HTMX, only while a job is active.
 - **Reports (`reports/`, read only):**
@@ -422,7 +440,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 - **Packaging:** the image installs the package, not the source tree, so each app's `templates/` must be listed in `[tool.setuptools.package-data]`.
 - **Docker:** `Dockerfile` + `compose.yaml` (service `web`, gunicorn, `/healthz`; service `worker`, health check `manage.py worker_status`). The port is published on `${BIND_ADDR:-127.0.0.1}:${WEB_PORT:-8000}`, so it's shared over NetBird only on purpose. Images are `sms-sender-dashboard:${IMAGE_TAG:-latest}`. Both services' logs are capped (json-file, 10 MB × 5), since they hold phone numbers. `DJANGO_TRUST_PROXY_SSL=1` sets `SECURE_PROXY_SSL_HEADER`, only for a TLS proxy that overwrites `X-Forwarded-Proto`. The DevOps handover is [docs/deploy.md](docs/deploy.md); keep it in step with these files.
 - **Backups ([backup.py](src/sms_sender_web/backup.py), no Django):** `manage.py backup` / `verify_backup` / `restore_backup` (in `jobs/management/commands/`, with `worker_status`).
-  - A backup copies `app.db`, `db/*.db` and `segments/*` into `BACKUP_DIR/<UTC stamp>/` (`SMS_SENDER_BACKUP_DIR`, default `<data>/backups`). Not the sandbox or exports.
+  - A backup copies `app.db`, `db/*.db` and `segments/*` into `BACKUP_DIR/<UTC stamp>/` (`SMS_SENDER_BACKUP_DIR`, default `<data>/backups`). Not the sandbox or exports. The dashboard's own backup, taken before an admin changes a sent message, uses `keep=None`, so it never prunes the scheduled ones.
   - DBs go through SQLite's online backup (a plain copy misses the `-wal`). Each is switched to DELETE mode, its leftover `-shm` removed, and integrity-checked.
   - `manifest.json` holds sizes, SHA-256 and row counts.
   - The backup is written to `.partial` and renamed when complete. Pruning (keep N) happens only after a good backup.

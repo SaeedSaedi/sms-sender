@@ -1,0 +1,20 @@
+{% load i18n ui %}
+{% if other_segments or lacking_segments %}
+<section class="subsection another-segment" aria-labelledby="another-segment-heading">
+  <h3 id="another-segment-heading">{% icon "users" %}{% translate "Send this message to another segment" %}</h3>
+  <p class="hint">{% translate "The message stays the same, and a new test SMS comes first. Anyone this campaign already sent to is skipped." %}</p>
+  {% if other_segments %}
+    <form method="post" action="{% url 'campaign_segment' campaign.slug %}" class="inline" id="segment-form">
+      {% csrf_token %}
+      <label for="id_next_segment" class="visually-hidden">{% translate "Segment" %}</label>
+      <select id="id_next_segment" name="segment" required data-cli="send --segment">
+        {% for segment in other_segments %}<option value="{{ segment.slug }}">{{ segment.name }} ({{ segment.slug }})</option>{% endfor %}
+      </select>
+      <button type="submit" class="secondary">{% translate "Use this segment" %}</button>
+    </form>
+  {% endif %}
+  {% if lacking_segments %}
+    <p class="hint">{% translate "Not listed, because they lack a column this message uses:" %} {% for segment in lacking_segments %}<bdi>{{ segment.name }}</bdi>{% if not forloop.last %}، {% endif %}{% endfor %}</p>
+  {% endif %}
+</section>
+{% endif %}

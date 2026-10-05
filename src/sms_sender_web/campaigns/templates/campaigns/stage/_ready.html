@@ -9,8 +9,18 @@
 {% endif %}
 <p class="hint">{% translate "Reads the segment with these settings, without sending anything: who would get the SMS, and what's in the way." %}</p>
 {% if check %}
-  {% for problem in check_problems %}<div class="callout callout-error" role="alert">{% icon "circle-alert" %}<p>{{ problem }}</p></div>{% endfor %}
-  {% if check.ok %}<div class="callout callout-success" role="status">{% icon "circle-check" %}<p>{% translate "Ready for a test SMS." %}</p></div>{% endif %}
+  {% if check.ok %}<div class="callout callout-success" role="status">{% icon "circle-check" %}<p>{% translate "Ready for a test SMS." %}</p></div>
+  {% else %}<div class="callout callout-error" role="alert">{% icon "circle-alert" %}<p>{% translate "Fix what's marked below before a test SMS." %}</p></div>{% endif %}
+  <ul class="checklist" id="checklist">
+    {% for item in checklist %}
+      <li class="check-{{ item.state }}">
+        {% if item.state == "ok" %}{% icon "circle-check" %}{% elif item.state == "warn" %}{% icon "triangle-alert" %}{% else %}{% icon "circle-x" %}{% endif %}
+        <span><span class="visually-hidden">{% if item.state == "ok" %}{{ check_states.ok }}{% elif item.state == "warn" %}{{ check_states.warn }}{% else %}{{ check_states.fail }}{% endif %}</span>
+          <strong>{{ item.label }}</strong>:
+          {% if item.value %}{% if item.ltr %}{{ item.value|ltr }}{% else %}<bdi>{{ item.value }}</bdi>{% endif %}{% if item.note %} · {% endif %}{% endif %}{% if item.note %}<span class="check-note">{{ item.note }}</span>{% endif %}</span>
+      </li>
+    {% endfor %}
+  </ul>
   <dl class="figures">
     <div><dt>{% translate "To send" %}</dt><dd class="num">{{ check.to_send|fa_number }}</dd></div>
     <div><dt>{% translate "Valid numbers" %}</dt><dd class="num">{{ check.valid|fa_number }}</dd></div>
@@ -22,7 +32,6 @@
   {% if check_invalid %}
     <ul class="plain">{% for label, n in check_invalid %}<li>{{ label }}: {{ n|fa_number }}</li>{% endfor %}</ul>
   {% endif %}
-  {% if not check.window_open %}<div class="callout callout-warning">{% icon "clock" %}<p>{% translate "It's outside the sending window now; a test SMS or a send waits for it." %}</p></div>{% endif %}
 {% endif %}
 {% if user|can:"edit_campaigns" %}
   <form method="post" action="{% url 'campaign_check' campaign.slug %}" class="form-actions" id="check-form">

@@ -41,6 +41,9 @@ ACTION_LABELS = {
     "send_started": _("Sending started"),
     "send_scheduled": _("Sending scheduled"),
     "send_unscheduled": _("Schedule cancelled"),
+    "campaign_duplicated": _("Campaign duplicated"),
+    "segment_switched": _("Campaign moved to another segment"),
+    "message_unlocked": _("Message opened for a change, after a backup"),
     "job_requested": _("Update requested"),
     "job_paused": _("Paused"),
     "job_resumed": _("Resumed"),
@@ -81,6 +84,13 @@ def describe(event) -> str:
         return _who(d.get("segment", ""))
     if event.action in ("template_saved", "template_deleted"):
         return _who(d.get("name", ""))
+    if event.action == "message_unlocked":
+        return format_html(gettext_now("backup {name}"), name=_who(d.get("backup", "")))
+    if event.action == "campaign_duplicated":
+        return format_html(gettext_now("from {source}"), source=_who(d.get("source", "")))
+    if event.action == "segment_switched":
+        return format_html(gettext_now("from {before} to {after}"), before=_who(d.get("before") or "—"),
+                           after=_who(d.get("after", "")))
     if event.action in ("send_started", "send_scheduled"):
         parts = [str(jalali(datetime.fromisoformat(d["at"])))] if d.get("at") else []
         if d.get("was_scheduled"):

@@ -20,7 +20,7 @@ from sms_sender.cli import cli  # noqa: E402
 from sms_sender_web import parity  # noqa: E402
 from sms_sender_web.parity import PARITY, Control, Excluded, Implied, Planned  # noqa: E402
 
-from .world import build_world  # noqa: E402
+from .world import PAGES, build_world  # noqa: E402
 
 BELOW = {"operator": "viewer", "admin": "operator"}
 
@@ -54,8 +54,7 @@ def test_no_entry_names_something_that_does_not_exist():
 
 
 def test_every_part_says_where_why_or_when():
-    pages = {"campaign.new", "campaign.settings", "campaign.fresh", "campaign.approved", "report",
-             "status", "account", "suppression", "segment.upload", "segment.map"}
+    pages = set(PAGES)  # every page the test world can build
     for key, parts in PARITY.items():
         assert parts, key
         for part in parts:

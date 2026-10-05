@@ -70,6 +70,21 @@ def test_changed_settings_take_an_approved_campaign_back_to_ready(world):
     assert life.stage == lc.READY and life.step == 2
 
 
+def test_a_send_for_other_settings_belongs_to_an_earlier_round(world):
+    """The list changed since the send (another segment), or the message
+    did: the campaign starts again from the check and the test SMS."""
+    campaign = world.campaigns["completed"]
+    assert stage(world, "completed") == lc.COMPLETED
+    campaign.settings["segment"] = "another"
+    campaign.save()
+    assert stage(world, "completed") == lc.READY
+    # A send still on its way is never an earlier round.
+    sending = world.campaigns["sending"]
+    sending.settings["segment"] = "another"
+    sending.save()
+    assert stage(world, "sending") == lc.SENDING
+
+
 def test_a_failed_test_is_ready_again_and_says_so(world):
     campaign = world.campaigns["fresh"]
     Job.objects.create(campaign=campaign, kind=Job.Kind.TEST, state=Job.State.FAILED,

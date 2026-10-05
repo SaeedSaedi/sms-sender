@@ -51,7 +51,7 @@ class Planned:
 
 Part = Control | Implied | Excluded | Planned
 
-PHASES = ("P2", "P3", "P4", "P5")
+PHASES = ("P3", "P4", "P5")  # P2 is done: nothing may be planned for it again
 # Commands whose options are send's, with the same meaning.
 ALIASES = {"retry-failed": "send", "dry-run": "send", "preview": "send"}
 
@@ -87,7 +87,7 @@ PARITY: dict[str, tuple[Part, ...]] = {
     "send --token-column": (Control("campaign.settings"),),
     "send --value-map": (Control("campaign.settings"),),
     "send --user-id-column": (Control("segment.map"),),
-    "send --segment": (Control("segment.upload"),),
+    "send --segment": (Control("segment.upload"), Control("campaign.completed", note="another round, another segment")),
     "send --workers": (Control("campaign.settings"),),
     "send --max-attempts": (_ADVANCED,),
     "send --timeout": (_ADVANCED,),
@@ -98,7 +98,7 @@ PARITY: dict[str, tuple[Part, ...]] = {
         Control("campaign.settings"),
         Excluded("'off' isn't offered: prohibited hours are a decided compliance rule."),
     ),
-    "send --allow-settings-change": (Planned("P2", "admin: continue with a changed message"),),
+    "send --allow-settings-change": (Control("campaign.halted", ADMIN, note="a typed confirmation, a backup first"),),
     "send --log-file": (_LOGS,),
     "send --verbose": (_LOGS,),
     "send --quiet": (_LOGS,),
@@ -133,8 +133,8 @@ PARITY: dict[str, tuple[Part, ...]] = {
         Control("campaign.fresh", note="the test SMS"),
         Excluded("Only to your own number (decision 7, 2026-10-04)."),
     ),
-    "sms-sender --config": (Planned("P2", "duplicate a campaign; template library"),),
-    "sms-sender --profile": (Planned("P2", "duplicate a campaign; template library"),),
+    "sms-sender --config": (Control("campaign.completed", note="duplicate a campaign: its settings are the preset"),),
+    "sms-sender --profile": (Control("campaign.completed", note="duplicate a campaign: its settings are the preset"),),
 
     # ---------- options every command shares ----------
     "* --campaign": (Implied("Every page and action belongs to one campaign."),),

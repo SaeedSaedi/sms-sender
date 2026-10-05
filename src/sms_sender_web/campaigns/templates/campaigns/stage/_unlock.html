@@ -1,0 +1,21 @@
+{% load i18n roles ui %}
+{% if can_unlock %}
+<details class="subsection unlock" id="unlock">
+  <summary>{% icon "message-square-text" %}{% translate "Change the message for those still waiting" %}</summary>
+  <p>{% translate "Some recipients already got this message, and the rest would get another one. Everything is backed up first; then the settings open for you, and a new test SMS comes before any send." %}</p>
+  <form method="post" action="{% url 'campaign_unlock' campaign.slug %}" id="unlock-form">
+    {% csrf_token %}
+    <label for="id_confirm_slug">{% translate "To confirm, type the campaign's short name:" %} <code dir="ltr">{{ campaign.slug }}</code></label>
+    <input id="id_confirm_slug" name="confirm" type="text" dir="ltr" autocomplete="off" spellcheck="false" required
+           pattern="{{ campaign.slug }}" data-cli="send --allow-settings-change">
+    <div class="form-actions">
+      <button type="submit" class="danger">{% icon "message-square-text" %}{% translate "Back up and change the message" %}</button>
+    </div>
+  </form>
+</details>
+{% elif message_unlocked and user|can:"change_sent_message" %}
+<div class="callout callout-warning">{% icon "triangle-alert" %}
+  <p>{% translate "The message is open for a change until the next send starts." %}
+    <a href="{% url 'campaign_settings' campaign.slug %}">{% translate "Settings" %}</a></p>
+</div>
+{% endif %}

@@ -75,9 +75,11 @@ PAGES: dict[str, tuple[str, str | None]] = {
     "campaign.awaiting": ("/campaigns/awaiting/", "operator"),
     "campaign.approved": ("/campaigns/approved/", "operator"),
     "campaign.scheduled": ("/campaigns/scheduled/", "operator"),
+    "campaign.duplicate": ("/campaigns/completed/duplicate/", "operator"),
     "campaign.sending": ("/campaigns/sending/", "operator"),
     "campaign.paused": ("/campaigns/paused/", "operator"),
     "campaign.halted": ("/campaigns/halted/", "operator"),
+    "campaign.halted.admin": ("/campaigns/halted/", "admin"),  # changing a sent message
     "campaign.completed": ("/campaigns/completed/", "operator"),
     "campaign.draft": ("/campaigns/draft-1/", "operator"),
     "report": ("/reports/approved/", "viewer"),
@@ -134,7 +136,7 @@ def _test_job(campaign: Campaign, operator, *, approved: bool) -> Job:
     now = timezone.now()
     return Job.objects.create(
         campaign=campaign, kind=Job.Kind.TEST, state=Job.State.DONE, requested_by=operator,
-        params={"test_number": TEST_PHONE}, settings_hash=services.settings_hash(campaign),
+        params={"test_number": TEST_PHONE, "parts": 2}, settings_hash=services.settings_hash(campaign),
         result={"cost_per_sms": 3020, "estimate": 3020 * len(PHONES), "credit": 264_731_842,
                 "links_ready": 1, "cost": 3020},  # the test SMS's own link only
         started_at=now, finished_at=now,
@@ -169,15 +171,36 @@ def build_world(data_dir: Path) -> World:
         + "not-a-number,u-9,Sara\n",
         encoding="utf-8",
     )
+    # Two more lists: one with the same columns, so a finished campaign can
+    # send its message there too, and one with numbers only.
+    for slug, name, columns, token_columns in (
+        ("vip-2", "مشتریان ویژه ۲", ["phone", "user_id", "first_name"], ["first_name"]),
+        ("plain", "فقط شماره", ["phone"], []),
+    ):
+        more = Segment.objects.create(
+            slug=slug, name=name, original_name=f"{slug}.csv", status=Segment.Status.READY,
+            columns=columns, token_columns=token_columns, uploaded_by=operator,
+            user_id_column="user_id" if "user_id" in columns else "",
+            summary={"rows": 2, "valid": 2, "invalid": 0, "duplicates": 0, "missing_user_id": 0,
+                     "conflicts": 0, "suppressed": 0, "invalid_sample": []},
+        )
+        more.path.write_text(
+            ",".join(columns) + "\n" + "".join(
+                ",".join({"phone": p, "user_id": f"u-{p[-2:]}", "first_name": "Sara"}[c] for c in columns) + "\n"
+                for p in ("09120000021", "09120000022")
+            ),
+            encoding="utf-8",
+        )
     draft = Segment.objects.create(slug="draft", name="فهرست تازه", original_name="new.csv",
                                    uploaded_by=operator)
     draft.upload_path.write_text("mobile,id,name\n09120000001,u1,Ali\n09120000002,u2,Sara\n", encoding="utf-8")
 
     rows = {PHONES[0]: "sent", PHONES[1]: "sent", PHONES[2]: "failed_permanent"}
     rows.update({phone: "pending" for phone in PHONES[3:]})
+    tested = {phone: "pending" for phone in PHONES}  # as a test SMS leaves them: nothing sent
     campaigns = world.campaigns
     campaigns["fresh"] = _campaign("fresh", "قیمت سکه", vip)
-    campaigns["approved"] = _campaign("approved", "نفت خام", vip, db_rows=rows)
+    campaigns["approved"] = _campaign("approved", "نفت خام", vip, db_rows=tested)
     _test_job(campaigns["approved"], operator, approved=True)
     campaigns["awaiting"] = _campaign("awaiting", "در انتظار تأیید", vip)
     _test_job(campaigns["awaiting"], operator, approved=False)
@@ -199,7 +222,7 @@ def build_world(data_dir: Path) -> World:
         )
 
     # A send set for tomorrow, to one recipient first.
-    scheduled = campaigns["scheduled"] = _campaign("scheduled", "ارسال فردا", vip, db_rows=rows)
+    scheduled = campaigns["scheduled"] = _campaign("scheduled", "ارسال فردا", vip, db_rows=tested)
     _test_job(scheduled, operator, approved=True)
     Job.objects.create(
         campaign=scheduled, kind=Job.Kind.SEND, state=Job.State.QUEUED, requested_by=operator,

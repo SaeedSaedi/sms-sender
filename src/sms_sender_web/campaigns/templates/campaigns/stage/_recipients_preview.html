@@ -4,6 +4,7 @@
   {% if message.known %}
     <div class="sms-bubble" dir="auto">{{ message.text }}</div>
     <p class="num sms-length">{{ message.length }}</p>
+    {% if message_cost %}<p class="hint num" id="message-cost">{{ message_cost }}</p>{% endif %}
     {% for problem in message.problems %}<div class="callout callout-error">{% icon "circle-alert" %}<p>{{ problem }}</p></div>{% endfor %}
     {% for warning in message.warnings %}<div class="callout callout-warning">{% icon "triangle-alert" %}<p>{{ warning }}</p></div>{% endfor %}
   {% elif message.template %}
