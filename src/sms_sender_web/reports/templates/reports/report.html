@@ -104,6 +104,28 @@
 </section>
 {% endif %}
 
+{% if conversions or user|can:"update_campaigns" and counts.sent %}
+<section class="card step" aria-labelledby="conversions-heading" id="conversions">
+  <h2 id="conversions-heading">{% icon "circle-check" %}{% translate "Conversions" %}</h2>
+  {% if conversions %}
+    <dl class="figures">
+      <div><dt>{% translate "People who converted" %}</dt><dd class="num">{{ conversions.people|fa_number }}{% if conversions.share is not None %} ({{ conversions.share|fa_number }}٪){% endif %}</dd></div>
+      <div><dt>{% translate "Conversions" %}</dt><dd class="num">{{ conversions.conversions|fa_number }}</dd></div>
+      <div><dt>{% translate "Their value" %}</dt><dd class="num">{{ conversions.value|fa_number }}</dd></div>
+    </dl>
+  {% endif %}
+  {% if user|can:"update_campaigns" %}
+    <form method="post" action="{% url 'report_conversions' slug %}" enctype="multipart/form-data" id="conversions-form">
+      {% csrf_token %}
+      <p class="hint">{% translate "A CSV from your own records, with a column r (the link's reference) or user_id, and optionally value and converted_at. Each row counts for a recipient who was sent the SMS; a file imported twice adds nothing twice. It needs no phone numbers." %}</p>
+      <label for="id_conversions_file">{% translate "File" %}</label>
+      <input id="id_conversions_file" name="file" type="file" accept=".csv,.txt,text/csv" required>
+      <div class="form-actions"><button type="submit" class="secondary">{% icon "upload" %}{% translate "Import conversions" %}</button></div>
+    </form>
+  {% endif %}
+</section>
+{% endif %}
+
 {% if chart %}
 <section class="card step" aria-labelledby="chart-heading" id="clicks-chart">
   <h2 id="chart-heading">{% icon "chart-column" %}{% translate "Clicks over time" %}</h2>
@@ -143,6 +165,12 @@
 
 <section class="card step" id="recipients" aria-labelledby="recipients-heading">
   <h2 id="recipients-heading">{% icon "users" %}{% translate "Recipients" %}</h2>
+  {% if audiences %}
+  <nav class="audiences" aria-label="{% translate "Ready-made audiences" %}">
+    <span class="hint">{% translate "Ready-made:" %}</span>
+    {% for label, query, n in audiences %}<a href="?{{ query }}#recipients"{% if query == filter_query %} aria-current="true"{% endif %}>{{ label }} <span class="num">({{ n|fa_number }})</span></a>{% endfor %}
+  </nav>
+  {% endif %}
   <form method="get" action="{% url 'report' slug %}#recipients" class="filters" id="filters">
       <div class="filter"><label for="id_status">{% translate "Status" %}</label>
         <select id="id_status" name="status">
@@ -235,6 +263,21 @@
   <p class="empty">{% translate "This number isn't in this campaign." %}</p>
   {% elif not query %}
   <p class="empty">{% translate "No recipient matches these filters." %}</p>
+  {% endif %}
+  {% if user|can:"edit_campaigns" and total and not query %}
+  <details class="subsection audience" id="audience">
+    <summary>{% icon "users" %}{% translate "Make a segment from these recipients" %}</summary>
+    <form method="post" action="{% url 'report_audience' slug %}">
+      {% csrf_token %}
+      {% for key, value in filters.items %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+      <p class="hint">{{ audience_hint }}</p>
+      <label for="id_audience_name">{% translate "Name" %}</label>
+      <input id="id_audience_name" name="name" type="text" maxlength="200" required value="{{ audience_name }}">
+      <label for="id_audience_slug">{% translate "Short name" %}</label>
+      <input id="id_audience_slug" name="segment_slug" type="text" dir="ltr" maxlength="64" required value="{{ audience_slug }}">
+      <div class="form-actions"><button type="submit" class="secondary">{% icon "users" %}{% translate "Make the segment" %}</button></div>
+    </form>
+  </details>
   {% endif %}
   {% if user|can:"export_people" %}
   <div class="actions downloads">

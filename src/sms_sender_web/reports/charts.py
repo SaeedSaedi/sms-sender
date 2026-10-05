@@ -39,6 +39,9 @@ def funnel(store: StateStore, counts: dict[str, int]) -> list[FunnelStep]:
     steps = [("accepted", sent), ("delivered", store.delivery_counts().get(DELIVERED, 0))]
     if store.has_personal_links():
         steps.append(("clicked", sum(row["clicked"] for row in store.clicks_by_segment())))
+    people, conversions, _value = store.conversion_totals()
+    if conversions:
+        steps.append(("converted", people))
     return [FunnelStep(key, str(FUNNEL_LABELS[key]), n, round(100 * n / sent)) for key, n in steps]
 
 

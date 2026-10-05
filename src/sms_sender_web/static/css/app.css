@@ -909,6 +909,8 @@ table.value-maps select, table.value-maps input { min-inline-size: 7rem; }
 
 /* ---------- the recipients list's filters (plan 05, P3) ---------- */
 
+nav.audiences { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-3); align-items: baseline; margin-block-end: var(--s-3); }
+nav.audiences a[aria-current] { font-weight: 700; text-decoration: none; }
 form.filters { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: flex-end; margin-block-end: var(--s-3); }
 form.filters > .filter { flex: 0 1 13rem; min-inline-size: 9rem; }
 form.filters > .filter label { margin-block-start: 0; }

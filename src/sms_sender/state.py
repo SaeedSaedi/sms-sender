@@ -100,6 +100,23 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
     (  # 6 → 7: clicks per hour (UTC hour start, unix seconds), for clicks over time
         "CREATE TABLE click_hours (hour INTEGER PRIMARY KEY, clicks INTEGER NOT NULL)",
     ),
+    (  # 7 → 8: conversions from the business's own records, each matched to a
+       # recipient who was sent the SMS, by the link's r or by user ID
+        """
+        CREATE TABLE conversions (
+            id           INTEGER PRIMARY KEY,
+            phone        TEXT NOT NULL,
+            matched_by   TEXT NOT NULL,
+            ref          TEXT,
+            user_id      TEXT,
+            value        REAL,
+            converted_at REAL,
+            imported_at  REAL NOT NULL,
+            batch        TEXT NOT NULL
+        )
+        """,
+        "CREATE INDEX idx_conversions_phone ON conversions(phone)",
+    ),
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)
@@ -871,6 +888,58 @@ class StateStore:
                 )
                 updated += conn.total_changes - before
         return updated
+
+    # ---------- conversions (see conversions.py) ----------
+
+    def phones_for_refs(self, refs: Iterable[str]) -> dict[str, str]:
+        """r → phone, for links of one's own that were sent."""
+        rows = self._select_in(
+            "SELECT l.ref AS ref, r.phone AS phone FROM links l "
+            "JOIN recipients r ON r.link_key = l.key AND r.phone = l.key "
+            "WHERE r.status = 'sent' AND l.ref IN ({in})",
+            refs,
+        )
+        return {r["ref"]: r["phone"] for r in rows}
+
+    def phones_for_user_ids(self, user_ids: Iterable[str]) -> dict[str, str]:
+        """user ID → phone, among recipients who were sent the SMS."""
+        rows = self._select_in(
+            "SELECT user_id, phone FROM recipients WHERE status = 'sent' AND user_id IN ({in})", user_ids,
+        )
+        return {r["user_id"]: r["phone"] for r in rows}
+
+    def add_conversions(self, rows: list[tuple], batch: str) -> tuple[int, int]:
+        """Store (phone, matched_by, ref, user_id, value, converted_at) rows;
+        one already stored for the same person, value and moment isn't added
+        again (a file imported twice). Returns (added, already there)."""
+        with self._tx() as conn:
+            seen = {
+                (r[0], r[1], r[2]) for r in conn.execute(
+                    "SELECT phone, COALESCE(value, ''), COALESCE(converted_at, '') FROM conversions"
+                )
+            }
+            added = duplicates = 0
+            now = time.time()
+            for phone, matched_by, ref, user_id, value, converted_at in rows:
+                key = (phone, "" if value is None else value, "" if converted_at is None else converted_at)
+                if key in seen:
+                    duplicates += 1
+                    continue
+                seen.add(key)
+                conn.execute(
+                    "INSERT INTO conversions (phone, matched_by, ref, user_id, value, converted_at, imported_at, batch) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (phone, matched_by, ref, user_id, value, converted_at, now, batch),
+                )
+                added += 1
+        return added, duplicates
+
+    def conversion_totals(self) -> tuple[int, int, float]:
+        """(people who converted, conversions, their value)."""
+        row = self._conn().execute(
+            "SELECT COUNT(DISTINCT phone), COUNT(*), COALESCE(SUM(value), 0) FROM conversions"
+        ).fetchone()
+        return int(row[0]), int(row[1]), float(row[2])
 
     def latest_click_hour(self) -> int | None:
         row = self._conn().execute("SELECT MAX(hour) FROM click_hours").fetchone()

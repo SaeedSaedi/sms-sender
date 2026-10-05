@@ -46,6 +46,8 @@ ACTION_LABELS = {
     "segment_switched": _("Campaign moved to another segment"),
     "message_unlocked": _("Message opened for a change, after a backup"),
     "recipients_requeued": _("Recipients queued again"),
+    "audience_created": _("Segment made from a report"),
+    "conversions_imported": _("Conversions imported"),
     "job_requested": _("Update requested"),
     "job_paused": _("Paused"),
     "job_resumed": _("Resumed"),
@@ -88,6 +90,12 @@ def describe(event) -> str:
         return _who(d.get("segment", ""))
     if event.action in ("template_saved", "template_deleted"):
         return _who(d.get("name", ""))
+    if event.action == "conversions_imported":
+        return format_html(gettext_now("{file}: {count} matched"), file=_who(d.get("file", "")),
+                           count=fa_number(d.get("by_ref", 0) + d.get("by_user_id", 0)))
+    if event.action == "audience_created":
+        return format_html(gettext_now("{segment}: {count}"), segment=_who(d.get("segment", "")),
+                           count=fa_number(d.get("count", 0)))
     if event.action == "recipients_requeued":
         return format_html(gettext_now("{status}: {count}"), status=SUBMISSION_STATUS.get(d.get("status"), d.get("status", "")),
                            count=fa_number(d.get("count", 0)))

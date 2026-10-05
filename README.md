@@ -487,9 +487,15 @@ internal, multi-user tool built with Django and HTMX. So far it has:
     numbers), the people who clicked, the filtered recipients, and the
     rejected and invalid rows (the CLI's `export-failed`), all with phone
     numbers except attribution. Each download is recorded;
-- in each report, the funnel from accepted to delivered to clicked, and
-  clicks over time; and an analytics page («تحلیل‌ها») with every campaign
-  side by side;
+- in each report, the funnel from accepted to delivered to clicked (and
+  converted), and clicks over time; and an analytics page («تحلیل‌ها»)
+  with every campaign side by side;
+- from a report, a new segment of its recipients: ready-made (clicked,
+  didn't click, delivered but didn't click, not delivered, rejected) or any
+  filter, with user IDs and, where the source list still exists, its token
+  columns;
+- conversions imported by CSV from your own records, matched by the
+  link's `r` or the user ID, without phone numbers;
 - a status page («وضعیت سرویس‌ها»): Kavenegar credit and account settings,
   the short-link service, and whether the worker is running.
 
