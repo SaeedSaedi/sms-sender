@@ -127,7 +127,14 @@ The approval test runs *before* the smoke test on purpose: the operator gets a c
 
 ### State machine (owned by `state.py`)
 
-Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_permanent`, `failed_retriable` (= definitely not sent), `unknown` (= may have been sent), `needs_review` (= reconciliation couldn't decide), `suppressed` (= on the opt-out list), `invalid` (= the input says don't send: two user IDs for one phone; only an explicit `reset --status invalid` undoes it). `CLAIMABLE = (pending, failed_retriable)`.
+Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_permanent`, `failed_retriable` (= definitely not sent), `unknown` (= may have been sent), `needs_review` (= reconciliation couldn't decide), `suppressed` (= on the opt-out list), `invalid` (= the input says don't send: two user IDs for one phone; only an explicit `reset --status invalid` undoes it), `capped` (= over the frequency cap this run; counted afresh next run). `CLAIMABLE = (pending, failed_retriable)`.
+
+**Frequency cap** (`frequency.py`, `--frequency-cap N/DAYS`, plan 05 decision 6: off unless set):
+- at most N accepted SMS to a number in DAYS days, counted by `state.folder_sends_since` across every campaign DB in the folder, query_only;
+- what counts: accepted `send` calls and `reconciled_sent` decisions; test SMS don't;
+- `Runner._apply_frequency_cap` runs with the exclusions in `_prepare`: `uncap()` first (the window moves), then `cap()` the claimable rows at or over N.
+
+Capped people got nothing from this campaign, so freeing them again can't send anyone twice.
 
 `--opt-out FILE` (repeatable) → `Runner(opt_out=…)` → `StateStore.suppress` turns matching claimable rows into `suppressed`. Rows already `sent` stay `sent`. Exclusions (opt-outs, user-ID conflicts) run in `_prepare` **after** orphan recovery and the start-of-run reconciliation, right before the queue is read. Otherwise a row that reconciliation requeues could slip past them in the same run. The details that matter:
 
@@ -306,10 +313,12 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
     - replace the file (`segment_replace`).
   - **Replacing** is refused once any campaign DB may have sent from it (`StateStore.segment_may_have_sent`), or while a send that uses it is on its way. The new file goes through the columns step again. `Segment.version` goes up, and `services.settings_hash` includes it once it's above 0, so campaigns using the segment need a new test SMS and a queued send is withdrawn.
   - The upload → columns → summary pages share a stepper (`segments/_steps.html`).
+- **System settings (`system/`, `/system/`, `manage_settings`):** one `SystemSettings` row. For now it holds the frequency cap, which `Engine.runner` passes to every run and `checks.check_campaign` counts (`capped`, `cap`). Changes are recorded as `system_settings_changed`.
 - **Suppression list (`suppression/`):**
   - A `Suppression` row is a canonical phone, either global (`campaign` null) or for one campaign. Two partial unique constraints keep each number once per scope, because NULLs never collide in a plain UNIQUE.
   - `service.add` and `service.phones_for(campaign)` are the API. `jobs.engine.Engine.runner` passes `phones_for(campaign)` into the runner's `opt_out`, so every send skips them.
-  - Operators (`add_suppression`) see the page and add numbers. Only admins (`remove_suppression`) remove them. Both changes are audited.
+  - Operators (`add_suppression`) see the page and add numbers, pasted or from a file. They apply to every campaign, or to one (the form's `scope`, the CLI's `--opt-out`). Only admins (`remove_suppression`) remove them. Both changes are audited.
+  - A number is searched with a POST (`action=find`), never in a URL.
 - **Phone numbers on pages** are masked with `privacy.mask_phone` (filter `mask_phone`): the first four and last two digits are shown, the rest become `*`. Values with fewer than ten digits are hidden entirely. Use `*`, never `•`, because next to Persian digits a dot reads as «۰».
 - **`accounts.decorators.forbidden(request)`** renders the Persian 403. Use it for checks inside a view, such as an action only admins may take.
 - **Campaign pages (`campaigns/`, spec 3):**

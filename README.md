@@ -99,6 +99,19 @@ Matching recipients become `suppressed` and are never sent; anyone who
 already got the campaign stays `sent`. In a profile:
 `opt_out = ["data/opt-out.txt"]`.
 
+### Frequency cap
+
+At most so many SMS to one number in so many days, counted across every
+campaign DB in the folder (test SMS don't count):
+
+```bash
+sms-sender send --campaign coin-price-7 --input ... --frequency-cap 2/7
+```
+
+Anyone already at the cap becomes `capped` and isn't sent by this run. Each
+run counts again, so they go out once the window has moved on. It's off
+unless set (`frequency_cap = "2/7"` in a profile).
+
 ### Sending hours
 
 Campaign SMS only go out between **08:00 and 21:00 Tehran time** by default.
@@ -420,8 +433,11 @@ internal, multi-user tool built with Django and HTMX. So far it has:
   the suppression list. From a segment: start a campaign, download it, or
   replace its file while nobody has been sent from it (campaigns using it
   then need a new test SMS);
-- the suppression list: operators add numbers (pasted or from a file),
-  admins remove them, and every send leaves them out;
+- the suppression list: operators add numbers (pasted or from a file), for
+  every campaign or just one; admins remove them; every send leaves them out;
+- a frequency cap («سقف ارسال», on «تنظیمات سامانه»): at most so many SMS to
+  one number in so many days, across all campaigns. It's off until an admin
+  sets it; the CLI's `--frequency-cap 2/7` does the same;
 - campaigns, run from the browser in the spec's stages:
   1. **Settings:** the segment, the template, and what fills each token: a
      fixed value, a column of the segment, or the short link. Then value
@@ -657,6 +673,7 @@ State machine per recipient:
 | `unknown` | may have been sent: a timeout after the request, a crash mid-send | never automatically; `reconcile` asks Kavenegar |
 | `needs_review` | `reconcile` couldn't decide | only after `reset --status needs_review` |
 | `suppressed` | on the opt-out list | only after `reset --status suppressed`, and only once it's off the list |
+| `capped` | over the frequency cap this run | counted again by the next `send`, which sends it once it's under the cap |
 
 Only `pending` and `failed_retriable` rows are ever claimed, so a `send` can
 never reach a row that has, or may have, the SMS.

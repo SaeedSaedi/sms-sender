@@ -18,6 +18,7 @@ from ..dashboard.templatetags.fa import fa_number
 from ..text import persian_text
 from . import service
 from .forms import AddForm
+from ..jobs.models import Campaign
 from .models import Suppression
 
 
@@ -44,9 +45,11 @@ def suppression_list(request):
         if form.is_valid():
             phones, invalid = form.cleaned_data["phones"], form.cleaned_data["invalid"]
             note = persian_text(form.cleaned_data["note"].strip())
-            added = service.add(phones, note=note, user=request.user)
+            campaign = form.cleaned_data["scope"]
+            added = service.add(phones, campaign=campaign, note=note, user=request.user)
             if added:
-                record("suppression_added", request=request, count=added)
+                record("suppression_added", request=request, campaign=campaign.slug if campaign else "",
+                       count=added)
             already = len(phones) - added
             if already:
                 messages.success(request, _(
@@ -63,7 +66,8 @@ def suppression_list(request):
             return redirect("suppression")
 
     entries = Suppression.objects.select_related("campaign", "added_by")
-    query = request.GET.get("q", "").strip()
+    # A number is looked up with a POST, so it never lands in a URL or a log.
+    query = request.POST.get("q", "").strip()[:32] if request.POST.get("action") == "find" else ""
     query_invalid = False
     if query:
         try:
@@ -78,4 +82,5 @@ def suppression_list(request):
         "query": query,
         "query_invalid": query_invalid,
         "total": Suppression.objects.count(),
+        "campaigns": Campaign.objects.order_by("name"),
     })

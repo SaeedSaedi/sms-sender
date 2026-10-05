@@ -25,6 +25,12 @@
         <span class="file-name" aria-live="polite" data-empty="{% translate "No file chosen" %}">{% translate "No file chosen" %}</span>
       </div>
       {% field_errors form.file %}
+      <label for="id_scope">{% translate "Applies to" %}</label>
+      <select id="id_scope" name="scope"{% aria form.scope %}>
+        <option value="">{% translate "All campaigns" %}</option>
+        {% for campaign in campaigns %}<option value="{{ campaign.slug }}"{% if form.scope.value == campaign.slug %} selected{% endif %}>{{ campaign.name }} ({{ campaign.slug }})</option>{% endfor %}
+      </select>
+      {% field_errors form.scope %}
       <label for="id_note">{% translate "Note" %}</label>
       <input id="id_note" name="note" type="text" maxlength="200" value="{{ form.note.value|default:'' }}"{% aria form.note hint=True %}>
       <p class="hint" id="id_note_hint">{% translate "For example, why these numbers are added." %}</p>
@@ -33,7 +39,8 @@
   </section>
 
   <section class="split-main">
-    <form method="get" class="inline search">
+    <form method="post" action="{% url 'suppression' %}" class="inline search" id="find-number">
+      {% csrf_token %}<input type="hidden" name="action" value="find">
       <label for="id_q" class="visually-hidden">{% translate "Find a number" %}</label>
       <input id="id_q" name="q" type="search" dir="ltr" inputmode="tel" value="{{ query }}"
              placeholder="{% translate "Find a number" %}">

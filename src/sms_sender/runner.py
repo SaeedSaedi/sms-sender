@@ -43,7 +43,8 @@ from .sender import (
     UncertainSendError,
 )
 from .shortlink import ShlinkHaltError
-from .state import NEEDS_REVIEW, SUPPRESSED, UNKNOWN, StateStore
+from .frequency import FrequencyCap
+from .state import CAPPED, NEEDS_REVIEW, SUPPRESSED, UNKNOWN, StateStore, folder_sends_since
 from .window import TEHRAN, SendWindow, now_tehran
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,7 @@ class RunSummary:
     stopped: bool = False
     # Rows on the opt-out list in this campaign's DB (never sent).
     suppressed: int = 0
+    capped: int = 0       # over the frequency cap, held back this run
     # What this run's accepted SMS cost, in rials (Kavenegar's own figures,
     # approval test included).
     cost: int = 0
@@ -215,6 +217,7 @@ class Runner:
         settings: dict | None = None,
         allow_settings_change: bool = False,
         opt_out: frozenset[str] | None = None,
+        frequency_cap: FrequencyCap | None = None,
         send_window: SendWindow | None = None,
         clock: Callable[[], datetime] = now_tehran,
         user_id_column: str | None = None,
@@ -253,6 +256,7 @@ class Runner:
         self._user_id_conflicts = 0
         # Phones that must never get this campaign (opt-out list).
         self.opt_out = opt_out or frozenset()
+        self.frequency_cap = frequency_cap
         # Daily hours SMS may go out; None = any time.
         self.send_window = send_window
         self.clock = clock
@@ -859,6 +863,9 @@ class Runner:
                     "suppressed", n=suppressed,
                 )
 
+        if self.frequency_cap is not None:
+            self._apply_frequency_cap()
+
         phones = self.state.list_claimable_phones()
         if self._row_tokens is not None:
             # Per-recipient tokens live in the input file, so a claimable row
@@ -904,6 +911,23 @@ class Runner:
                 "missing_user_id", n=loaded.missing_user_id,
             )
         return set(loaded.conflicts) | {phone for phone, _, _ in earlier}
+
+    def _apply_frequency_cap(self) -> None:
+        """Hold back whoever got as many SMS as the cap allows within its
+        days, across the folder's campaigns. Counted afresh each run: last
+        run's capped rows go back first, as the window has moved on."""
+        cap = self.frequency_cap
+        self.state.uncap()
+        counts = folder_sends_since(Path(self.state.db_path).parent, time.time() - cap.seconds)
+        over = [p for p in self.state.list_claimable_phones() if counts.get(p, 0) >= cap.sms]
+        capped = self.state.cap(over)
+        if capped:
+            logger.info("frequency_capped", extra={"n": capped, "cap": str(cap)})
+            self._reporter.note(
+                f"{capped} recipient(s) already got {cap.sms} SMS in the last {cap.days} days "
+                "(the frequency cap) and won't be sent this time.",
+                "capped", n=capped, sms=cap.sms, days=cap.days,
+            )
 
     def _exclude_conflicts(self, conflicting: set[str]) -> None:
         """`invalid` is never claimable, and unlike `failed_permanent` no
@@ -1015,6 +1039,7 @@ class Runner:
             needs_review=db_counts.get(NEEDS_REVIEW, 0),
             stopped=self._cancelled.is_set() or self._window_closed.is_set(),
             suppressed=db_counts.get(SUPPRESSED, 0),
+            capped=db_counts.get(CAPPED, 0),
             cost=self._run_cost,
             missing_user_id=loaded.missing_user_id,
             user_id_conflicts=self._user_id_conflicts,
@@ -1046,6 +1071,7 @@ def _summary_log_fields(s: RunSummary) -> dict:
         "unknown": s.unknown,
         "needs_review": s.needs_review,
         "suppressed": s.suppressed,
+        "capped": s.capped,
         "cost": s.cost,
         "missing_user_id": s.missing_user_id,
         "user_id_conflicts": s.user_id_conflicts,
@@ -1078,6 +1104,8 @@ def format_report(s: RunSummary) -> str:
         lines.append(f"  needs_review      {s.needs_review}  (Kavenegar check was ambiguous)")
     if s.suppressed:
         lines.append(f"  suppressed        {s.suppressed}  (on the opt-out list; never sent)")
+    if s.capped:
+        lines.append(f"  capped            {s.capped}  (over the frequency cap; counted again next run)")
     if s.missing_user_id:
         lines.append(f"  missing user ID   {s.missing_user_id}  (sent; not attributable to a user)")
     if s.user_id_conflicts:
@@ -1157,6 +1185,7 @@ def make_runner(
     campaign: str | None = None,
     allow_settings_change: bool = False,
     opt_out: frozenset[str] | None = None,
+    frequency_cap: FrequencyCap | None = None,
     send_window: SendWindow | None = None,
     user_id_column: str | None = None,
     segment: str | None = None,
@@ -1187,6 +1216,7 @@ def make_runner(
         settings=campaign_settings(sender_cfg, token_columns, links),
         allow_settings_change=allow_settings_change,
         opt_out=opt_out,
+        frequency_cap=frequency_cap,
         send_window=send_window,
         user_id_column=user_id_column,
         segment=segment,

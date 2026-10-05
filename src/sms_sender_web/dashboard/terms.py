@@ -15,6 +15,7 @@ SUBMISSION_STATUS = {
     "suppressed": _("On the suppression list"),
     "invalid": _("Invalid"),
     "cancelled": _("Cancelled"),
+    "capped": _("Over the frequency cap"),
 }
 STATUS_ORDER = tuple(SUBMISSION_STATUS)
 

@@ -64,6 +64,7 @@ from .shortlink import (
     load_shlink_config,
     shlink_base_url,
 )
+from .frequency import parse_cap
 from .window import DEFAULT_WINDOW, ENV_SEND_WINDOW, parse_window
 from .state import (
     CANCELLED,
@@ -391,6 +392,12 @@ def _send_options(f: F) -> F:
                  "`suppressed`; anyone already sent stays `sent`.",
         ),
         click.option(
+            "--frequency-cap", "frequency_cap", default=None, metavar="N/DAYS",
+            help="At most N SMS to one number in DAYS days, counted across the "
+                 "campaign DBs in this DB's folder, e.g. 2/7. Recipients over it "
+                 "become `capped` and are counted again at the next run. Off by default.",
+        ),
+        click.option(
             "--send-window", "send_window", default=DEFAULT_WINDOW, show_default=True,
             envvar=ENV_SEND_WINDOW, metavar="HH:MM-HH:MM",
             help="Only send inside this daily window, in Tehran time; 'off' to send "
@@ -485,6 +492,7 @@ def _do_send(
     token_column: tuple[str, ...] = (), value_map: tuple[str, ...] = (),
     campaign: str | None = None, allow_settings_change: bool = False,
     opt_out: tuple[str, ...] = (),
+    frequency_cap: str | None = None,
     # None: the env var, else 08:00-21:00 (the wizard doesn't pass it).
     send_window: str | None = None,
     user_id_column: str | None = None,
@@ -533,6 +541,10 @@ def _do_send(
         window = parse_window(send_window)
     except ValueError as e:
         raise click.UsageError(str(e)) from e
+    try:
+        cap = parse_cap(frequency_cap)
+    except ValueError as e:
+        raise click.UsageError(f"--frequency-cap: {e}") from e
 
     # `load_api_key` calls `load_dotenv`, which makes `.env`-set values
     # (including SMS_SENDER_TEST_NUMBER) visible to `_resolve_test_number`.
@@ -562,6 +574,7 @@ def _do_send(
         campaign=campaign,
         allow_settings_change=allow_settings_change,
         opt_out=_load_opt_out(opt_out),
+        frequency_cap=cap,
         send_window=window,
         user_id_column=user_id_column,
         segment=segment,

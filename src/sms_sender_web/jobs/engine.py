@@ -19,6 +19,7 @@ from sms_sender.state import StateStore
 from sms_sender.window import DEFAULT_WINDOW, parse_window
 
 from ..suppression.service import phones_for
+from ..system.models import SystemSettings
 from .models import Campaign
 from .sandbox import SandboxKavenegar, SandboxShlink
 
@@ -85,6 +86,7 @@ class Engine:
             token_columns=token_columns,
             campaign=campaign.slug,
             opt_out=frozenset(opt_out) or None,
+            frequency_cap=SystemSettings.load().frequency_cap,
             send_window=parse_window(s.get("send_window", DEFAULT_WINDOW)),
             user_id_column=s.get("user_id_column"),
             segment=s.get("segment"),
