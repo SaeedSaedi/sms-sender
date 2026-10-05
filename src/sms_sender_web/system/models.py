@@ -11,6 +11,13 @@ class SystemSettings(models.Model):
     # days, across every campaign. Either empty: no cap.
     frequency_cap_sms = models.PositiveSmallIntegerField(null=True, blank=True)
     frequency_cap_days = models.PositiveSmallIntegerField(null=True, blank=True)
+    # Where a send's end is announced (the CLI's --notify): slack:<webhook>,
+    # telegram:<bot token>:<chat id>, or an https:// webhook. Secrets: the
+    # pages show them masked (notify.redact_target).
+    notify_targets = models.JSONField(default=list, blank=True)
+    # What a new campaign starts with; empty: the built-in default.
+    default_send_window = models.CharField(max_length=11, blank=True, default="")
+    default_rate = models.CharField(max_length=16, blank=True, default="")
     updated_by = models.ForeignKey(
         django_settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
     )

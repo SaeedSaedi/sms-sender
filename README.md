@@ -438,6 +438,10 @@ internal, multi-user tool built with Django and HTMX. So far it has:
 - a frequency cap («سقف ارسال», on «تنظیمات سامانه»): at most so many SMS to
   one number in so many days, across all campaigns. It's off until an admin
   sets it; the CLI's `--frequency-cap 2/7` does the same;
+- notifications (the CLI's `--notify`, on «تنظیمات سامانه»): Slack, Telegram
+  or a webhook hears how each send ended. The addresses are shown masked, and
+  each has a test button. The same page sets new campaigns' default window
+  and rate;
 - campaigns, run from the browser in the spec's stages:
   1. **Settings:** the segment, the template, and what fills each token: a
      fixed value, a column of the segment, or the short link. Then value

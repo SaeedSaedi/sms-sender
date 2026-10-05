@@ -34,6 +34,7 @@ from ..jobs.engine import campaign_db
 from ..jobs.models import Campaign, Job
 from ..segments.models import Segment
 from ..system import operations
+from ..system.models import SystemSettings
 from .checks import check_campaign
 from .forms import (
     _ASCII_DIGITS, SCHEDULE_ERRORS, TOKENS, DuplicateForm, NewCampaignForm, SettingsForm, combined,
@@ -74,13 +75,15 @@ def campaign_new(request):
     if request.method == "POST" and form.is_valid():
         d = form.cleaned_data
         segment = d["segment"]
+        defaults = SystemSettings.load()
         campaign = Campaign.objects.create(
             slug=d["slug"], name=d["name"].strip(), created_by=request.user,
             settings={
                 "segment": segment.slug, "input": str(segment.path),
                 "user_id_column": segment.user_id_column or None,
                 "template": d["template"], "tokens": {}, "token_columns": {}, "value_maps": {},
-                "send_window": "08:00-21:00", "rate": None, "workers": 5,
+                "send_window": defaults.default_send_window or "08:00-21:00",
+                "rate": defaults.default_rate or None, "workers": 5,
             },
         )
         record("campaign_created", request=request, campaign=campaign.slug)

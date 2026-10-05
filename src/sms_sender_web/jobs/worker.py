@@ -108,6 +108,18 @@ class _Heartbeat(threading.Thread):
         self.join()
 
 
+def _announce(job: Job, summary) -> None:
+    """Every notification target an admin set (system settings) hears how
+    the send ended: the CLI's report, headed with the campaign. Best-effort:
+    a failed notification changes nothing about the job."""
+    from sms_sender.notify import notify
+
+    from ..system.models import SystemSettings
+
+    for target in SystemSettings.load().notify_targets:
+        notify(target, summary, heading=job.campaign.slug)
+
+
 class Worker:
     def __init__(
         self, engine: Engine | None = None, *, worker_id: str | None = None,
@@ -254,6 +266,8 @@ class Worker:
             k: v for k, v in dataclasses.asdict(summary).items() if k != "top_errors"
         }
         result["top_errors"] = [[message, count] for message, count in summary.top_errors]
+        if not test and reason.value not in ("shutdown", "lost"):
+            _announce(job, summary)  # the CLI's --notify: a send ended or stopped
         if reason.value == "cancel" or (test and reason.value == "pause"):
             if not test:
                 with RunLock(campaign_db(job.campaign)):

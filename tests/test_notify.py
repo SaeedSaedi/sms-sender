@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 
 from sms_sender import notify as notify_module
-from sms_sender.notify import _redact, notify
+from sms_sender.notify import notify, redact_target
 from sms_sender.runner import RunSummary
 
 
@@ -142,7 +142,7 @@ def test_http_400_does_not_raise(monkeypatch):
     ("https://example.com/secret/path?key=v", "https://example.com/<redacted>"),
 ])
 def test_redact(target, expected_prefix):
-    assert _redact(target) == expected_prefix
+    assert redact_target(target) == expected_prefix
 
 
 # ---------- regression: halt + leaked-key surfaces clean ----------
