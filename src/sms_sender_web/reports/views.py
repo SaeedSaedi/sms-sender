@@ -420,11 +420,22 @@ def analytics(request):
     })
 
 
-def _expiry(value):
-    """Kavenegar's expiry: a unix time (as int or text), shown as a date."""
+# Kavenegar reports an account that never expires as 9999-12-31, Tehran time
+# (expiredate 253402201800). No Solar Hijri date reaches that far.
+NEVER_EXPIRES_YEAR = 9000
+
+
+def _expiry(value) -> tuple[datetime | None, bool]:
+    """Kavenegar's expiry, a unix time (as int or text): (the date, False);
+    (None, True) for an account that never expires; (None, False) when
+    Kavenegar says nothing."""
     if isinstance(value, (int, float)) or (isinstance(value, str) and value.isdigit()):
-        return datetime.fromtimestamp(int(value), timezone.utc)
-    return None
+        try:
+            when = datetime.fromtimestamp(int(value), timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None, True
+        return (None, True) if when.year >= NEVER_EXPIRES_YEAR else (when, False)
+    return None, False
 
 
 @never_cache
@@ -436,8 +447,9 @@ def status(request):
     try:
         sender = engine.sender()
         info = sender.account_info()
-        kavenegar = {"ok": True, "credit": info.remaining_credit, "expires": _expiry(info.expire_date),
-                     "type": info.type}
+        expires, never_expires = _expiry(info.expire_date)
+        kavenegar = {"ok": True, "credit": info.remaining_credit, "expires": expires,
+                     "never_expires": never_expires, "type": info.type}
         try:
             config = sender.account_config()
             kavenegar.update(debug_mode=config.debug_mode, resend_failed=config.resend_failed)

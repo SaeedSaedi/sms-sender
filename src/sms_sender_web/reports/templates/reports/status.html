@@ -14,7 +14,7 @@
   {% if kavenegar.ok %}
     <dl class="figures">
       <div><dt>{% translate "Account credit" %}</dt><dd class="num">{% if kavenegar.credit is not None %}{{ kavenegar.credit|fa_number }} {% translate "rials" %}{% else %}—{% endif %}</dd></div>
-      <div><dt>{% translate "Valid until" %}</dt><dd class="num">{% if kavenegar.expires %}{{ kavenegar.expires|jalali:"%Y/%m/%d" }}{% else %}—{% endif %}</dd></div>
+      <div><dt>{% translate "Valid until" %}</dt><dd class="num">{% if kavenegar.expires %}{{ kavenegar.expires|jalali:"%Y/%m/%d" }}{% elif kavenegar.never_expires %}{% translate "Doesn't expire" %}{% else %}—{% endif %}</dd></div>
     </dl>
     {% if kavenegar.debug_mode %}<div class="callout callout-error" role="alert">{% icon "circle-alert" %}<p>{% translate "Debug mode is on: no SMS is delivered. Turn it off in the Kavenegar panel." %}</p></div>
     {% elif kavenegar.debug_mode is False %}<p class="ok">{% icon "circle-check" %} {% translate "Debug mode is off." %}</p>{% endif %}

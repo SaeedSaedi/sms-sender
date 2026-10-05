@@ -176,6 +176,27 @@ def test_the_status_page_asks_kavenegar_shlink_and_the_worker(signed_in, monkeyp
     assert "در حال اجرا" in html
 
 
+def status_with_expiry(signed_in, monkeypatch, expire_date):
+    account = FakeAccount(AccountInfo(remaining_credit=1_000, expire_date=expire_date, type="Customer"),
+                          AccountConfig(debug_mode=False, resend_failed=False))
+    monkeypatch.setattr(Engine, "sender", lambda self: account)
+    monkeypatch.setattr(Engine, "link_client", lambda self: FakeShlink())
+    return signed_in.get("/status/")
+
+
+def test_an_account_that_never_expires_says_so(signed_in, monkeypatch):
+    """Kavenegar reports "never" as 9999-12-31, Tehran time (253402201800),
+    beyond any Solar Hijri date: the real account's status page failed on it."""
+    response = status_with_expiry(signed_in, monkeypatch, "253402201800")
+    assert response.status_code == 200
+    assert "بدون تاریخ انقضا" in response.content.decode()
+
+
+def test_an_account_expiry_is_a_solar_hijri_date(signed_in, monkeypatch):
+    html = status_with_expiry(signed_in, monkeypatch, "1767225600").content.decode()  # 2026-01-01 UTC
+    assert "۱۴۰۴/۱۰/۱۱" in html and "بدون تاریخ انقضا" not in html
+
+
 def test_the_status_page_explains_problems_in_persian(signed_in, monkeypatch):
     monkeypatch.setattr(Engine, "sender", lambda self: FakeAccount(error=HaltError(401, "invalid key")))
     monkeypatch.setattr(Engine, "link_client", lambda self: FakeShlink(version=None))
