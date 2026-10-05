@@ -144,6 +144,7 @@ def stop_reason(key: str | None, fields: dict | None) -> str:
 
 CHECK_PROBLEMS = {
     "segment_missing": _("The campaign's segment isn't ready or its file is missing."),
+    "more_segment_missing": _("One of the more segments isn't ready, or its file is missing."),
     "no_template": _("The campaign has no template."),
     "columns_missing": _("A column the tokens use isn't in the segment's file."),
     "nobody_to_send": _("Nobody is left to send to."),
@@ -153,6 +154,7 @@ CHECK_PROBLEMS = {
 # The check's lines (present.checklist).
 CHECKLIST = {
     "list": _("Segment"),
+    "lists": _("Segments"),
     "valid": _("{n} valid numbers."),
     "template": _("Template"),
     "text_known": _("Its text is in the library."),
@@ -168,9 +170,31 @@ CHECKLIST = {
 }
 CHECK_STATES = {"ok": _("Done:"), "warn": _("Warning:"), "fail": _("Problem:")}
 
+# Importing the CLI's profiles (profiles.py): why a profile can't be one,
+# and why the file can't be read.
+IMPORT_PROBLEMS = {
+    "not_a_table": _("It isn't a table of settings."),
+    "no_template": _("It has no template."),
+    "bad_template": _("Its template's name isn't one Kavenegar takes."),
+    "bad_token": _("A fixed token value breaks Kavenegar's rules."),
+    "bad_token_column": _("A token column isn't written as TOKEN=COLUMN."),
+    "token_twice": _("A token is filled both with a fixed value and with a column."),
+    "bad_value_map": _("A value translation isn't written as COLUMN:FROM=TO, or no token uses its column."),
+    "bad_link": _("Its short link's settings can't be used."),
+}
+IMPORT_FILE_ERRORS = {
+    "too_big": _("The file is too big for a profiles file."),
+    "not_utf8": _("The file isn't UTF-8 text."),
+    "not_toml": _("The file isn't valid TOML."),
+    "no_profiles": _("The file has no [profile.…] tables."),
+    "missing": _("Choose the profiles file first."),
+    "expired": _("The file read earlier is gone. Choose it again."),
+}
+
 # Setting names, for the activity log's "settings changed" line.
 SETTING_NAMES = {
     "segment": _("segment"),
+    "more_segments": _("more segments"),
     "template": _("template"),
     "tokens": _("tokens"),
     "token_columns": _("tokens"),

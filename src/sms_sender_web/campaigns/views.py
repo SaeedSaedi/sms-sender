@@ -38,16 +38,19 @@ from ..system.models import SystemSettings
 from .checks import check_campaign
 from .forms import (
     _ASCII_DIGITS, SCHEDULE_ERRORS, TOKENS, DuplicateForm, NewCampaignForm, SettingsForm, combined,
-    free_slug, parse_when,
+    free_slug, more_segment_choices, parse_when,
 )
 from .lifecycle import CANCELLED, COMPLETED, DRAFT, PAUSED, READY, STOPPED, lifecycle
 from .message import placeholders
 from .models import MessageTemplate
 from .present import checklist, notes, result_line, say, send_summary
 from .preview import ROW_CHOICES, load_segment, preview_of, recipients
+from .profiles import MAX_BYTES as PROFILES_MAX_BYTES
+from .profiles import ProfileFileError, drafts as profile_drafts, read as read_profiles
 from .terms import (
-    CHECK_PROBLEMS, CHECK_STATES, CONFLICTS, COST_EACH, COST_TOTAL, FOLLOWUPS, INVALID_ROWS, LINKS_AT_SEND,
-    NEXT_STEP, REQUEUE_CONFIRM, REQUEUED, STAGES, STEPS, stop_reason,
+    CHECK_PROBLEMS, CHECK_STATES, CONFLICTS, COST_EACH, COST_TOTAL, FOLLOWUPS, IMPORT_FILE_ERRORS,
+    IMPORT_PROBLEMS, INVALID_ROWS, LINKS_AT_SEND, NEXT_STEP, REQUEUE_CONFIRM, REQUEUED, STAGES, STEPS,
+    stop_reason,
 )
 
 logger = logging.getLogger(__name__)
@@ -112,6 +115,75 @@ def campaign_duplicate(request, slug: str):
     return render(request, "campaigns/duplicate.html", {"form": form, "source": source})
 
 
+# The profiles file between reading it and importing from it.
+_PROFILES_SESSION = "profile_import"
+
+
+def _cli_option(key: str) -> str:
+    return "--" + key.replace("_", "-")
+
+
+def _import_page(request, text: str, *, error: str = "", file: str = ""):
+    rows = [
+        {"draft": d, "problems": [IMPORT_PROBLEMS[key] for key in d.problems],
+         "reset": ", ".join(map(_cli_option, d.reset)), "left_out": ", ".join(map(_cli_option, d.left_out))}
+        for d in profile_drafts(read_profiles(text.encode("utf-8")))
+    ]
+    return render(request, "campaigns/import.html", {
+        "rows": rows, "error": error, "file": file,
+        "importable": sum(1 for row in rows if row["draft"].importable),
+    })
+
+
+@requires("manage_settings")
+@require_http_methods(["GET", "POST"])
+def campaign_import(request):
+    """The CLI's profiles (sms-sender.toml) as draft campaigns, for an
+    admin: read the file, see each profile as the campaign it would be,
+    then import the ones chosen. The file waits in the session between the
+    two steps; nothing is sent, and no campaign DB is opened."""
+    if request.method == "GET":
+        request.session.pop(_PROFILES_SESSION, None)
+        return render(request, "campaigns/import.html", {})
+    if request.POST.get("step") == "import":
+        text = request.session.get(_PROFILES_SESSION)
+        if text is None:
+            messages.error(request, IMPORT_FILE_ERRORS["expired"])
+            return redirect("campaign_import")
+        chosen = set(request.POST.getlist("profile"))
+        try:
+            found = [d for d in profile_drafts(read_profiles(text.encode("utf-8")))
+                     if d.profile in chosen and d.importable]
+        except ProfileFileError:
+            found = []
+        if not found:
+            return _import_page(request, text, error=_("Choose at least one profile to import."))
+        with transaction.atomic():
+            created = [
+                Campaign.objects.create(slug=d.slug, name=d.name, created_by=request.user, settings=d.settings)
+                for d in found
+            ]
+        for d, campaign in zip(found, created):
+            record("campaign_imported", request=request, campaign=campaign.slug, profile=d.profile)
+        request.session.pop(_PROFILES_SESSION, None)
+        messages.success(request, _(
+            "%(n)s campaigns were made from the profiles, each as a draft: choose its segment if it has none, "
+            "check it, then send a test SMS."
+        ) % {"n": fa_number(len(created))})
+        return redirect("home")
+    upload = request.FILES.get("file")
+    if upload is None:
+        return render(request, "campaigns/import.html", {"error": IMPORT_FILE_ERRORS["missing"]})
+    raw = upload.read(PROFILES_MAX_BYTES + 1)
+    try:
+        read_profiles(raw)
+    except ProfileFileError as e:
+        return render(request, "campaigns/import.html", {"error": IMPORT_FILE_ERRORS[e.code]})
+    text = raw.decode("utf-8-sig")
+    request.session[_PROFILES_SESSION] = text
+    return _import_page(request, text, file=upload.name[:255])
+
+
 def _other_segments(campaign: Campaign) -> tuple[list[Segment], list[Segment]]:
     """Where this message can go next: ready segments other than the current
     one, (with every column its tokens use, without)."""
@@ -156,26 +228,41 @@ def campaign_requeue(request, slug: str):
 @requires("edit_campaigns")
 @require_POST
 def campaign_segment(request, slug: str):
-    """Another round: the same message to another segment (the CLI's
-    `send --campaign` with another `--input`). The approval covers the list,
-    so a new test SMS comes first, and anyone this campaign already sent to
-    is skipped."""
+    """Another round: the same message to another segment, or to several
+    in one send (the CLI's `send --campaign` with another `--input`). The
+    approval covers the list, so a new test SMS comes first, and anyone
+    this campaign already sent to is skipped."""
     campaign = get_object_or_404(Campaign, slug=slug)
     if Job.objects.filter(campaign=campaign, kind=Job.Kind.SEND, state__in=services.ACTIVE).exists():
         messages.error(request, CONFLICTS["send_on_its_way"])
         return redirect("campaign_detail", slug=slug)
     usable, _lacking = _other_segments(campaign)
-    segment = next((seg for seg in usable if seg.slug == request.POST.get("segment")), None)
-    if segment is None:
+    wanted = set(request.POST.getlist("segment"))
+    if not wanted:
+        messages.error(request, _("Choose at least one segment."))
+        return redirect("campaign_detail", slug=slug)
+    chosen = [seg for seg in usable if seg.slug in wanted]  # in the order they're listed
+    if len(chosen) != len(wanted):
         raise Http404
+    segment, *more = chosen
     before = campaign.settings.get("segment")
     campaign.settings.update(
         segment=segment.slug, input=str(segment.path), user_id_column=segment.user_id_column or None,
     )
+    if more:
+        campaign.settings["more_segments"] = [seg.slug for seg in more]
+    else:
+        campaign.settings.pop("more_segments", None)
     campaign.save()
-    record("segment_switched", request=request, campaign=slug, before=before, after=segment.slug)
-    messages.success(request, _("The campaign now sends to “%(segment)s”. Check the list, then send a new test SMS.")
-                     % {"segment": segment.name})
+    record("segment_switched", request=request, campaign=slug, before=before, after=segment.slug,
+           **({"more": [seg.slug for seg in more]} if more else {}))
+    if more:
+        messages.success(request, _(
+            "The campaign now sends to %(n)s segments in one send. Check the list, then send a new test SMS."
+        ) % {"n": fa_number(len(chosen))})
+    else:
+        messages.success(request, _("The campaign now sends to “%(segment)s”. Check the list, then send a new test SMS.")
+                         % {"segment": segment.name})
     return redirect("campaign_detail", slug=slug)
 
 
@@ -288,6 +375,8 @@ def campaign_settings(request, slug: str):
         "campaign": campaign, "form": form, "columns": columns, "ui": ui,
         "value_map_rows": rows + [{"column": "", "source": "", "target": ""}],
         "segments": Segment.objects.filter(status=Segment.Status.READY),
+        "more_segment_choices": more_segment_choices(),
+        "chosen_more": set(form["more_segments"].value() or []),
         "templates": MessageTemplate.objects.all(),
         "advanced": can(request.user, "manage_settings"),
         **_with_cost("preview", preview_of(campaign.settings, segment)),
@@ -454,6 +543,7 @@ def _live(request, campaign: Campaign, **preview) -> dict:
         ready["requeue_items"] = _requeue_items(campaign, request.user)
     return {
         **ready,
+        **_sends(campaign),
         "cancel_confirm": _(
             "Cancel the campaign? %(n)s recipients who haven't got the SMS yet are cancelled. "
             "SMS that Kavenegar already accepted can't be recalled."
@@ -546,16 +636,26 @@ def _preview_params(data) -> dict:
 
 
 def _page(request, campaign: Campaign, *, preview: dict | None = None, **extra):
-    s = campaign.settings
     return render(request, "campaigns/detail.html", {
         **_live(request, campaign, **(preview or {})),
+        **extra,
+    })
+
+
+def _sends(campaign: Campaign) -> dict:
+    """What the campaign sends, for the side card (the poll renders it too):
+    its segment and any more segments, and what fills each token."""
+    s = campaign.settings or {}
+    more = {seg.slug: seg for seg in Segment.objects.filter(slug__in=s.get("more_segments") or [])}
+    return {
         "segment": Segment.objects.filter(slug=s.get("segment")).first(),
+        # One send for several: (slug, the segment or None if it's gone), in order.
+        "more_segments": [(slug, more.get(slug)) for slug in s.get("more_segments") or []],
         "tokens": [
             (name, (s.get("tokens") or {}).get(name), (s.get("token_columns") or {}).get(name))
             for name in TOKENS
         ],
-        **extra,
-    })
+    }
 
 
 @requires("view_campaigns")

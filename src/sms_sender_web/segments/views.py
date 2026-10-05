@@ -23,7 +23,7 @@ from ..jobs.services import ACTIVE
 from ..suppression.service import phones_for
 from . import files
 from .forms import MAPPING_ERRORS, MappingForm, ReplaceForm, UploadForm
-from .models import Segment
+from .models import Segment, campaign_slugs
 
 # Upload → columns → summary: the steps every segment page shows.
 STEPS = ((1, gettext_lazy("File")), (2, gettext_lazy("Columns")), (3, gettext_lazy("Summary")))
@@ -37,6 +37,12 @@ def segment_steps(request) -> dict:
 
 # Header names that usually hold a user ID: the mapping page preselects one.
 _USER_ID_NAMES = {"user_id", "userid", "user id", "user", "id", "uid", "شناسه", "شناسه کاربر"}
+
+
+def campaigns_using(segment: Segment) -> list[Campaign]:
+    """The campaigns that send to it: as their segment, or as one of their
+    more segments (a JSON list, so it's looked up here, not in SQL)."""
+    return [c for c in Campaign.objects.order_by("name") if segment.slug in campaign_slugs(c.settings)]
 
 
 @requires("view_campaigns")
@@ -152,7 +158,7 @@ def segment_detail(request, slug: str):
     return render(request, "segments/detail.html", {
         "segment": segment,
         "summary": segment.summary,
-        "used_by": list(Campaign.objects.filter(settings__segment=segment.slug)),
+        "used_by": campaigns_using(segment),
         "replace_blocked": _replace_blocked(segment),
         "step": 4,  # every step done: the summary is the page itself
         **segment_steps(request),
@@ -175,7 +181,8 @@ def _replace_blocked(segment: Segment) -> str:
     sent = _sent_from(segment)
     if sent:
         return _("Campaign %(campaigns)s has sent from this segment, so its file stays as it is. For a new list, upload a new segment.") % {"campaigns": "، ".join(sent)}
-    if Job.objects.filter(kind=Job.Kind.SEND, state__in=ACTIVE, campaign__settings__segment=segment.slug).exists():
+    users = [c.pk for c in campaigns_using(segment)]
+    if Job.objects.filter(kind=Job.Kind.SEND, state__in=ACTIVE, campaign__in=users).exists():
         return _("A send that uses this segment is on its way. Replace the file after it ends.")
     return ""
 
@@ -215,8 +222,7 @@ def segment_replace(request, slug: str):
         record("segment_replaced", request=request, segment=segment.slug, file=segment.original_name)
         return redirect("segment_map", slug=slug)
     return render(request, "segments/replace.html", {
-        "segment": segment, "form": form,
-        "used_by": list(Campaign.objects.filter(settings__segment=segment.slug)),
+        "segment": segment, "form": form, "used_by": campaigns_using(segment),
     })
 
 
@@ -224,8 +230,7 @@ def segment_replace(request, slug: str):
 @require_POST
 def segment_delete(request, slug: str):
     segment = get_object_or_404(Segment, slug=slug)
-    used_by = list(Campaign.objects.filter(settings__segment=segment.slug).values_list("slug", flat=True))
-    if used_by:
+    if campaigns_using(segment):
         messages.error(request, _("A campaign uses this segment, so it can't be deleted."))
         return redirect("segment_detail", slug=slug)
     segment.delete_files()

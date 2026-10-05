@@ -40,6 +40,20 @@
     </select>
     {% field_errors form.segment alert=False %}
 
+    {% if more_segment_choices|length > 1 %}
+    <details class="subsection more-segments" id="more-segments"{% if chosen_more or form.more_segments.errors %} open{% endif %}>
+      <summary>{% translate "More segments in the same send (optional)" %}{% if chosen_more %} (<span class="num">{{ chosen_more|length|fa_number }}</span>){% endif %}</summary>
+      <p class="hint" id="more-segments-hint">{% translate "The same message goes to these lists too, after the first and in this order, with one test SMS for all of them. A number in two lists gets one SMS. Each list needs the columns the tokens use." %}</p>
+      <div class="check-group" role="group" aria-label="{% translate "More segments in the same send (optional)" %}" aria-describedby="more-segments-hint">
+        {% for seg in more_segment_choices %}
+          <label class="check" data-more-segment="{{ seg.slug }}"><input type="checkbox" name="more_segments" value="{{ seg.slug }}"{% if seg.slug in chosen_more %} checked{% endif %}>
+            <span><bdi>{{ seg.name }}</bdi> <span class="muted">({{ seg.slug }}) · {{ seg.summary.valid|default:0|fa_number }} {% translate "numbers" %}</span></span></label>
+        {% endfor %}
+      </div>
+      {% field_errors form.more_segments alert=False %}
+    </details>
+    {% endif %}
+
     <label for="id_template">{% translate "Template" %}</label>
     <input id="id_template" name="template" type="text" dir="ltr" maxlength="100" required list="template-names" data-cli="send --template" value="{{ form.template.value|default:'' }}"{% aria form.template hint=True %}>
     <datalist id="template-names">{% for t in templates %}<option value="{{ t.name }}">{% endfor %}</datalist>

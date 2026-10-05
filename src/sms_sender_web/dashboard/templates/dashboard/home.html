@@ -6,7 +6,10 @@
     <p class="page-meta">{% translate "Every campaign, where it stands, and what needs someone now." %}</p>
   </div>
   {% if campaigns and user|can:"edit_campaigns" %}
-    <div class="page-actions"><a class="button" href="{% url 'campaign_new' %}">{% icon "plus" %}{% translate "New campaign" %}</a></div>
+    <div class="page-actions">
+      {% if user|can:"manage_settings" %}<a class="button secondary" href="{% url 'campaign_import' %}">{% icon "upload" %}{% translate "Import the CLI's profiles" %}</a>{% endif %}
+      <a class="button" href="{% url 'campaign_new' %}">{% icon "plus" %}{% translate "New campaign" %}</a>
+    </div>
   {% endif %}
 </header>
 
@@ -119,7 +122,8 @@
   {% icon "megaphone" %}
   <h2>{% translate "No campaigns yet" %}</h2>
   <p>{% translate "A campaign sends one message to a segment: set its text, send a test SMS to yourself, then send." %}</p>
-  {% if user|can:"edit_campaigns" %}<a class="button" href="{% url 'campaign_new' %}">{% icon "plus" %}{% translate "New campaign" %}</a>{% endif %}
+  {% if user|can:"edit_campaigns" %}<div class="actions"><a class="button" href="{% url 'campaign_new' %}">{% icon "plus" %}{% translate "New campaign" %}</a>
+    {% if user|can:"manage_settings" %}<a class="button secondary" href="{% url 'campaign_import' %}">{% icon "upload" %}{% translate "Import the CLI's profiles" %}</a>{% endif %}</div>{% endif %}
 </div>
 {% endif %}
 {% endblock %}

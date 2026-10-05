@@ -71,6 +71,7 @@ PAGES: dict[str, tuple[str, str | None]] = {
     "segment.map": ("/segments/draft/columns/", "operator"),
     "suppression": ("/suppression/", "operator"),
     "campaign.new": ("/campaigns/new/", "operator"),
+    "campaign.import": ("/campaigns/import/", "admin"),
     "campaign.settings": ("/campaigns/fresh/settings/", "operator"),
     "campaign.fresh": ("/campaigns/fresh/", "operator"),
     "campaign.awaiting": ("/campaigns/awaiting/", "operator"),

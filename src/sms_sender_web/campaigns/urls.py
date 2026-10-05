@@ -4,6 +4,7 @@ from . import library, views
 
 urlpatterns = [
     path("campaigns/new/", views.campaign_new, name="campaign_new"),
+    path("campaigns/import/", views.campaign_import, name="campaign_import"),
     path("campaigns/<slug:slug>/", views.campaign_detail, name="campaign_detail"),
     path("campaigns/<slug:slug>/settings/", views.campaign_settings, name="campaign_settings"),
     path("campaigns/<slug:slug>/settings/preview/", views.settings_preview, name="campaign_settings_preview"),

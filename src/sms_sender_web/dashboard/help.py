@@ -13,7 +13,7 @@ from .terms import DELIVERY_STATUS, SUBMISSION_STATUS
 
 # What each of the campaign page's five steps (campaigns.terms.STEPS) is for.
 STEP_HELP = (
-    _("Choose the segment, the template and what fills its tokens."),
+    _("Choose the segment (or several, for one send), the template and what fills its tokens."),
     _("The check reads the list as a send would: the valid numbers, the template, the tokens, the short link and the sending window. The preview shows each recipient's final text."),
     _("One SMS to your own number, set on “My account”, with the final text and link. Check it on your phone, then approve it or reject it."),
     _("A send needs a test SMS approved for these exact settings. It starts now or at a set time: the short links are made first, then the SMS go out inside the sending window."),
@@ -69,6 +69,7 @@ ACTIONS = (
     (_("Reconcile with Kavenegar"), _("Asks Kavenegar about the SMS whose outcome is unknown. No SMS is sent.")),
     (_("Update delivery statuses"), _("Asks Kavenegar which SMS were delivered. No SMS is sent.")),
     (_("Queue again"), _("Puts the recipients of one status back in the queue for the next send, after a confirmation that names how many. Only a system admin can do it for anyone who may already have the SMS, because they could get it twice.")),
+    (_("Import the CLI's profiles"), _("A system admin reads sms-sender.toml, and each profile chosen becomes a draft campaign with its own message and sending settings. Nothing is sent.")),
 )
 
 # The campaign stages a send can stop in (campaigns.terms.STAGES) → what to do.

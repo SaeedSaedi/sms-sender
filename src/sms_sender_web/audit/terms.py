@@ -60,6 +60,7 @@ ACTION_LABELS = {
     "backup_verified": _("Backup checked"),
     "campaign_purged": _("Campaign and its records deleted"),
     "campaign_adopted": _("CLI campaign brought to the dashboard"),
+    "campaign_imported": _("Campaign made from a CLI profile"),
     "job_requested": _("Update requested"),
     "job_paused": _("Paused"),
     "job_resumed": _("Resumed"),
@@ -125,9 +126,12 @@ def describe(event) -> str:
         return format_html(gettext_now("backup {name}"), name=_who(d.get("backup", "")))
     if event.action == "campaign_duplicated":
         return format_html(gettext_now("from {source}"), source=_who(d.get("source", "")))
+    if event.action == "campaign_imported":
+        return format_html(gettext_now("from profile {profile}"), profile=_who(d.get("profile", "")))
     if event.action == "segment_switched":
+        after = " + ".join([d.get("after", ""), *d.get("more", [])])
         return format_html(gettext_now("from {before} to {after}"), before=_who(d.get("before") or "—"),
-                           after=_who(d.get("after", "")))
+                           after=_who(after))
     if event.action in ("send_started", "send_scheduled"):
         parts = [str(jalali(datetime.fromisoformat(d["at"])))] if d.get("at") else []
         if d.get("was_scheduled"):

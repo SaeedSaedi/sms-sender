@@ -34,26 +34,36 @@ SOURCES = [
 ]
 _ASCII_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
 # The template's name at Kavenegar, as typed in its panel.
-_TEMPLATE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
+TEMPLATE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 
 
 def _ready_segments():
     return Segment.objects.filter(status=Segment.Status.READY)
 
 
+def more_segment_choices():
+    """The segments a campaign can send to after its own, in the order a
+    send reads them (by name)."""
+    return _ready_segments().order_by("name", "slug")
+
+
 def clean_template(value: str) -> str:
     value = value.strip()
-    if not _TEMPLATE_RE.match(value):
+    if not TEMPLATE_RE.match(value):
         raise forms.ValidationError(
             _("Write the template's name exactly as in the Kavenegar panel: English letters, digits, “-”, “_” or “.”, no spaces.")
         )
     return value
 
 
+# Pages under /campaigns/, never a campaign's short name.
+RESERVED = ("new", "import")
+
+
 def slug_taken(slug: str) -> bool:
     """A campaign has it, or a DB of that name exists (made by the CLI: it's
     another campaign's record)."""
-    return slug == "new" or Campaign.objects.filter(slug=slug).exists() or campaign_db(Campaign(slug=slug)).exists()
+    return slug in RESERVED or Campaign.objects.filter(slug=slug).exists() or campaign_db(Campaign(slug=slug)).exists()
 
 
 def free_slug(base: str) -> str:
@@ -106,6 +116,8 @@ class SettingsForm(forms.Form):
     """Everything a send needs, for a campaign with a segment chosen."""
 
     segment = forms.ModelChoiceField(queryset=_ready_segments(), to_field_name="slug")
+    # One send for several segments: these after the first, with one test SMS.
+    more_segments = forms.MultipleChoiceField(required=False)
     template = forms.CharField(max_length=100)
     value_maps = forms.CharField(widget=forms.Textarea, required=False)
     link_destination = forms.CharField(max_length=2000, required=False)
@@ -132,6 +144,10 @@ class SettingsForm(forms.Form):
         self.advanced = advanced  # the advanced settings apply only from an admin
         self.fields["segment"].queryset = _ready_segments()
         self.fields["segment"].error_messages["invalid_choice"] = _("Choose a segment whose columns are set.")
+        self.fields["more_segments"].choices = [(seg.slug, seg.name) for seg in more_segment_choices()]
+        self.fields["more_segments"].error_messages["invalid_choice"] = _(
+            "One of the chosen segments isn't ready any more. Choose again."
+        )
         for name in TOKENS:
             self.fields[f"{name}_source"] = forms.ChoiceField(choices=SOURCES, required=False)
             self.fields[f"{name}_value"] = forms.CharField(max_length=200, required=False, strip=False)
@@ -142,6 +158,7 @@ class SettingsForm(forms.Form):
         links = settings.get("links") or {}
         initial = {
             "segment": settings.get("segment"),
+            "more_segments": list(settings.get("more_segments") or []),
             "template": settings.get("template", ""),
             "value_maps": "\n".join(
                 f"{column}:{source}={target}"
@@ -267,10 +284,25 @@ class SettingsForm(forms.Form):
             # Kavenegar's lookup needs the first token in every request.
             self.add_error("token_source", _("Kavenegar needs the first token (token) in every SMS."))
         data["tokens"], data["token_columns"], data["link_token"] = tokens, columns, link
+        data["more_segments"] = self._more_segments(data, set(columns.values()))
         data["value_maps_parsed"] = self._value_maps(data.get("value_maps") or "", set(columns.values()))
         if link is not None:
             self._check_link(data)
         return data
+
+    def _more_segments(self, data: dict, needed: set[str]) -> list[str]:
+        """The segments after the first, in the order they're listed: never
+        the first one again, and each with every column the tokens use."""
+        first = data.get("segment")
+        chosen = [slug for slug in dict.fromkeys(data.get("more_segments") or []) if not first or slug != first.slug]
+        by_slug = {seg.slug: seg for seg in more_segment_choices().filter(slug__in=chosen)}
+        lacking = [by_slug[slug].name for slug in chosen if not needed <= set(by_slug[slug].token_columns or [])]
+        if lacking:
+            self.add_error("more_segments", _(
+                "These segments don't have every column the tokens use: %(names)s."
+            ) % {"names": "، ".join(lacking)})
+        order = list(by_slug)  # more_segment_choices' order
+        return sorted(chosen, key=order.index)
 
     def _value_maps(self, text: str, used: set[str]) -> dict[str, dict[str, str]]:
         maps: dict[str, dict[str, str]] = {}
@@ -321,6 +353,10 @@ class SettingsForm(forms.Form):
             "rate": d["rate"] or None,
             "workers": d["workers"],
         }
+        if d["more_segments"]:
+            settings["more_segments"] = d["more_segments"]
+        else:
+            settings.pop("more_segments", None)
         if d["link_token"]:
             settings["links"] = {
                 "destination": d["link_destination"], "token": d["link_token"],

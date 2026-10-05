@@ -59,7 +59,15 @@
     {% if user|can:"edit_campaigns" and not settings_locked %}<a class="button secondary small" href="{% url 'campaign_settings' campaign.slug %}">{% icon "settings" %}{% translate "Settings" %}</a>{% endif %}
   </div>
   <dl class="pairs stacked">
-    <dt>{% translate "Segment" %}</dt><dd>{% if segment %}<a href="{% url 'segment_detail' segment.slug %}"><bdi>{{ segment.name }}</bdi></a>{% else %}—{% endif %}</dd>
+    {% if more_segments %}
+      <dt>{% translate "Segments, in sending order" %}</dt>
+      <dd><ol class="plain" id="send-segments">
+        <li>{% if segment %}<a href="{% url 'segment_detail' segment.slug %}"><bdi>{{ segment.name }}</bdi></a>{% else %}—{% endif %}</li>
+        {% for slug, seg in more_segments %}<li>{% if seg %}<a href="{% url 'segment_detail' seg.slug %}"><bdi>{{ seg.name }}</bdi></a>{% else %}{{ slug|ltr }}{% endif %}</li>{% endfor %}
+      </ol></dd>
+    {% else %}
+      <dt>{% translate "Segment" %}</dt><dd>{% if segment %}<a href="{% url 'segment_detail' segment.slug %}"><bdi>{{ segment.name }}</bdi></a>{% else %}—{% endif %}</dd>
+    {% endif %}
     <dt>{% translate "Template" %}</dt><dd>{% if campaign.settings.template %}{{ campaign.settings.template|ltr }}{% else %}—{% endif %}</dd>
     {% for name, value, column in tokens %}
       {% if value or column or campaign.settings.links.token == name %}

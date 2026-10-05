@@ -1,16 +1,18 @@
-{% load i18n ui %}
+{% load i18n fa ui %}
 {% if other_segments or lacking_segments %}
 <section class="subsection another-segment" aria-labelledby="another-segment-heading">
-  <h3 id="another-segment-heading">{% icon "users" %}{% translate "Send this message to another segment" %}</h3>
-  <p class="hint">{% translate "The message stays the same, and a new test SMS comes first. Anyone this campaign already sent to is skipped." %}</p>
+  <h3 id="another-segment-heading">{% icon "users" %}{% translate "Send this message to other segments" %}</h3>
+  <p class="hint" id="another-segment-hint">{% translate "The message stays the same, and a new test SMS comes first. Choose one segment, or several for one send. Anyone this campaign already sent to is skipped." %}</p>
   {% if other_segments %}
-    <form method="post" action="{% url 'campaign_segment' campaign.slug %}" class="inline" id="segment-form">
+    <form method="post" action="{% url 'campaign_segment' campaign.slug %}" id="segment-form">
       {% csrf_token %}
-      <label for="id_next_segment" class="visually-hidden">{% translate "Segment" %}</label>
-      <select id="id_next_segment" name="segment" required data-cli="send --segment">
-        {% for segment in other_segments %}<option value="{{ segment.slug }}">{{ segment.name }} ({{ segment.slug }})</option>{% endfor %}
-      </select>
-      <button type="submit" class="secondary">{% translate "Use this segment" %}</button>
+      <div class="check-group" role="group" aria-labelledby="another-segment-heading" aria-describedby="another-segment-hint" data-cli="send --segment">
+        {% for segment in other_segments %}
+          <label class="check"><input type="checkbox" name="segment" value="{{ segment.slug }}">
+            <span><bdi>{{ segment.name }}</bdi> <span class="muted">({{ segment.slug }}) · {{ segment.summary.valid|default:0|fa_number }} {% translate "numbers" %}</span></span></label>
+        {% endfor %}
+      </div>
+      <div class="form-actions"><button type="submit" class="secondary">{% translate "Use these segments" %}</button></div>
     </form>
   {% endif %}
   {% if lacking_segments %}

@@ -15,7 +15,7 @@ from sms_sender.window import now_tehran, parse_window
 
 from ..jobs.engine import campaign_db
 from ..jobs.models import Campaign
-from ..segments.models import Segment
+from ..segments.models import campaign_slugs, ready_segments
 from ..suppression.service import phones_for
 from ..system.models import SystemSettings
 
@@ -34,6 +34,10 @@ class CheckResult:
     settled: int = 0       # in the campaign DB and not to be sent again
     to_send: int = 0
     window_open: bool = True
+    # Each segment the send reads, in order, with the valid numbers it adds
+    # (a number in two segments counts for the first).
+    segments: list[tuple[str, int]] = field(default_factory=list)
+    missing_segments: list[str] = field(default_factory=list)  # more segments not ready
 
     @property
     def invalid_total(self) -> int:
@@ -49,9 +53,14 @@ def check_campaign(campaign: Campaign, loaded=None) -> CheckResult:
     (preview.load_segment), so a page reads it once."""
     s = campaign.settings or {}
     result = CheckResult()
-    segment = Segment.objects.filter(slug=s.get("segment"), status=Segment.Status.READY).first()
-    if segment is None or not segment.path.exists():
+    slugs = campaign_slugs(s)
+    segments = ready_segments(slugs)
+    if not s.get("segment") or segments[0] is None:
         result.problems.append("segment_missing")
+        return result
+    result.missing_segments = [slug for slug, seg in zip(slugs[1:], segments[1:]) if seg is None]
+    if result.missing_segments:
+        result.problems.append("more_segment_missing")
         return result
     if not s.get("template"):
         result.problems.append("no_template")
@@ -61,10 +70,12 @@ def check_campaign(campaign: Campaign, loaded=None) -> CheckResult:
     )
     if loaded is None:
         try:
-            loaded = input_loader.load(segment.path, token_columns, segment.user_id_column or None)
+            loaded = input_loader.load_parts([seg.part() for seg in segments], token_columns)
         except InputError:
             result.problems.append("columns_missing")
             return result
+    added = Counter(loaded.segments.values())
+    result.segments = [(seg.name, added.get(seg.slug, 0)) for seg in segments]
     result.valid = len(loaded.valid)
     result.invalid = dict(Counter(row.key for row in loaded.invalid))
     result.duplicates = loaded.duplicates_collapsed

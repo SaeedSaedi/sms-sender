@@ -568,6 +568,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 
 input[type="checkbox"], input[type="radio"] { inline-size: 1.1rem; block-size: 1.1rem; margin: 0; accent-color: var(--primary); box-shadow: none; }
 label.check { display: flex; gap: var(--s-2); align-items: center; font-weight: 550; }
+/* A list of choices, one per line (e.g. a campaign's more segments). */
+.check-group { display: grid; gap: var(--s-2); margin-block: var(--s-3); }
+.check-group label.check { align-items: flex-start; font-weight: 450; }
+.check-group label.check input { margin-block-start: 0.2rem; }
 
 fieldset {
   min-inline-size: 0;
@@ -1074,6 +1078,7 @@ progress::-moz-progress-bar { background: var(--primary); border-radius: var(--r
 .empty-state h2 { margin: var(--s-2) 0 0; color: var(--text); }
 .empty-state p { max-inline-size: 34rem; margin: 0; }
 .empty-state .btn, .empty-state .button { margin-block-start: var(--s-3); }
+.empty-state .actions { justify-content: center; }
 
 /* ---------- two-step setup, keys and copy buttons ---------- */
 

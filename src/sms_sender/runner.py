@@ -20,12 +20,12 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Iterator, Protocol
+from typing import Callable, Iterator, Protocol, Sequence
 
 from tqdm import tqdm
 
 from . import input_loader
-from .input_loader import LoadResult, TokenColumns
+from .input_loader import InputPart, LoadResult, TokenColumns
 from .links import DEFAULT_WORKERS as DEFAULT_LINK_WORKERS
 from .links import LinkClient, LinkError, LinkSettings, LinkStage
 from .locking import RunLock
@@ -222,6 +222,7 @@ class Runner:
         clock: Callable[[], datetime] = now_tehran,
         user_id_column: str | None = None,
         segment: str | None = None,
+        more_inputs: Sequence[InputPart] = (),
         links: LinkSettings | None = None,
         link_client: LinkClient | None = None,
         link_workers: int = DEFAULT_LINK_WORKERS,
@@ -253,6 +254,11 @@ class Runner:
         # and the segment this input is (default: the file's name).
         self.user_id_column = user_id_column
         self.segment = segment or input_loader.segment_from_path(input_path)
+        # A send may read several lists, in order (the dashboard's segments):
+        # this one, then `more_inputs`. Each recipient keeps its own list's
+        # segment; one in two lists is sent once, from the first.
+        self.parts = [InputPart(self.input_path, self.segment, user_id_column), *more_inputs]
+        self._uses_user_ids = any(part.user_id_column is not None for part in self.parts)
         self._user_id_conflicts = 0
         # Phones that must never get this campaign (opt-out list).
         self.opt_out = opt_out or frozenset()
@@ -813,14 +819,14 @@ class Runner:
                 logger.warning("campaign_settings_changed", extra={"changed": ", ".join(changed)})
                 self._reporter.note(f"Campaign settings changed: {', '.join(changed)}.",
                                     "settings_changed", changed=changed)
-        loaded = input_loader.load(self.input_path, self.token_columns, self.user_id_column)
+        loaded = input_loader.load_parts(self.parts, self.token_columns)
         if self.token_columns is not None:
             self._row_tokens = {r.phone: r.tokens for r in loaded.valid}
         logger.info(
             "input_loaded",
             extra={
-                "path": str(self.input_path),
-                "segment": self.segment,
+                "path": ", ".join(str(part.path) for part in self.parts),
+                "segment": ", ".join(part.segment for part in self.parts),
                 "valid": len(loaded.valid),
                 "invalid": len(loaded.invalid),
                 "duplicates_collapsed": loaded.duplicates_collapsed,
@@ -834,12 +840,13 @@ class Runner:
             self.state.record_invalid_many(
                 [(inv.raw, inv.reason) for inv in loaded.invalid]
             )
-        new_count = self.state.upsert_pending(
-            [(r.phone, r.raw) for r in loaded.valid], segment=self.segment,
+        by_segment: dict[str, list[tuple[str, str]]] = {}
+        for r in loaded.valid:
+            by_segment.setdefault(loaded.segments.get(r.phone, self.segment), []).append((r.phone, r.raw))
+        new_count = sum(
+            self.state.upsert_pending(rows, segment=name) for name, rows in by_segment.items()
         )
-        conflicting = (
-            self._record_user_ids(loaded) if self.user_id_column is not None else set()
-        )
+        conflicting = self._record_user_ids(loaded) if self._uses_user_ids else set()
         orphans = self.state.mark_orphans_unknown()
         if orphans:
             logger.warning("orphans_marked_unknown", extra={"n": orphans})
@@ -875,7 +882,8 @@ class Runner:
                 logger.warning("skipped_not_in_input", extra={"n": not_in_input})
                 self._reporter.note(
                     f"Skipping {not_in_input} claimable row(s) that aren't in "
-                    f"{self.input_path.name} (no per-recipient tokens for them).",
+                    f"{', '.join(part.path.name for part in self.parts)} "
+                    "(no per-recipient tokens for them).",
                     "not_in_input", n=not_in_input,
                 )
                 phones = [p for p in phones if p in self._row_tokens]
@@ -893,10 +901,12 @@ class Runner:
 
     def _record_user_ids(self, loaded: LoadResult) -> set[str]:
         """Record user IDs and return the phones that came with two
-        different ones — within this file, or against an earlier import.
+        different ones — within the input, or against an earlier import.
         They can't be attributed to anyone, so they aren't sent (decided
         2026-10-04); `_exclude_conflicts` takes them out of the queue."""
-        self.state.set_meta("user_id_column", self.user_id_column or "")
+        self.state.set_meta("user_id_column", next(
+            (part.user_id_column for part in self.parts if part.user_id_column is not None), "",
+        ))
         earlier = self.state.assign_user_ids(
             {r.phone: r.user_id for r in loaded.valid if r.user_id}
         )
@@ -1189,6 +1199,7 @@ def make_runner(
     send_window: SendWindow | None = None,
     user_id_column: str | None = None,
     segment: str | None = None,
+    more_inputs: Sequence[InputPart] = (),
     links: LinkSettings | None = None,
     link_client: LinkClient | None = None,
     link_rate_per_sec: float = 10.0,
@@ -1220,6 +1231,7 @@ def make_runner(
         send_window=send_window,
         user_id_column=user_id_column,
         segment=segment,
+        more_inputs=more_inputs,
         links=links,
         link_client=link_client,
         link_rate_per_sec=link_rate_per_sec,

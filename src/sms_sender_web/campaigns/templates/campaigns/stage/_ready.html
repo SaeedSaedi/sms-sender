@@ -33,6 +33,13 @@
   {% if check_invalid %}
     <ul class="plain">{% for label, n in check_invalid %}<li>{{ label }}: {{ n|fa_number }}</li>{% endfor %}</ul>
   {% endif %}
+  {% if check.segments|length > 1 %}
+    <h3 id="check-segments-title">{% translate "Segments, in sending order" %}</h3>
+    <ol class="plain" id="check-segments" aria-labelledby="check-segments-title">
+      {% for name, n in check.segments %}<li><bdi>{{ name }}</bdi>: <span class="num">{{ n|fa_number }}</span> {% translate "numbers" %}</li>{% endfor %}
+    </ol>
+    <p class="hint">{% translate "A number in two segments counts once, for the first." %}</p>
+  {% endif %}
 {% endif %}
 {% if user|can:"edit_campaigns" %}
   <form method="post" action="{% url 'campaign_check' campaign.slug %}" class="form-actions" id="check-form">
