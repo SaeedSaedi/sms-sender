@@ -86,12 +86,14 @@ def test_the_whole_flow_runs_without_sending(operator_client, campaign):
     operator_client.post("/campaigns/try-1/test/")
     test = run(Job.Kind.TEST)
     assert test.state == Job.State.DONE, test.last_error
-    # One link per recipient, and one of its own for the test SMS.
-    assert test.result["cost_per_sms"] == 3020 and test.result["links_ready"] == len(ROWS) + 1
+    # Only the test SMS's own link: the recipients' are made when sending
+    # starts (plan 05, decision 4), so the test SMS doesn't wait for them.
+    assert test.result["cost_per_sms"] == 3020 and test.result["links_ready"] == 1
     operator_client.post("/campaigns/try-1/approve/", {"job": test.pk})
     operator_client.post("/campaigns/try-1/send/")
     send = run(Job.Kind.SEND)
     assert send.state == Job.State.DONE, send.last_error
+    assert send.result["links_ready"] == len(ROWS)  # one per recipient, before any SMS
     store = StateStore(campaign_db(campaign))
     assert store.counts() == {SENT: 2, FAILED_PERMANENT: 1, UNKNOWN: 1}
     assert store.total_cost() == 2 * 3020

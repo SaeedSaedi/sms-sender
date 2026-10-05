@@ -9,6 +9,7 @@ an operator too, has none yet."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import timedelta
 from pathlib import Path
 
 from django.contrib.auth import get_user_model
@@ -33,8 +34,6 @@ def open_window() -> str:
     """A sending window that's open now and for hours either way. A fixed
     00:00-23:59 is closed for the last minute of the day; this one never is
     while a test runs. Windows may cross midnight."""
-    from datetime import timedelta
-
     from sms_sender.window import now_tehran
 
     now = now_tehran()
@@ -75,6 +74,7 @@ PAGES: dict[str, tuple[str, str | None]] = {
     "campaign.fresh": ("/campaigns/fresh/", "operator"),
     "campaign.awaiting": ("/campaigns/awaiting/", "operator"),
     "campaign.approved": ("/campaigns/approved/", "operator"),
+    "campaign.scheduled": ("/campaigns/scheduled/", "operator"),
     "campaign.sending": ("/campaigns/sending/", "operator"),
     "campaign.paused": ("/campaigns/paused/", "operator"),
     "campaign.halted": ("/campaigns/halted/", "operator"),
@@ -136,7 +136,7 @@ def _test_job(campaign: Campaign, operator, *, approved: bool) -> Job:
         campaign=campaign, kind=Job.Kind.TEST, state=Job.State.DONE, requested_by=operator,
         params={"test_number": TEST_PHONE}, settings_hash=services.settings_hash(campaign),
         result={"cost_per_sms": 3020, "estimate": 3020 * len(PHONES), "credit": 264_731_842,
-                "links_ready": len(PHONES) + 1, "cost": 3020},
+                "links_ready": 1, "cost": 3020},  # the test SMS's own link only
         started_at=now, finished_at=now,
         decision=Job.Decision.APPROVED if approved else "", decided_by=operator if approved else None,
         decided_at=now if approved else None,
@@ -197,6 +197,15 @@ def build_world(data_dir: Path) -> World:
             settings_hash=services.settings_hash(campaign), result=result, progress=progress,
             control=control, started_at=now, finished_at=now if state == Job.State.FAILED else None,
         )
+
+    # A send set for tomorrow, to one recipient first.
+    scheduled = campaigns["scheduled"] = _campaign("scheduled", "ارسال فردا", vip, db_rows=rows)
+    _test_job(scheduled, operator, approved=True)
+    Job.objects.create(
+        campaign=scheduled, kind=Job.Kind.SEND, state=Job.State.QUEUED, requested_by=operator,
+        settings_hash=services.settings_hash(scheduled), params={"cost_per_sms": 3020, "smoke_test": True},
+        not_before=now + timedelta(days=1),
+    )
 
     # A finished send with something left to do: an unknown outcome, one
     # not sent, one rejected (Kavenegar 411), and the engine's notes.

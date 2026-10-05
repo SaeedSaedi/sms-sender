@@ -2,11 +2,29 @@
 <h2>{% icon "send" %}{% translate "Send" %}</h2>
 {% include "campaigns/stage/_test_figures.html" %}
 <div class="callout callout-success">{% icon "circle-check" %}<p>{% translate "Approved" %}{% if test.decided_by %} · {{ test.decided_by.username|ltr }}{% endif %} · {{ test.decided_at|jalali }}</p></div>
+{% if links_note %}<div class="callout">{% icon "link" %}<p>{{ links_note }}</p></div>{% endif %}
 {% if user|can:"run_campaigns" %}
-  <form method="post" action="{% url 'campaign_action' campaign.slug 'send' %}" class="form-actions" id="send-form"
-        data-confirm="{{ send_confirm }}">
+  <form method="post" action="{% url 'campaign_action' campaign.slug 'send' %}" id="send-form" data-confirm="{{ send_confirm }}">
     {% csrf_token %}
-    <button type="submit" data-cli="send">{% icon "send" %}{% translate "Start sending" %}</button>
+    <label class="check"><input type="checkbox" name="smoke_test"{% if schedule_smoke %} checked{% endif %} data-cli="send --smoke-test">
+      {% translate "Send to one recipient first, and stop if that SMS doesn't go out" %}</label>
+    <div class="form-actions">
+      <button type="submit" name="when" value="now" data-cli="send">{% icon "send" %}{% translate "Start sending" %}</button>
+    </div>
+    <details class="subsection schedule"{% if schedule_error %} open{% endif %}>
+      <summary>{% icon "calendar-clock" %}{% translate "Or schedule it for later" %}</summary>
+      {% if schedule_error %}
+        <div class="field-errors" id="id_schedule_error" role="alert" tabindex="-1" data-autofocus><p class="error">{{ schedule_error }}</p></div>
+      {% endif %}
+      <div class="field-grid">
+        <div><label for="id_date">{% translate "Date (Solar Hijri)" %}</label>
+          <input id="id_date" name="date" type="text" dir="ltr" inputmode="numeric" maxlength="10" placeholder="{{ today_jalali }}" value="{{ schedule_date }}"{% if schedule_error %} aria-describedby="id_schedule_error"{% endif %}{% if schedule_bad_date %} aria-invalid="true"{% endif %}></div>
+        <div><label for="id_time">{% translate "Time (Tehran)" %}</label>
+          <input id="id_time" name="time" type="text" dir="ltr" inputmode="numeric" maxlength="5" placeholder="09:00" value="{{ schedule_time }}"{% if schedule_error %} aria-describedby="id_schedule_error"{% endif %}{% if schedule_bad_time %} aria-invalid="true"{% endif %}></div>
+      </div>
+      <p class="hint">{% translate "Outside the sending window, it starts when the window opens." %}</p>
+      <button type="submit" name="when" value="later" class="secondary">{% icon "calendar-clock" %}{% translate "Schedule" %}</button>
+    </details>
   </form>
 {% else %}
   <p class="muted">{% translate "Sending needs an approved test SMS for the current settings." %}</p>

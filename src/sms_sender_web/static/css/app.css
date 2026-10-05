@@ -419,8 +419,9 @@ button.link:hover { background: none; color: var(--primary-hover); text-decorati
 .icon-button .icon { inline-size: 1.35rem; block-size: 1.35rem; }
 
 button[disabled], .btn[aria-disabled="true"] { opacity: .6; cursor: not-allowed; }
-.is-busy { cursor: progress; }
-.is-busy::before {
+/* A plain form marks its button (app.js); an HTMX one has htmx-request while it waits. */
+.is-busy, form.htmx-request button[type="submit"] { cursor: progress; }
+.is-busy::before, form.htmx-request button[type="submit"]::before {
   content: "";
   inline-size: 1em;
   block-size: 1em;
@@ -651,7 +652,10 @@ tbody th { font-weight: 650; }
 
 .pager { display: flex; gap: var(--s-5); align-items: center; justify-content: center; margin-block: var(--s-4); }
 
-form.search { margin-block-end: var(--s-4); }
+/* A full-width row: in a shrink-to-fit inline-flex form, the input's 100%
+   resolved against the form itself, took all of it, and pushed the button
+   onto a line of its own. */
+form.search { display: flex; margin-block-end: var(--s-4); }
 form.search input { inline-size: min(18rem, 100%); }
 
 /* ---------- live progress ---------- */
@@ -890,6 +894,17 @@ details.advanced { margin-block-end: var(--s-5); }
 
 table.value-maps td { padding: var(--s-2); }
 table.value-maps select, table.value-maps input { min-inline-size: 7rem; }
+
+/* ---------- check, preview and send (plan 05, P2) ---------- */
+
+.recipients-preview { margin-block-start: var(--s-6); }
+.recipients-preview .sms-bubble { max-inline-size: 40rem; }
+.row-text { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
+.long-url { overflow-wrap: anywhere; }
+.token-values { display: grid; gap: var(--s-1); margin: 0; padding: 0; list-style: none; }
+.token-values .sample { max-inline-size: 100%; overflow-wrap: anywhere; }
+#send-form label.check { margin-block: 0 var(--s-3); }
+details.schedule .field-grid { max-inline-size: 24rem; }
 
 .sticky-actions {
   position: sticky;

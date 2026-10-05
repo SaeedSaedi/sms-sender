@@ -85,8 +85,9 @@ def lifecycle(campaign, jobs: list[Job] | None = None) -> Lifecycle:
             .order_by("-created_at", "-id")
         )
     test = next((j for j in jobs if j.kind == Job.Kind.TEST), None)
+    # A withdrawn send (unscheduled, or refused before it began) sent nothing.
     send = next(
-        (j for j in jobs if j.kind == Job.Kind.SEND and not (j.result or {}).get("unscheduled")), None,
+        (j for j in jobs if j.kind == Job.Kind.SEND and not (j.result or {}).get("withdrawn")), None,
     )
     test_failed = bool(test and test.state == Job.State.FAILED)
 

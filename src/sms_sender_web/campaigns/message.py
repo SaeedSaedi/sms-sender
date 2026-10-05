@@ -10,10 +10,15 @@ Length, as the networks count it:
   takes more than one (^ { } \\ [ ] ~ | € count twice);
 - anything else, Persian included (UCS-2): 70, or 67 per part. Characters
   outside the basic plane (most emoji) count twice.
+
+Direction: phones set a message's direction from its first letter (Android
+and iOS both take the first "strong" character), so Persian text whose
+first word is Latin shows left to right, its punctuation out of place.
 """
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import NamedTuple
 
 from sms_sender.sender import TOKEN_MAX_SPACES
@@ -68,3 +73,15 @@ def check(text: str, filled: set[str]) -> Check:
         missing=tuple(t for t in used if t not in filled),
         unused=tuple(t for t in TOKENS if t in filled and t not in used),
     )
+
+
+def shows_left_to_right(text: str) -> bool:
+    """Right-to-left text (Persian) that phones will show left to right,
+    because its first letter is Latin."""
+    for c in text:
+        kind = unicodedata.bidirectional(c)
+        if kind in ("R", "AL"):
+            return False
+        if kind == "L":
+            return any(unicodedata.bidirectional(d) in ("R", "AL") for d in text)
+    return False

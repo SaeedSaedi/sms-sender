@@ -74,6 +74,8 @@ class Job(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
+    # A scheduled send: the worker leaves it queued until then (plan 05, P2).
+    not_before = models.DateTimeField(null=True, blank=True)
     # Which worker holds the job, and until when: past this, it's taken as dead.
     lease_owner = models.CharField(max_length=64, blank=True)
     lease_until = models.DateTimeField(null=True, blank=True)

@@ -50,9 +50,6 @@ msgstr "گیرندگان"
 msgid "Statuses"
 msgstr "وضعیت‌ها"
 
-msgid "Short links"
-msgstr "لینک‌های کوتاه"
-
 msgid "Last run"
 msgstr "آخرین اجرا"
 
@@ -795,9 +792,6 @@ msgstr "بازگشت به کمپین"
 msgid "Before a campaign sends, its test SMS goes to this number, and only to it, so you can see the final text."
 msgstr "پیش از ارسال هر کمپین، پیامک آزمایشی آن فقط به این شماره ارسال می‌شود تا متن نهایی را ببینید."
 
-msgid "Before sending, one SMS goes to your own number, so you can see the final text. The short links are made first."
-msgstr "پیش از ارسال اصلی، یک پیامک به شماره خود شما ارسال می‌شود تا متن نهایی را ببینید. لینک‌های کوتاه پیش از آن ساخته می‌شوند."
-
 msgid "Campaign created"
 msgstr "ساخت کمپین"
 
@@ -818,9 +812,6 @@ msgstr "در حال لغو…"
 
 msgid "Changing the message, its tokens, the link or the segment needs a new test SMS before sending."
 msgstr "با تغییر قالب، متغیرها، لینک یا گروه مخاطبان، پیش از ارسال یک پیامک آزمایشی تازه لازم است."
-
-msgid "Check now"
-msgstr "اجرای اعتبارسنجی"
 
 msgid "checks, short links and the test SMS…"
 msgstr "بررسی‌ها، ساخت لینک‌های کوتاه و پیامک آزمایشی…"
@@ -1022,9 +1013,6 @@ msgstr "لینک کوتاه"
 
 msgid "Start sending"
 msgstr "آغاز ارسال"
-
-msgid "Start sending this campaign now?"
-msgstr "ارسال این کمپین همین حالا آغاز شود؟"
 
 msgid "State"
 msgstr "وضعیت"
@@ -1416,10 +1404,6 @@ msgstr "کاوه‌نگار خطای {code} برگرداند: {meaning} ارسا
 
 msgid "Links in the SMS text are blocked for this account."
 msgstr "ارسال لینک در متن پیامک برای این حساب مسدود است."
-
-#, python-format
-msgid "Start sending to %(n)s recipients now?"
-msgstr "ارسال به %(n)s گیرنده همین حالا آغاز شود؟"
 
 msgid "The account's credit isn't enough."
 msgstr "اعتبار حساب کافی نیست."
@@ -1873,3 +1857,128 @@ msgstr "{token} مقدار دارد، اما متن قالب از آن استف�
 
 msgid "Copy it from the Kavenegar panel, tokens included: the buttons above add one where the cursor is."
 msgstr "آن را همراه با متغیرهایش از پنل کاوه‌نگار رونوشت کنید: دکمه‌های بالا هر متغیر را همان‌جا که مکان‌نما است می‌افزایند."
+
+#, python-format
+msgid "%(n)s recipients will get this SMS. An SMS Kavenegar has accepted can't be recalled."
+msgstr "%(n)s گیرنده این پیامک را دریافت می‌کنند. پیامکی که کاوه‌نگار بپذیرد قابل بازگشت نیست."
+
+msgid "Everyone still waiting will get this SMS. An SMS Kavenegar has accepted can't be recalled."
+msgstr "همه گیرندگانی که در انتظارند این پیامک را دریافت می‌کنند. پیامکی که کاوه‌نگار بپذیرد قابل بازگشت نیست."
+
+msgid "Cancel the schedule"
+msgstr "لغو زمان‌بندی"
+
+msgid "Cancelling the schedule cancels no one: the campaign stays ready to send."
+msgstr "با لغو زمان‌بندی، ارسال به هیچ گیرنده‌ای لغو نمی‌شود و کمپین آماده ارسال می‌ماند."
+
+msgid "Date (Solar Hijri)"
+msgstr "تاریخ (شمسی)"
+
+msgid "Or schedule it for later"
+msgstr "یا زمان‌بندی برای بعد"
+
+msgid "Outside the sending window, it starts when the window opens."
+msgstr "اگر این زمان خارج از بازه مجاز ارسال باشد، ارسال از ابتدای بازه انجام می‌شود."
+
+msgid "Schedule"
+msgstr "زمان‌بندی"
+
+msgid "Schedule cancelled"
+msgstr "لغو زمان‌بندی ارسال"
+
+msgid "Send to one recipient first, and stop if that SMS doesn't go out"
+msgstr "نخست به یک گیرنده ارسال شود و اگر آن پیامک ارسال نشد، ارسال متوقف شود"
+
+#, python-format
+msgid "Sending is scheduled for %(when)s."
+msgstr "ارسال برای %(when)s زمان‌بندی شد."
+
+msgid "Sending scheduled"
+msgstr "زمان‌بندی ارسال"
+
+msgid "Scheduled for"
+msgstr "زمان آغاز ارسال"
+
+msgid "Sending starts now. Progress appears here."
+msgstr "ارسال همین حالا آغاز می‌شود. پیشرفت آن در همین صفحه نمایش داده می‌شود."
+
+msgid "Show"
+msgstr "نمایش"
+
+msgid "Start now"
+msgstr "آغاز فوری"
+
+msgid "Tags"
+msgstr "برچسب‌ها"
+
+msgid "That time has passed. Choose a later one."
+msgstr "این زمان گذشته است. زمان دیرتری را انتخاب کنید."
+
+msgid "The schedule is cancelled. The campaign is ready to send, now or at another time."
+msgstr "زمان‌بندی لغو شد. کمپین آماده ارسال است، همین حالا یا در زمانی دیگر."
+
+msgid "This number isn't in this campaign's segment."
+msgstr "این شماره در گروه مخاطبان این کمپین نیست."
+
+msgid "This send isn't waiting for a set time any more."
+msgstr "این ارسال دیگر در انتظار زمان تعیین‌شده نیست."
+
+msgid "Time (Tehran)"
+msgstr "ساعت (به وقت تهران)"
+
+msgid "Title"
+msgstr "عنوان"
+
+msgid "Valid recipients"
+msgstr "گیرندگان معتبر"
+
+msgid "What the short-link service is asked for"
+msgstr "درخواست ساخت لینک کوتاه"
+
+msgid "When sending starts, the recipients' short links are made first, before any SMS: up to about {minutes} minutes for {n} links."
+msgstr "با آغاز ارسال، پیش از هر پیامک نخست لینک‌های کوتاه گیرندگان ساخته می‌شود؛ ساخت {n} لینک تا حدود {minutes} دقیقه طول می‌کشد."
+
+msgid "Write the date as year/month/day in the Solar Hijri calendar, e.g. 1405/07/20."
+msgstr "تاریخ را به شکل سال/ماه/روز شمسی بنویسید، مثلاً ۱۴۰۵/۰۷/۲۰."
+
+msgid "Write the time as hours:minutes, e.g. 09:30."
+msgstr "ساعت را به شکل ساعت:دقیقه بنویسید، مثلاً ۰۹:۳۰."
+
+msgid "r is random, and different for every recipient: nothing in the address tells who they are."
+msgstr "مقدار r تصادفی است و برای هر گیرنده فرق می‌کند؛ از نشانی نمی‌توان فهمید گیرنده کیست."
+
+msgid "recipients"
+msgstr "گیرنده"
+
+msgid "to one recipient first"
+msgstr "نخست به یک گیرنده"
+
+msgid "before its scheduled time"
+msgstr "پیش از زمان تعیین‌شده"
+
+msgid "That looks like a Gregorian date. Write it in the Solar Hijri calendar, e.g. 1405/07/20."
+msgstr "این تاریخ میلادی به نظر می‌رسد. آن را به تاریخ شمسی بنویسید، مثلاً ۱۴۰۵/۰۷/۲۰."
+
+msgid "That's more than 30 days away. Choose a nearer time."
+msgstr "این زمان بیش از ۳۰ روز دیگر است. زمان نزدیک‌تری را انتخاب کنید."
+
+msgid "The settings changed after the test SMS was approved, so nothing was sent. Send a new test SMS."
+msgstr "تنظیمات پس از تأیید پیامک آزمایشی تغییر کرده است، پس هیچ پیامکی ارسال نشد. یک پیامک آزمایشی تازه بفرستید."
+
+msgid "A send is scheduled for this campaign. To change its settings, cancel the schedule first."
+msgstr "ارسال این کمپین زمان‌بندی شده است. برای تغییر تنظیمات، نخست زمان‌بندی را لغو کنید."
+
+msgid "Before sending, one SMS goes to your own number, so you can see the final text."
+msgstr "پیش از ارسال اصلی، یک پیامک به شماره خود شما ارسال می‌شود تا متن نهایی را ببینید."
+
+msgid "It carries a short link of its own; the recipients' links are made when sending starts."
+msgstr "این پیامک لینک کوتاه مخصوص خودش را دارد؛ لینک‌های گیرندگان با آغاز ارسال ساخته می‌شوند."
+
+msgid "Starts at {when}."
+msgstr "زمان آغاز: {when}"
+
+msgid "Taken back before it started: nothing was sent, and no one was cancelled."
+msgstr "پیش از آغاز پس گرفته شد: نه پیامکی ارسال شد و نه گیرنده‌ای لغو شد."
+
+msgid "The message starts with a Latin word, so phones show it left to right, with its punctuation out of place. A Persian value (a translation) or a Persian word first keeps it right to left."
+msgstr "پیام با یک واژه لاتین شروع می‌شود، پس گوشی‌ها آن را از چپ به راست و با نشانه‌گذاری نابه‌جا نشان می‌دهند. اگر مقدار آغازین فارسی باشد (با یک ترجمه) یا پیام با واژه‌ای فارسی شروع شود، راست به چپ می‌ماند."

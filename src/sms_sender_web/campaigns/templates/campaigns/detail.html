@@ -13,7 +13,7 @@
     <p class="page-meta">{{ campaign.slug|copyable }} · {% translate "Segment" %}: {% if segment %}<a href="{% url 'segment_detail' segment.slug %}"><bdi>{{ segment.name }}</bdi></a>{% else %}—{% endif %} · {% translate "Template" %}: {% if campaign.settings.template %}{{ campaign.settings.template|copyable }}{% else %}—{% endif %}</p>
   </div>
   <div class="page-actions">
-    {% if user|can:"edit_campaigns" and not send_started %}<a class="button secondary" href="{% url 'campaign_settings' campaign.slug %}">{% icon "settings" %}{% translate "Settings" %}</a>{% endif %}
+    {% if user|can:"edit_campaigns" and not settings_locked %}<a class="button secondary" href="{% url 'campaign_settings' campaign.slug %}">{% icon "settings" %}{% translate "Settings" %}</a>{% endif %}
     {% if summary %}<a class="button secondary" href="{% url 'report' campaign.slug %}">{% icon "chart-column" %}{% translate "Report" %}</a>{% endif %}
   </div>
 </header>

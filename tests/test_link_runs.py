@@ -106,6 +106,34 @@ def test_the_approval_test_sms_carries_its_own_link(tmp_path):
     assert sent[0] != sent[1]
 
 
+def test_a_test_only_run_makes_just_the_test_link(tmp_path):
+    """The dashboard's test step doesn't wait for every recipient's link
+    (plan 05, decision 4). Those are made when sending starts, still before
+    the first SMS."""
+    inp = write(tmp_path, f"{A}\n{B}\n{C}\n")
+    state, shlink = StateStore(tmp_path / "s.db"), FakeShlink()
+    test = runner(tmp_path, inp, state=state, shlink=shlink, approval_test_number=A, test_only=True).run()
+    assert (test.links_ready, test.links_created) == (1, 1)
+    assert set(state.get_links([A, B, C, f"test:{A}"])) == {f"test:{A}"}
+
+    events: list[str] = []
+
+    class Shlink(FakeShlink):
+        def create(self, **kw):
+            events.append("link")
+            return super().create(**kw)
+
+    class Sender(FakeSender):
+        def send(self, phone, tokens=None):
+            events.append("sms")
+            return super().send(phone, tokens)
+
+    send = runner(tmp_path, inp, state=state, shlink=Shlink(), sender=Sender()).run()
+    assert events == ["link"] * 3 + ["sms"] * 3
+    assert (send.links_ready, send.sent) == (3, 3)
+    assert set(state.get_links([A, B, C])) == {A, B, C}
+
+
 def test_a_resumed_run_reuses_its_links(tmp_path):
     inp = write(tmp_path, f"{A}\n{B}\n{C}\n")
     state, shlink = StateStore(tmp_path / "s.db"), FakeShlink()

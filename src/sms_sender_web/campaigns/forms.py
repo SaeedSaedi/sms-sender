@@ -4,8 +4,12 @@ exactly what `sms-sender send` would."""
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta
+from datetime import time as dtime
 
+import jdatetime
 from django import forms
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from sms_sender.input_loader import SLUG_RE
@@ -13,7 +17,7 @@ from sms_sender.links import STRATEGIES, allowed_domains, destination_issue, for
 from sms_sender.rate import parse_rate
 from sms_sender.sender import TOKEN_MAX_SPACES, token_issue
 from sms_sender.shortlink import shlink_base_url
-from sms_sender.window import DEFAULT_WINDOW, parse_window
+from sms_sender.window import DEFAULT_WINDOW, TEHRAN, parse_window
 
 from ..jobs.engine import campaign_db
 from ..jobs.models import Campaign
@@ -334,3 +338,47 @@ def combined(data):
             if column.strip() or source.strip() or target.strip()
         )
     return data
+
+
+# A send can be set this far ahead at most: further is almost surely a typo.
+# "too_far" below says the number.
+SCHEDULE_MAX_DAYS = 30
+
+SCHEDULE_ERRORS = {
+    "bad_date": _("Write the date as year/month/day in the Solar Hijri calendar, e.g. 1405/07/20."),
+    "gregorian": _("That looks like a Gregorian date. Write it in the Solar Hijri calendar, e.g. 1405/07/20."),
+    "bad_time": _("Write the time as hours:minutes, e.g. 09:30."),
+    "past": _("That time has passed. Choose a later one."),
+    "too_far": _("That's more than 30 days away. Choose a nearer time."),
+}
+
+
+def parse_when(date_text: str, time_text: str, now: datetime | None = None):
+    """(an aware datetime, None) for a Solar Hijri date and a time in Tehran
+    time, or (None, error key). Persian or Latin digits; "/", "-" or "."
+    between the date's parts."""
+    parts = re.split(r"[/\-.]", (date_text or "").strip().translate(_ASCII_DIGITS))
+    try:
+        year, month, day = (int(p) for p in parts)
+    except ValueError:
+        return None, "bad_date"
+    if year >= 1900:  # this century's Solar Hijri years are 13xx and 14xx
+        return None, "gregorian"
+    try:
+        day_g = jdatetime.date(year, month, day).togregorian()
+    except ValueError:
+        return None, "bad_date"
+    match = re.fullmatch(r"(\d{1,2}):(\d{2})", (time_text or "").strip().translate(_ASCII_DIGITS))
+    try:
+        at_time = dtime(int(match.group(1)), int(match.group(2))) if match else None
+    except ValueError:
+        at_time = None
+    if at_time is None:
+        return None, "bad_time"
+    at = datetime.combine(day_g, at_time, tzinfo=TEHRAN)
+    now = now or timezone.now()
+    if at <= now + timedelta(minutes=1):
+        return None, "past"
+    if at > now + timedelta(days=SCHEDULE_MAX_DAYS):
+        return None, "too_far"
+    return at, None

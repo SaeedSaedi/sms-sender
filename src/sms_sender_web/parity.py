@@ -72,8 +72,8 @@ PARITY: dict[str, tuple[Part, ...]] = {
     "clicks": (Control("campaign.approved"),),
     "export-attribution": (Control("report"),),
     "export-clickers": (Control("report"),),
-    "dry-run": (Control("campaign.fresh"), Planned("P2", "each row's final tokens and the link preview")),
-    "preview": (Planned("P2", "per-recipient preview"),),
+    "dry-run": (Control("campaign.fresh", note="the check, each row's tokens and the link's request"),),
+    "preview": (Control("campaign.fresh", note="each recipient's message"),),
     "wizard": (Excluded("The dashboard is the guided flow."),),
 
     # ---------- send (and its aliases) ----------
@@ -102,7 +102,7 @@ PARITY: dict[str, tuple[Part, ...]] = {
     "send --log-file": (_LOGS,),
     "send --verbose": (_LOGS,),
     "send --quiet": (_LOGS,),
-    "send --smoke-test": (Planned("P2", "send to one recipient first, stop if it fails"),),
+    "send --smoke-test": (Control("campaign.approved"),),
     "send --approval-test": (Control("campaign.fresh", note="always required"),),
     "send --test-number": (Control("account"),),
     "send --no-preflight": (
@@ -126,8 +126,8 @@ PARITY: dict[str, tuple[Part, ...]] = {
     "reconcile --min-age": (Planned("P3", "reconcile options"),),
     "reconcile --requeue-not-found": (Planned("P3", "reconcile options"),),
     "reset --status": (Planned("P3", "requeue by status"),),
-    "preview --phone": (Planned("P2", "per-recipient preview"),),
-    "preview --limit": (Planned("P2", "preview of the first rows"),),
+    "preview --phone": (Control("campaign.fresh"),),
+    "preview --limit": (Control("campaign.fresh"),),
     "preview --check-account": (Control("status", VIEWER),),
     "preview --send": (
         Control("campaign.fresh", note="the test SMS"),

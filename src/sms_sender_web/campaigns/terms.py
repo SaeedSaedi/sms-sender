@@ -23,6 +23,7 @@ STOP_REASONS = {
     "provider_unreachable": _("Kavenegar didn't answer. Try again in a moment."),
     "busy": _("Another process is sending this campaign right now."),
     "settings_mismatch": _("This campaign's settings don't match what it sent before."),
+    "not_approved": _("The settings changed after the test SMS was approved, so nothing was sent. Send a new test SMS."),
     "input_unreadable": _("The segment's file couldn't be read."),
     "crashed": _("The run stopped on an unexpected error. The details are in the system log."),
     "given_up": _("The worker stopped during this job {attempts} times, so it was given up."),
@@ -61,6 +62,7 @@ CONFLICTS = {
     "not_approved": _("Send a test SMS and approve it first."),
     "settings_changed": _("The settings changed after the test SMS. Send a new test SMS and approve it."),
     "not_decidable": _("This test SMS can't be approved or rejected now."),
+    "not_scheduled": _("This send isn't waiting for a set time any more."),
 }
 
 TOKEN_ISSUES = {
@@ -235,3 +237,12 @@ FOLLOWUPS = {
 LENGTH = _("{chars} characters · {parts} SMS")
 PREVIEW_MISSING = _("The text uses {token}, but nothing fills it: Kavenegar would refuse the SMS.")
 PREVIEW_UNUSED = _("{token} is filled, but the template's text doesn't use it.")
+PREVIEW_LTR = _("The message starts with a Latin word, so phones show it left to right, with its punctuation out of place. A Persian value (a translation) or a Persian word first keeps it right to left.")
+
+# Before sending: the recipients' links are made first (plan 05 decision 4).
+LINKS_AT_SEND = _("When sending starts, the recipients' short links are made first, before any SMS: up to about {minutes} minutes for {n} links.")
+
+# The history's result line for a send that waits for its time, or was
+# withdrawn before it began.
+SCHEDULED_FOR = _("Starts at {when}.")
+WITHDRAWN = _("Taken back before it started: nothing was sent, and no one was cancelled.")
