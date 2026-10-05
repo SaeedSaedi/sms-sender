@@ -48,6 +48,9 @@ ACTION_LABELS = {
     "recipients_requeued": _("Recipients queued again"),
     "audience_created": _("Segment made from a report"),
     "conversions_imported": _("Conversions imported"),
+    "api_token_created": _("API token issued"),
+    "api_token_revoked": _("API token revoked"),
+    "api_called": _("Attribution API called"),
     "job_requested": _("Update requested"),
     "job_paused": _("Paused"),
     "job_resumed": _("Resumed"),
@@ -90,6 +93,10 @@ def describe(event) -> str:
         return _who(d.get("segment", ""))
     if event.action in ("template_saved", "template_deleted"):
         return _who(d.get("name", ""))
+    if event.action in ("api_token_created", "api_token_revoked"):
+        return format_html("{} · {}", d.get("name", ""), _who(f"{d.get('prefix', '')}…"))
+    if event.action == "api_called":
+        return format_html("{} · {}", _who(d.get("path", "")), fa_number(d.get("rows", 0)))
     if event.action == "conversions_imported":
         return format_html(gettext_now("{file}: {count} matched"), file=_who(d.get("file", "")),
                            count=fa_number(d.get("by_ref", 0) + d.get("by_user_id", 0)))

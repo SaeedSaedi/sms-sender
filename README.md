@@ -496,6 +496,9 @@ internal, multi-user tool built with Django and HTMX. So far it has:
   columns;
 - conversions imported by CSV from your own records, matched by the
   link's `r` or the user ID, without phone numbers;
+- an attribution API for the company's backend (`/api/v1/…`, read only,
+  no phone numbers), with tokens an admin issues on «توکن‌های API»; every
+  call is recorded;
 - a status page («وضعیت سرویس‌ها»): Kavenegar credit and account settings,
   the short-link service, and whether the worker is running.
 

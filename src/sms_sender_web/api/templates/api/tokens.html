@@ -1,0 +1,63 @@
+{% extends "base.html" %}{% load i18n fa ui %}
+{% block title %}{% translate "API tokens" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{% translate "API tokens" %}</h1>
+    <p class="page-meta">{% translate "For the company's own systems to read attribution: which recipient each link's r belongs to, by user ID, with delivery and clicks. Never a phone number. Every call is recorded in the activity log." %}</p>
+  </div>
+</header>
+{% if shown %}
+  <div class="callout callout-warning" role="alert" tabindex="-1" data-autofocus>{% icon "triangle-alert" %}
+    <div>
+      <p>{% translate "Copy the token now: it's shown only this once. Only a fingerprint of it is kept." %}</p>
+      <p>{{ shown|copyable }}</p>
+    </div>
+  </div>
+{% endif %}
+<div class="split">
+<section class="card split-main">
+  {% if tokens %}
+  <div class="table-wrap" tabindex="0" role="region" aria-label="{% translate "API tokens" %}">
+    <table class="table-stack">
+      <thead><tr>
+        <th scope="col">{% translate "Name" %}</th><th scope="col">{% translate "Token" %}</th>
+        <th scope="col">{% translate "Issued" %}</th><th scope="col">{% translate "Last used" %}</th><th scope="col"></th>
+      </tr></thead>
+      <tbody>
+      {% for t in tokens %}
+        <tr>
+          <th scope="row"><bdi>{{ t.name }}</bdi></th>
+          <td data-label="{% translate "Token" %}"><code dir="ltr">{{ t.prefix }}…</code></td>
+          <td data-label="{% translate "Issued" %}">{{ t.created_at|jalali }}{% if t.created_by %} · {{ t.created_by.get_username|ltr }}{% endif %}</td>
+          <td data-label="{% translate "Last used" %}">{% if t.last_used_at %}{{ t.last_used_at|jalali }}{% else %}—{% endif %}</td>
+          <td data-label="">
+            {% if t.revoked_at %}<span class="muted">{% translate "Revoked" %} · {{ t.revoked_at|jalali }}</span>
+            {% else %}
+              <form method="post" action="{% url 'api_token_revoke' t.pk %}" class="inline"
+                    data-confirm="{% translate "Revoke this token? Systems using it can't read attribution any more." %}">
+                {% csrf_token %}<button type="submit" class="small danger">{% translate "Revoke" %}</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">{% icon "lock" %}<h2>{% translate "No tokens yet" %}</h2><p>{% translate "Issue one for each system that reads attribution." %}</p></div>
+  {% endif %}
+</section>
+<aside class="card">
+  <h2>{% translate "Issue a token" %}</h2>
+  <form method="post">
+    {% csrf_token %}
+    <label for="id_name">{% translate "Which system uses it" %}</label>
+    <input id="id_name" name="name" type="text" maxlength="100" required>
+    <div class="form-actions"><button type="submit">{% icon "plus" %}{% translate "Issue" %}</button></div>
+  </form>
+  <p class="hint">{% translate "Send it as “Authorization: Bearer <token>” to /api/v1/campaigns/ and /api/v1/campaigns/<short name>/attribution/." %}</p>
+</aside>
+</div>
+{% endblock %}
