@@ -81,6 +81,7 @@ PAGES: dict[str, tuple[str, str | None]] = {
     "campaign.halted": ("/campaigns/halted/", "operator"),
     "campaign.halted.admin": ("/campaigns/halted/", "admin"),  # changing a sent message
     "campaign.completed": ("/campaigns/completed/", "operator"),
+    "campaign.completed.admin": ("/campaigns/completed/", "admin"),  # every status it may queue again
     "campaign.draft": ("/campaigns/draft-1/", "operator"),
     "report": ("/reports/completed/", "viewer"),
     "templates": ("/templates/", "viewer"),

@@ -61,14 +61,14 @@ _ADVANCED = Control("campaign.settings", ADMIN, note="advanced settings")
 PARITY: dict[str, tuple[Part, ...]] = {
     # ---------- commands ----------
     "send": (Control("campaign.approved"),),
-    "retry-failed": (Planned("P3", "retry not sent (N), requeue rejected (N)"),),
+    "retry-failed": (Control("campaign.completed", note="not sent: send to them again; rejected: queue again"),),
     "status": (Control("report", VIEWER),),
     "export-failed": (Control("report", note="rejected and invalid rows; any status through the filters"),),
-    "reset": (Planned("P3", "requeue by status"),),
+    "reset": (Control("campaign.completed", note="queue again, by status, each with its role"),),
     "purge": (Planned("P5", "delete a campaign's records, with a backup first"),),
     "reconcile": (Control("campaign.approved"),),
     "delivery": (Control("campaign.approved"),),
-    "check-sends": (Planned("P3", "did anyone get it twice?"),),
+    "check-sends": (Control("report", VIEWER),),
     "clicks": (Control("campaign.approved"),),
     "export-attribution": (Control("report"),),
     "export-clickers": (Control("report"),),
@@ -122,10 +122,10 @@ PARITY: dict[str, tuple[Part, ...]] = {
     "send --utm-content": (Control("campaign.settings"),),
 
     # ---------- options of their own ----------
-    "retry-failed --include-permanent": (Planned("P3", "requeue rejected"),),
-    "reconcile --min-age": (Planned("P3", "reconcile options"),),
-    "reconcile --requeue-not-found": (Planned("P3", "reconcile options"),),
-    "reset --status": (Planned("P3", "requeue by status"),),
+    "retry-failed --include-permanent": (Control("campaign.completed"),),
+    "reconcile --min-age": (Control("campaign.completed"),),
+    "reconcile --requeue-not-found": (Control("campaign.completed"),),
+    "reset --status": (Control("campaign.completed"),),
     "preview --phone": (Control("campaign.fresh"),),
     "preview --limit": (Control("campaign.fresh"),),
     "preview --check-account": (Control("status", VIEWER),),

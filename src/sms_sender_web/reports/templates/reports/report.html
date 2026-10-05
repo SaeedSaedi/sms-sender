@@ -88,6 +88,23 @@
   <p class="hint">{% translate "Files use English column names and Latin digits, for other systems. Every download is recorded in the activity log." %}</p>
 </section>
 
+{% if sends.sms or sends.maybe_twice or sends.unrecorded %}
+<section class="card step" data-cli="check-sends" aria-labelledby="twice-heading" id="sends-check">
+  <h2 id="twice-heading">{% icon "shield-check" %}{% translate "Did anyone get it twice?" %}</h2>
+  {% if sends.twice %}
+    <div class="callout callout-error" role="alert">{% icon "circle-alert" %}<p>{{ sends_line }}</p></div>
+    <ul class="plain">{% for phone, n in twice %}<li>{{ phone|mask_phone|fa_digits|ltr }} — <span class="num">{{ n|fa_number }}</span> {% translate "SMS" %}</li>{% endfor %}</ul>
+    {% if twice_more %}<p class="hint">{% translate "and more" %}: <span class="num">{{ twice_more|fa_number }}</span></p>{% endif %}
+    {% if sends_maybe_line %}<div class="callout callout-warning">{% icon "triangle-alert" %}<p>{{ sends_maybe_line }}</p></div>{% endif %}
+  {% elif sends.maybe_twice %}
+    <div class="callout callout-warning">{% icon "triangle-alert" %}<p>{{ sends_line }}</p></div>
+  {% else %}
+    <div class="callout callout-success" role="status">{% icon "circle-check" %}<p>{{ sends_line }}</p></div>
+  {% endif %}
+  {% if sends_unrecorded %}<p class="hint">{{ sends_unrecorded }}</p>{% endif %}
+</section>
+{% endif %}
+
 <section class="card step" id="recipients" aria-labelledby="recipients-heading">
   <h2 id="recipients-heading">{% icon "users" %}{% translate "Recipients" %}</h2>
   <form method="get" action="{% url 'report' slug %}#recipients" class="filters" id="filters">

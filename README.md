@@ -459,6 +459,13 @@ internal, multi-user tool built with Django and HTMX. So far it has:
   The check reads as a checklist, and the message preview estimates the
   cost per recipient from the latest test SMS.
 
+  After a send, recipients can be **queued again** by status, each with its
+  role. Operators queue the rejected. Admins queue those whose outcome is
+  unknown or needs review, those suppressed, invalid or cancelled, and those
+  who got it (a second SMS, after a typed confirmation and a backup).
+  Reconciling with Kavenegar takes the CLI's options. The report says
+  whether anyone got the SMS twice.
+
   A campaign always shows its stage and the next step. When a send ends, its
   results and what's left (unknown, not sent, rejected) sit together, each
   with its action. A send the sending window stopped goes on by itself

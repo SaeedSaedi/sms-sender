@@ -14,7 +14,7 @@ ACTIONS = (
     "test_number_changed",
     "campaign_created", "campaign_changed", "template_saved", "template_deleted",
     "test_requested", "test_approved", "test_rejected", "send_started",
-    "send_scheduled", "send_unscheduled", "campaign_duplicated", "segment_switched", "message_unlocked",
+    "send_scheduled", "send_unscheduled", "campaign_duplicated", "segment_switched", "message_unlocked", "recipients_requeued",
     "job_requested", "job_paused", "job_resumed", "job_cancelled",
     "phone_revealed", "report_downloaded",
 )

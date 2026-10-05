@@ -6,8 +6,16 @@
     <div>
       <p>{{ item.text }}</p>
       {% if item.action == "reconcile" and user|can:"update_campaigns" %}
-        <form method="post" action="{% url 'campaign_action' campaign.slug 'reconcile' %}" class="form-actions" id="followup-reconcile">
-          {% csrf_token %}<button type="submit" class="small secondary">{% icon "refresh-cw" %}{% translate "Reconcile with Kavenegar" %}</button>
+        <form method="post" action="{% url 'campaign_action' campaign.slug 'reconcile' %}" id="followup-reconcile">
+          {% csrf_token %}
+          <div class="form-actions"><button type="submit" class="small secondary">{% icon "refresh-cw" %}{% translate "Reconcile with Kavenegar" %}</button></div>
+          <details class="subsection reconcile-options">
+            <summary>{% translate "Options" %}</summary>
+            <label for="id_min_age">{% translate "Only those last tried at least this many minutes ago" %}</label>
+            <input id="id_min_age" name="min_age_minutes" type="text" dir="ltr" inputmode="numeric" maxlength="5" placeholder="5" data-cli="reconcile --min-age">
+            <label class="check"><input type="checkbox" name="review_not_found" data-cli="reconcile --requeue-not-found">
+              {% translate "If Kavenegar has no record of one, hold it for review instead of queueing it again" %}</label>
+          </details>
         </form>
       {% elif item.action == "send" and approved and user|can:"run_campaigns" %}
         <form method="post" action="{% url 'campaign_action' campaign.slug 'send' %}" class="form-actions" id="followup-send"
@@ -18,5 +26,6 @@
     </div>
   </div>
 {% endfor %}
+{% include "campaigns/stage/_requeue.html" %}
 {% include "campaigns/stage/_another_segment.html" %}
 {% include "campaigns/stage/_unlock.html" %}

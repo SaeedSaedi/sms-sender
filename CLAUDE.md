@@ -326,6 +326,14 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
     - **A changed setting while nothing has gone out.**
 
     The lifecycle skips withdrawn and superseded sends.
+  - **Queue again** (`campaign_requeue`, the CLI's `reset --status` / `retry-failed --include-permanent`): `services.REQUEUE` maps each status to its capability.
+    - Rejected: an operator (`update_campaigns`).
+    - Unknown, needs review, suppressed, invalid, cancelled and sent: an admin (`requeue_review`). Sent also needs the typed short name and a backup first (`keep=None`).
+    - Refused while a send is on its way. It holds the run lock.
+    - The confirmation states the number and the consequence (`terms.REQUEUE_CONFIRM`); the activity log records `recipients_requeued`.
+    - Not-sent rows are already in the queue: "send to them again" covers them.
+    - `StateStore.reset_status` never queues an `INVALID:<raw>` row.
+  - **Reconcile options:** the CLI's `--min-age` (in minutes) and `--review-not-found` go in the reconcile job's `params` (`min_age_sec`, `requeue_not_found`). The worker passes them to `reconcile_unknown`.
   - **Duplicate** (`campaign_duplicate`, the dashboard's presets: the CLI's `--config` / `--profile`): a new campaign with a deep copy of the settings, and a suggested short name from `forms.free_slug` (coin-price-7 → coin-price-8; CLI DBs count as taken). No tests, approvals or sends are copied.
   - **Approval guard:** on a send's first claim (`attempts == 1`), the worker compares its `settings_hash` with the campaign's. A mismatch sends nothing: the job is withdrawn (`CANCELLED`, `result` `{"withdrawn": True, "stop_reason": "not_approved"}`, `started_at` cleared), and the campaign is back at the test SMS. A send without the hash never runs, so tests that queue one directly give it `services.settings_hash(campaign)`.
   - **Scheduling:** `services.start_send(campaign, user, at=…, smoke_test=…)`. `Job.not_before` keeps a queued send from being claimed until then. `forms.parse_when` reads a Solar Hijri date and an HH:MM Tehran time (Persian digits work). It refuses a Gregorian-looking year (≥ 1900), the past, and more than `SCHEDULE_MAX_DAYS` (30) ahead. A wrong one comes back on the page with what was typed. `unschedule` withdraws the send (`result.withdrawn`, nobody cancelled); `start_now` clears `not_before`. The lifecycle skips withdrawn sends.
@@ -337,6 +345,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 - **Reports (`reports/`, read only):**
   - `/reports/<slug>/` reads any campaign DB in `data/db/`, the CLI's too, and never creates one.
   - It uses the CLI's own queries: `click_report`, `display_counts`, `delivery_counts`, `total_cost`, and `recipients_page` (by rowid, so no number appears in a URL).
+  - **"Did anyone get it twice?"** (`check-sends`) runs `sendcheck.check_sends` on the report, for viewers too: twice, maybe, or OK, with masked numbers. Calls from before schema 2 are counted apart.
   - **The recipients list** filters with `state.RecipientFilter`, shared by `recipients_page`, `recipient_total` and `iter_recipients`. The filters:
     - status, as `display_counts` names it (`invalid` included);
     - segment;

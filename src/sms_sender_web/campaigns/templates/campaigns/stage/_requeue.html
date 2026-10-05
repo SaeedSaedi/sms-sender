@@ -1,0 +1,23 @@
+{% load i18n fa ui %}
+{% if requeue_items %}
+<details class="subsection requeue" id="requeue" data-cli="reset, retry-failed">
+  <summary>{% icon "refresh-cw" %}{% translate "Queue recipients again" %}</summary>
+  <p class="hint">{% translate "They go out with the next send, after the same checks." %}</p>
+  <ul class="plain requeue-list">
+    {% for item in requeue_items %}
+      <li>
+        <form method="post" action="{% url 'campaign_requeue' campaign.slug %}" data-confirm="{{ item.confirm }}" id="requeue-{{ item.status }}">
+          {% csrf_token %}<input type="hidden" name="status" value="{{ item.status }}">
+          <p class="requeue-label">{{ item.label }} · <span class="num">{{ item.count|fa_number }}</span></p>
+          {% if item.status == "sent" %}
+            <label for="id_confirm_requeue">{% translate "To send each of them a second SMS, type the campaign's short name:" %} <code dir="ltr">{{ campaign.slug }}</code></label>
+            <input id="id_confirm_requeue" name="confirm" type="text" dir="ltr" autocomplete="off" spellcheck="false" required pattern="{{ campaign.slug }}">
+          {% endif %}
+          <button type="submit" class="small {% if item.risky %}danger{% else %}secondary{% endif %}"
+                  data-cli="reset --status{% if item.status == "failed_permanent" %}, retry-failed --include-permanent{% endif %}">{% icon "refresh-cw" %}{% translate "Queue again" %}</button>
+        </form>
+      </li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}

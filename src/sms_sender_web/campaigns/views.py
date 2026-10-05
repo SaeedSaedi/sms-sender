@@ -16,6 +16,8 @@ from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods, require_POST
 
 from sms_sender.links import DEFAULT_RATE as DEFAULT_LINK_RATE
+from sms_sender.reconcile import DEFAULT_MIN_AGE_SEC
+from sms_sender.state import FAILED_PERMANENT, SENT, StateStore
 from sms_sender.rate import parse_rate
 from sms_sender.sender import TOKEN_MAX_SPACES
 
@@ -26,14 +28,15 @@ from ..accounts.roles import can
 from ..audit.record import record
 from ..dashboard.campaigns import read_campaign
 from ..dashboard.templatetags.fa import fa_number, jalali
-from ..dashboard.terms import STATUS_ORDER
+from ..dashboard.terms import STATUS_ORDER, SUBMISSION_STATUS as STATUS_LABELS
 from ..jobs import services
 from ..jobs.engine import campaign_db
 from ..jobs.models import Campaign, Job
 from ..segments.models import Segment
 from .checks import check_campaign
 from .forms import (
-    SCHEDULE_ERRORS, TOKENS, DuplicateForm, NewCampaignForm, SettingsForm, combined, free_slug, parse_when,
+    _ASCII_DIGITS, SCHEDULE_ERRORS, TOKENS, DuplicateForm, NewCampaignForm, SettingsForm, combined,
+    free_slug, parse_when,
 )
 from .lifecycle import CANCELLED, COMPLETED, PAUSED, READY, STOPPED, lifecycle
 from .models import MessageTemplate
@@ -41,7 +44,7 @@ from .present import checklist, notes, result_line, say, send_summary
 from .preview import ROW_CHOICES, preview_of, recipients
 from .terms import (
     CHECK_PROBLEMS, CHECK_STATES, CONFLICTS, COST_EACH, COST_TOTAL, FOLLOWUPS, INVALID_ROWS, LINKS_AT_SEND,
-    NEXT_STEP, STAGES, STEPS, stop_reason,
+    NEXT_STEP, REQUEUE_CONFIRM, REQUEUED, STAGES, STEPS, stop_reason,
 )
 
 logger = logging.getLogger(__name__)
@@ -113,6 +116,36 @@ def _other_segments(campaign: Campaign) -> tuple[list[Segment], list[Segment]]:
     for segment in Segment.objects.filter(status=Segment.Status.READY).exclude(slug=s.get("segment")).order_by("name"):
         (usable if needed <= set(segment.token_columns or []) else lacking).append(segment)
     return usable, lacking
+
+
+@require_POST
+def campaign_requeue(request, slug: str):
+    """Put a status's recipients back in the queue, for the next send (the
+    CLI's reset --status and retry-failed --include-permanent). Each status
+    has its role; sent ones also need the short name typed, and a backup."""
+    campaign = get_object_or_404(Campaign, slug=slug)
+    status = request.POST.get("status", "")
+    capability = services.REQUEUE.get(status)
+    if capability is None:
+        raise Http404
+    if not can(request.user, capability):
+        return forbidden(request)
+    if status == SENT and request.POST.get("confirm", "").strip() != campaign.slug:
+        messages.error(request, _("To confirm, type the campaign's short name exactly as shown."))
+        return redirect("campaign_detail", slug=slug)
+    try:
+        n, backup = services.requeue(campaign, status)
+    except services.JobConflict as e:
+        messages.error(request, CONFLICTS.get(e.code, CONFLICTS["busy"]))
+        return redirect("campaign_detail", slug=slug)
+    except (BackupError, OSError):
+        logger.exception("requeue_backup_failed", extra={"campaign": slug})
+        messages.error(request, _("The backup failed, so nothing changed. The details are in the system log."))
+        return redirect("campaign_detail", slug=slug)
+    record("recipients_requeued", request=request, campaign=slug, status=status, count=n,
+           **({"backup": backup} if backup else {}))
+    messages.success(request, say(REQUEUED, {"n": n}))
+    return redirect("campaign_detail", slug=slug)
 
 
 @requires("edit_campaigns")
@@ -289,6 +322,33 @@ def _links_note(campaign: Campaign, waiting: int) -> str:
     return say(LINKS_AT_SEND, {"n": waiting, "minutes": minutes})
 
 
+def _requeue_items(campaign: Campaign, user) -> list[dict]:
+    """What the user may put back in the queue, with how many and what it
+    means (the CLI's reset --status). Counted as the requeue counts them:
+    an input row that wasn't a number never goes back."""
+    db = campaign_db(campaign)
+    if not db.exists():
+        return []
+    store = StateStore(db)
+    raw, shown = store.counts(), store.display_counts()
+    items = []
+    for status, capability in services.REQUEUE.items():
+        n = shown.get(status, 0) if status == FAILED_PERMANENT else raw.get(status, 0)
+        if n and can(user, capability):
+            items.append({"status": status, "label": STATUS_LABELS[status], "count": n,
+                          "confirm": say(REQUEUE_CONFIRM[status], {"n": n}), "risky": status != FAILED_PERMANENT})
+    return items
+
+
+def _reconcile_params(data) -> dict:
+    """The CLI's reconcile --min-age (in minutes here) and --review-not-found."""
+    minutes = data.get("min_age_minutes", "").strip().translate(_ASCII_DIGITS)
+    params = {"requeue_not_found": data.get("review_not_found") != "on"}
+    if minutes.isdigit():
+        params["min_age_sec"] = min(int(minutes), 7 * 24 * 60) * 60.0
+    return params
+
+
 def _followups(counts: dict) -> list[dict]:
     """What's left after a send, each with its action (if any)."""
     items = []
@@ -336,6 +396,8 @@ def _live(request, campaign: Campaign, **preview) -> dict:
         )
     elif life.stage in (COMPLETED, CANCELLED) and can(request.user, "edit_campaigns"):
         ready["other_segments"], ready["lacking_segments"] = _other_segments(campaign)
+    if life.stage in (COMPLETED, CANCELLED, STOPPED):
+        ready["requeue_items"] = _requeue_items(campaign, request.user)
     return {
         **ready,
         "cancel_confirm": _(
@@ -544,9 +606,10 @@ def campaign_action(request, slug: str, action: str):
             record("job_cancelled", request=request, campaign=slug, kind=job.kind)
             messages.success(request, _("Cancelled. SMS that Kavenegar already accepted can't be recalled."))
         else:
+            params = _reconcile_params(request.POST) if action == "reconcile" else {}
             with transaction.atomic():
-                services.enqueue(campaign, action, request.user)
-            record("job_requested", request=request, campaign=slug, kind=action)
+                services.enqueue(campaign, action, request.user, params=params)
+            record("job_requested", request=request, campaign=slug, kind=action, **params)
             messages.success(request, _("Queued. The result appears in the list of jobs."))
     except services.JobConflict as e:
         messages.error(request, CONFLICTS.get(e.code, CONFLICTS["busy"]))

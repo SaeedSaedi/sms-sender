@@ -2153,3 +2153,75 @@ msgstr "فقط گیرندگان بدون شناسه کاربر"
 
 msgid "recipients, filtered, with phone numbers"
 msgstr "گیرندگان فیلترشده، با شماره تلفن"
+
+msgid "A send is on its way. Queue recipients again after it ends."
+msgstr "ارسالی در جریان است. پس از پایان آن گیرندگان را دوباره در صف بگذارید."
+
+msgid "Did anyone get it twice?"
+msgstr "آیا کسی دو بار پیامک گرفته است؟"
+
+msgid "If Kavenegar has no record of one, hold it for review instead of queueing it again"
+msgstr "اگر کاوه‌نگار سابقه‌ای از آن نداشت، به‌جای قرار گرفتن دوباره در صف، برای بررسی نگه داشته شود"
+
+msgid "Nobody got it twice: {sms} SMS to {recipients} recipients, test SMS apart ({tests})."
+msgstr "هیچ‌کس دو بار پیامک نگرفته است: {sms} پیامک برای {recipients} گیرنده، جدا از پیامک‌های آزمایشی ({tests})."
+
+msgid "Only those last tried at least this many minutes ago"
+msgstr "فقط آن‌هایی که دست‌کم این چند دقیقه از آخرین تلاششان گذشته است"
+
+msgid "Options"
+msgstr "گزینه‌ها"
+
+msgid "Queue again"
+msgstr "قرار دادن دوباره در صف"
+
+msgid "Queue recipients again"
+msgstr "قرار دادن دوباره گیرندگان در صف"
+
+msgid "Recipients queued again"
+msgstr "قرار گرفتن دوباره گیرندگان در صف"
+
+msgid "They go out with the next send, after the same checks."
+msgstr "این گیرندگان با ارسال بعدی و پس از همان بررسی‌ها ارسال می‌شوند."
+
+msgid "and more"
+msgstr "و بیشتر"
+
+msgid "{n} SMS from before calls were recorded can't be checked."
+msgstr "{n} پیامک مربوط به پیش از ثبت تماس‌ها است و بررسی نمی‌شود."
+
+msgid "{n} cancelled recipients go back in the queue for the next send."
+msgstr "{n} گیرنده لغوشده برای ارسال بعدی دوباره در صف قرار می‌گیرند."
+
+msgid "{n} numbers came with two different user IDs. Queue them again only after fixing the IDs at the source."
+msgstr "{n} شماره با دو شناسه کاربر متفاوت آمده است. فقط پس از اصلاح شناسه‌ها در منبع، آن‌ها را دوباره در صف بگذارید."
+
+msgid "{n} recipients Kavenegar rejected go back in the queue. Fix the cause first (the template, a token), or they'll be rejected again."
+msgstr "{n} گیرنده‌ای که کاوه‌نگار رد کرد دوباره در صف قرار می‌گیرند. نخست علت را برطرف کنید (قالب یا یک متغیر)، وگرنه دوباره رد می‌شوند."
+
+msgid "{n} recipients already got this SMS. Each gets a second one with the next send. Everything is backed up first."
+msgstr "{n} گیرنده این پیامک را دریافت کرده‌اند و با ارسال بعدی هر کدام پیامک دومی می‌گیرند. نخست از همه داده‌ها نسخه پشتیبان گرفته می‌شود."
+
+msgid "{n} recipients are back in the queue. They go out with the next send."
+msgstr "{n} گیرنده دوباره در صف است و با ارسال بعدی ارسال می‌شود."
+
+msgid "{n} recipients are on the suppression list. The next send leaves them out again unless they're taken off it first."
+msgstr "{n} گیرنده در فهرست عدم ارسال است. ارسال بعدی دوباره آن‌ها را کنار می‌گذارد، مگر اینکه نخست از فهرست حذف شوند."
+
+msgid "{n} recipients got it more than once."
+msgstr "{n} گیرنده بیش از یک بار پیامک گرفته‌اند."
+
+msgid "{n} recipients may already have the SMS. Queued without checking, they can get a second one; “Reconcile with Kavenegar” checks first."
+msgstr "{n} گیرنده ممکن است پیامک را گرفته باشند. اگر بدون بررسی در صف قرار گیرند، ممکن است پیامک دوم بگیرند؛ «تطبیق با کاوه‌نگار» نخست بررسی می‌کند."
+
+msgid "{n} recipients may already have the SMS: Kavenegar listed more than one message. Queued again, they can get a second one."
+msgstr "{n} گیرنده ممکن است پیامک را گرفته باشند: کاوه‌نگار بیش از یک پیام فهرست کرد. اگر دوباره در صف قرار گیرند، ممکن است پیامک دوم بگیرند."
+
+msgid "{n} recipients may have got it twice: a call isn't settled yet. Reconciling with Kavenegar settles it."
+msgstr "{n} گیرنده ممکن است دو بار پیامک گرفته باشند: نتیجه یک تماس هنوز روشن نیست. تطبیق با کاوه‌نگار آن را روشن می‌کند."
+
+msgid "{status}: {count}"
+msgstr "{status}: {count}"
+
+msgid "To send each of them a second SMS, type the campaign's short name:"
+msgstr "برای ارسال پیامک دوم به هر یک از آن‌ها، نام کوتاه کمپین را بنویسید:"

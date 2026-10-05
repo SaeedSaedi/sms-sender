@@ -11,6 +11,7 @@ urlpatterns = [
     path("campaigns/<slug:slug>/duplicate/", views.campaign_duplicate, name="campaign_duplicate"),
     path("campaigns/<slug:slug>/segment/", views.campaign_segment, name="campaign_segment"),
     path("campaigns/<slug:slug>/unlock/", views.campaign_unlock, name="campaign_unlock"),
+    path("campaigns/<slug:slug>/requeue/", views.campaign_requeue, name="campaign_requeue"),
     path("campaigns/<slug:slug>/preview/", views.campaign_preview, name="campaign_preview"),
     path("campaigns/<slug:slug>/live/", views.campaign_live, name="campaign_live"),
     path("campaigns/<slug:slug>/<str:action>/", views.campaign_action, name="campaign_action"),
