@@ -334,11 +334,19 @@ def test_the_live_part_polls_only_while_a_job_is_active(operator_client, campaig
     assert 'hx-swap="morph:outerHTML"' in html  # in place, so focus stays on its button
 
 
-def test_settings_are_fixed_once_sending_started(operator_client, campaign):
-    Job.objects.create(campaign=campaign, kind=Job.Kind.SEND, state=Job.State.DONE,
+def test_settings_are_fixed_once_an_sms_may_have_gone_out(operator_client, campaign):
+    # A send that failed before sending anything fixes nothing: a wrong
+    # template can still be corrected.
+    Job.objects.create(campaign=campaign, kind=Job.Kind.SEND, state=Job.State.FAILED,
                        started_at=campaign.created_at)
+    assert operator_client.get("/campaigns/coin-7/settings/").status_code == 200
+    store = StateStore(campaign_db(campaign))
+    store.upsert_pending([("09120000001", "09120000001")])
+    store.claim("09120000001")
+    store.mark_sent("09120000001", 1001, 200, 3020)
     response = operator_client.get("/campaigns/coin-7/settings/", follow=True)
     assert "ارسال این کمپین آغاز شده است و تنظیماتش دیگر تغییر نمی‌کند" in response.content.decode()
+    assert services.settings_locked(campaign) == "started"
 
 
 def test_the_engine_builds_a_test_run_for_the_operators_number(settings, monkeypatch, campaign):

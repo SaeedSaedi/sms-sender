@@ -446,7 +446,18 @@ internal, multi-user tool built with Django and HTMX. So far it has:
 
   Changing the message (template, tokens, link, segment) needs a new test
   SMS. While a send is scheduled, the settings wait: cancel the schedule to
-  change them. Once sending has started, a campaign's settings are fixed.
+  change them. Once an SMS may have gone out, a campaign's settings are
+  fixed; a send that failed before sending anything fixes nothing.
+
+  After a send, the same message can go to **another segment**: only the
+  list changes, a new test SMS comes first, and nobody gets it twice. An
+  admin can **change the message for those still waiting** (the CLI's
+  `--allow-settings-change`): they type the campaign's short name, and
+  everything is backed up first. **Duplicate** starts a new campaign from
+  another's settings.
+
+  The check reads as a checklist, and the message preview estimates the
+  cost per recipient from the latest test SMS.
 
   A campaign always shows its stage and the next step. When a send ends, its
   results and what's left (unknown, not sent, rejected) sit together, each

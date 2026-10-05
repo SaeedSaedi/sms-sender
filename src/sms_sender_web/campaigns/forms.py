@@ -50,16 +50,27 @@ def clean_template(value: str) -> str:
     return value
 
 
-class NewCampaignForm(forms.Form):
+def slug_taken(slug: str) -> bool:
+    """A campaign has it, or a DB of that name exists (made by the CLI: it's
+    another campaign's record)."""
+    return slug == "new" or Campaign.objects.filter(slug=slug).exists() or campaign_db(Campaign(slug=slug)).exists()
+
+
+def free_slug(base: str) -> str:
+    """The next short name after `base` that nobody has: coin-price-7 →
+    coin-price-8, vip → vip-2."""
+    match = re.fullmatch(r"(.*?)-(\d+)", base)
+    stem, n = (match.group(1), int(match.group(2))) if match else (base, 1)
+    while True:
+        n += 1
+        candidate = f"{stem[:60 - len(str(n))]}-{n}"
+        if SLUG_RE.match(candidate) and not slug_taken(candidate):
+            return candidate
+
+
+class _NamedForm(forms.Form):
     name = forms.CharField(max_length=200)
     slug = forms.CharField(max_length=64)
-    segment = forms.ModelChoiceField(queryset=_ready_segments(), to_field_name="slug")
-    template = forms.CharField(max_length=100)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["segment"].queryset = _ready_segments()  # fresh on every form
-        self.fields["segment"].error_messages["invalid_choice"] = _("Choose a segment whose columns are set.")
 
     def clean_name(self) -> str:
         return persian_text(self.cleaned_data["name"].strip())
@@ -68,15 +79,27 @@ class NewCampaignForm(forms.Form):
         slug = self.cleaned_data["slug"].strip()
         if not SLUG_RE.match(slug):
             raise forms.ValidationError(_("Use lowercase English letters, digits and dashes, e.g. vip-users."))
-        if slug == "new" or Campaign.objects.filter(slug=slug).exists():
-            raise forms.ValidationError(_("A campaign with this short name already exists. Choose another."))
-        # A DB of that name was made by the CLI: it's another campaign's record.
-        if campaign_db(Campaign(slug=slug)).exists():
+        if slug_taken(slug):
             raise forms.ValidationError(_("A campaign with this short name already exists. Choose another."))
         return slug
 
+
+class NewCampaignForm(_NamedForm):
+    segment = forms.ModelChoiceField(queryset=_ready_segments(), to_field_name="slug")
+    template = forms.CharField(max_length=100)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["segment"].queryset = _ready_segments()  # fresh on every form
+        self.fields["segment"].error_messages["invalid_choice"] = _("Choose a segment whose columns are set.")
+
     def clean_template(self) -> str:
         return clean_template(self.cleaned_data["template"])
+
+
+class DuplicateForm(_NamedForm):
+    """A new campaign with another's settings: the dashboard's presets (the
+    CLI's profiles). Tests, approvals and sends stay with the original."""
 
 
 class SettingsForm(forms.Form):

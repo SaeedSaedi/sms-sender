@@ -897,6 +897,15 @@ table.value-maps select, table.value-maps input { min-inline-size: 7rem; }
 
 /* ---------- check, preview and send (plan 05, P2) ---------- */
 
+.checklist { display: grid; gap: var(--s-2); margin: 0 0 var(--s-4); padding: 0; list-style: none; }
+.checklist li { display: flex; gap: var(--s-2); align-items: flex-start; }
+.checklist li > .icon { flex: none; margin-block-start: .2em; }
+.checklist li > span { min-inline-size: 0; overflow-wrap: anywhere; }
+.check-ok > .icon { color: var(--success); }
+.check-warn > .icon { color: var(--warning); }
+.check-fail > .icon { color: var(--danger); }
+.check-note { color: var(--text-2); }
+
 .recipients-preview { margin-block-start: var(--s-6); }
 .recipients-preview .sms-bubble { max-inline-size: 40rem; }
 .row-text { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -63,6 +63,8 @@ CONFLICTS = {
     "settings_changed": _("The settings changed after the test SMS. Send a new test SMS and approve it."),
     "not_decidable": _("This test SMS can't be approved or rejected now."),
     "not_scheduled": _("This send isn't waiting for a set time any more."),
+    "send_on_its_way": _("A send is on its way. Change the list after it ends."),
+    "not_needed": _("Nothing has gone out yet, so the settings can change as they are."),
 }
 
 TOKEN_ISSUES = {
@@ -133,6 +135,24 @@ CHECK_PROBLEMS = {
     "nobody_to_send": _("Nobody is left to send to."),
     "bad_destination": _("The short link's address isn't allowed."),
 }
+
+# The check's lines (present.checklist).
+CHECKLIST = {
+    "list": _("Segment"),
+    "valid": _("{n} valid numbers."),
+    "template": _("Template"),
+    "text_known": _("Its text is in the library."),
+    "text_unknown": _("Its text isn't in the library, so the message can't be shown here."),
+    "tokens": _("Tokens"),
+    "tokens_filled": _("Every token the text uses is filled."),
+    "link": _("Short link"),
+    "window": _("Sending window (Tehran time)"),
+    "window_open": _("Open now."),
+    "window_closed": _("Closed now: a test SMS or a send waits for it to open."),
+    "recipients": _("Recipients"),
+    "to_send": _("{n} to send."),
+}
+CHECK_STATES = {"ok": _("Done:"), "warn": _("Warning:"), "fail": _("Problem:")}
 
 # Setting names, for the activity log's "settings changed" line.
 SETTING_NAMES = {
@@ -235,6 +255,8 @@ FOLLOWUPS = {
 
 # A message's length (campaigns/message.py), as people read it.
 LENGTH = _("{chars} characters · {parts} SMS")
+COST_EACH = _("About {cost} rials per recipient, from the price of the latest test SMS.")
+COST_TOTAL = _("About {cost} rials per recipient, {total} rials for {n}, from the price of the latest test SMS.")
 PREVIEW_MISSING = _("The text uses {token}, but nothing fills it: Kavenegar would refuse the SMS.")
 PREVIEW_UNUSED = _("{token} is filled, but the template's text doesn't use it.")
 PREVIEW_LTR = _("The message starts with a Latin word, so phones show it left to right, with its punctuation out of place. A Persian value (a translation) or a Persian word first keeps it right to left.")

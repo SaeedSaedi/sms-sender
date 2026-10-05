@@ -44,12 +44,14 @@ class FakeEngine(Engine):
     def link_client(self, campaign=None):
         raise AssertionError("no links in these tests")
 
-    def runner(self, campaign, reporter, *, test_number=None, cost_per_sms=None, smoke_test=False):
+    def runner(self, campaign, reporter, *, test_number=None, cost_per_sms=None, smoke_test=False,
+               allow_settings_change=False):
         runner = Runner(
             input_path=campaign.settings["input"], state=self.state(campaign), sender=self.fake,
             workers=1, campaign=campaign.slug, reporter=reporter, preflight=False,
             install_signal_handlers=False, approval_test_number=test_number,
             test_only=test_number is not None, cost_per_sms=cost_per_sms,
+            allow_settings_change=allow_settings_change,
         )
         runner.asked_smoke_test = smoke_test  # without preflight it wouldn't run anyway
         self.runners.append(runner)

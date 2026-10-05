@@ -4,6 +4,7 @@ length and SMS parts, and the token mismatches — a placeholder nothing
 fills, or a token the text doesn't use. Nothing here sends or saves."""
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -12,6 +13,7 @@ from sms_sender.input_loader import InputError, TokenColumns
 from sms_sender.links import token_value
 from sms_sender.shortlink import shlink_base_url
 
+from ..jobs.models import Job
 from ..privacy import mask_phone
 from .message import check, fill, length, shows_left_to_right
 from .models import MessageTemplate
@@ -33,6 +35,18 @@ class Preview:
     has_link: bool = False
     problems: list[str] = field(default_factory=list)   # placeholders nothing fills
     warnings: list[str] = field(default_factory=list)   # tokens the text doesn't use
+    cost: int | None = None         # rials per recipient, estimated (price_per_part)
+
+
+def price_per_part() -> float | None:
+    """Rials per SMS part, from the latest test SMS whose cost and parts are
+    both known (Kavenegar bills each part). None before the first one."""
+    tests = Job.objects.filter(kind=Job.Kind.TEST, state=Job.State.DONE).order_by("-finished_at", "-id")
+    for test in tests.only("params", "result")[:50]:
+        parts, cost = (test.params or {}).get("parts"), (test.result or {}).get("cost_per_sms")
+        if parts and cost:
+            return cost / parts
+    return None
 
 
 def _first_row(settings: dict, segment) -> tuple[dict[str, str], str]:
@@ -70,8 +84,10 @@ def preview_of(settings: dict | None, segment) -> Preview:
     text = fill(template.text, values)
     size = length(text)
     found = check(template.text, filled)
+    price = price_per_part()
     return Preview(
         template=name, known=True, text=text, parts=size.parts,
+        cost=math.ceil(size.parts * price) if price else None,
         length=say(LENGTH, {"chars": size.chars, "parts": size.parts}),
         sample=sample, has_link=bool(links.get("token")),
         problems=[say(PREVIEW_MISSING, {"token": f"%{t}"}) for t in found.missing],

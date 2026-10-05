@@ -139,6 +139,13 @@ INVALID = "invalid"
 CANCELLED = "cancelled"
 
 CLAIMABLE = (PENDING, FAILED_RETRIABLE)
+# Rows an SMS may have gone out for. Once one exists, the campaign's message
+# is fixed (bind_campaign), unless a change is explicitly allowed.
+MAY_HAVE_SENT = (SENT, IN_FLIGHT, UNKNOWN, NEEDS_REVIEW)
+
+_MAY_HAVE_SENT_SQL = (
+    f"SELECT 1 FROM recipients WHERE status IN ({', '.join('?' * len(MAY_HAVE_SENT))}) LIMIT 1"
+)
 
 # Link statuses (`links` table)
 LINK_PENDING = "pending"  # written, not created at Shlink yet (or Shlink was unreachable)
@@ -557,10 +564,7 @@ class StateStore:
             changed = sorted(k for k in set(stored) | set(settings) if stored.get(k) != settings.get(k))
             if not changed:
                 return []
-            may_have_gone_out = conn.execute(
-                "SELECT 1 FROM recipients WHERE status IN (?, ?, ?, ?) LIMIT 1",
-                (SENT, IN_FLIGHT, UNKNOWN, NEEDS_REVIEW),
-            ).fetchone()
+            may_have_gone_out = conn.execute(_MAY_HAVE_SENT_SQL, MAY_HAVE_SENT).fetchone()
             if may_have_gone_out and not allow_change:
                 raise CampaignMismatchError(
                     f"{self.db_path} already sent with different settings "
@@ -931,6 +935,10 @@ class StateStore:
             "SELECT AVG(cost) FROM recipients WHERE cost IS NOT NULL"
         ).fetchone()
         return math.ceil(row[0]) if row and row[0] is not None else None
+
+    def may_have_sent(self) -> bool:
+        """Whether an SMS may have gone out to anyone in this campaign."""
+        return self._conn().execute(_MAY_HAVE_SENT_SQL, MAY_HAVE_SENT).fetchone() is not None
 
     def counts(self) -> dict[str, int]:
         rows = self._conn().execute(

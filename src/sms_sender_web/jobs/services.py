@@ -5,13 +5,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 
+from django.conf import settings as django_settings
 from django.db import transaction
 from django.utils import timezone
 
 from sms_sender.locking import RunLock, RunLockError
+from sms_sender.state import StateStore
 
 from ..accounts.models import test_phone_of
+from ..accounts.roles import can
+from ..backup import make_backup
 from .engine import Engine, campaign_db
 from .models import Campaign, Job
 
@@ -25,7 +30,7 @@ APPROVED_SETTINGS = ("segment", "template", "tokens", "token_columns", "value_ma
 class JobConflict(Exception):
     """The action can't be done right now. `code` picks the Persian message:
     busy, no_test_number, send_active, test_active, not_approved,
-    settings_changed, not_decidable, not_scheduled."""
+    settings_changed, not_decidable, not_scheduled, send_on_its_way, not_needed."""
 
     def __init__(self, code: str, detail: str = ""):
         super().__init__(detail or code)
@@ -40,17 +45,77 @@ def settings_hash(campaign: Campaign) -> str:
     return hashlib.sha256(json.dumps(approved, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
-def settings_locked(campaign: Campaign) -> str:
-    """Why the settings can't change now ("" when they can): "started" once
-    a send has begun (what went out and what follows must be one message),
-    "waiting" while a send is queued or scheduled (it would go out with
-    settings nobody approved)."""
-    sends = Job.objects.filter(campaign=campaign, kind=Job.Kind.SEND)
-    if sends.exclude(started_at=None).exists():
-        return "started"
-    if sends.filter(state__in=ACTIVE).exists():
-        return "waiting"
+def may_have_sent(campaign: Campaign) -> bool:
+    db = campaign_db(campaign)
+    return db.exists() and StateStore(db).may_have_sent()  # never creates the DB
+
+
+def message_unlocked(campaign: Campaign) -> bool:
+    """An admin opened the settings of a campaign that has sent, and no send
+    has started since."""
+    return campaign.unlocked_at is not None and not Job.objects.filter(
+        campaign=campaign, kind=Job.Kind.SEND, started_at__gte=campaign.unlocked_at,
+    ).exists()
+
+
+def settings_locked(campaign: Campaign, user=None) -> str:
+    """Why the settings can't change now ("" when they can):
+    - "scheduled": a send waits for its time; cancel the schedule first;
+    - "started": an SMS may have gone out (the CLI's rule): what went out
+      and what follows must be one message. An admin who unlocked it
+      (`unlock_message`) may still change it;
+    - "waiting": a send is on its way, though nothing has gone out yet.
+    A send that failed before sending anything locks nothing, so a wrong
+    template can still be fixed."""
+    active = Job.objects.filter(campaign=campaign, kind=Job.Kind.SEND, state__in=ACTIVE)
+    if active.filter(state=Job.State.QUEUED, not_before__gt=timezone.now()).exists():
+        return "scheduled"
+    if active.exists():
+        return "started" if may_have_sent(campaign) else "waiting"
+    if may_have_sent(campaign):
+        unlocked = message_unlocked(campaign) and user is not None and can(user, "change_sent_message")
+        return "" if unlocked else "started"
     return ""
+
+
+def _allowance(campaign: Campaign) -> dict:
+    """For a test or a send after an admin's unlock: the campaign DB accepts
+    the changed settings (the worker passes it on)."""
+    return {"allow_settings_change": True} if message_unlocked(campaign) else {}
+
+
+def can_unlock(campaign: Campaign) -> bool:
+    """An admin can change the message now: it has gone out to someone, no
+    send is queued or running (a paused one is superseded), and it isn't
+    unlocked already."""
+    busy = Job.objects.filter(
+        campaign=campaign, kind=Job.Kind.SEND, state__in=(Job.State.QUEUED, Job.State.RUNNING),
+    ).exists()
+    return not busy and may_have_sent(campaign) and not message_unlocked(campaign)
+
+
+def unlock_message(campaign: Campaign, user) -> tuple[str, list[int]]:
+    """Let an admin change the message of a campaign that has sent (the
+    CLI's --allow-settings-change). Everything is backed up first; if that
+    fails (BackupError, OSError) nothing changes. A paused send ends,
+    superseded, without cancelling anyone: those still waiting get the new
+    message, after a new test SMS. Returns the backup's name and the
+    superseded jobs."""
+    if not can_unlock(campaign):
+        raise JobConflict("send_on_its_way" if may_have_sent(campaign) else "not_needed")
+    backup = make_backup(Path(django_settings.DATA_DIR), django_settings.BACKUP_DIR, keep=None)
+    superseded = []
+    with transaction.atomic():
+        for job in Job.objects.select_for_update().filter(
+            campaign=campaign, kind=Job.Kind.SEND, state=Job.State.PAUSED,
+        ):
+            job.state, job.finished_at = Job.State.CANCELLED, timezone.now()
+            job.result = {**(job.result or {}), "superseded": True}
+            job.save(update_fields=["state", "finished_at", "result"])
+            superseded.append(job.pk)
+        campaign.unlocked_at, campaign.unlocked_by = timezone.now(), user
+        campaign.save(update_fields=["unlocked_at", "unlocked_by"])
+    return backup.path.name, superseded
 
 
 def latest_test(campaign: Campaign) -> Job | None:
@@ -66,9 +131,11 @@ def approval(campaign: Campaign) -> Job | None:
     return None
 
 
-def request_test(campaign: Campaign, user) -> Job:
+def request_test(campaign: Campaign, user, *, parts: int | None = None) -> Job:
     """Queue a test SMS to the user's own number (stages 1–3: validate,
-    links, pre-send checks). A test already waiting or running is returned."""
+    links, pre-send checks). A test already waiting or running is returned.
+    `parts`: the message's SMS parts, when the template's text is known, so
+    its cost gives a price per part for estimates."""
     phone = test_phone_of(user)
     if not phone:
         raise JobConflict("no_test_number")
@@ -82,7 +149,8 @@ def request_test(campaign: Campaign, user) -> Job:
             return existing
         return Job.objects.create(
             campaign=campaign, kind=Job.Kind.TEST, requested_by=user,
-            params={"test_number": phone}, settings_hash=settings_hash(campaign),
+            params={"test_number": phone, **({"parts": parts} if parts else {}), **_allowance(campaign)},
+            settings_hash=settings_hash(campaign),
         )
 
 
@@ -122,7 +190,8 @@ def start_send(campaign: Campaign, user, *, at=None, smoke_test: bool = False) -
             raise JobConflict("test_active")
         return Job.objects.create(
             campaign=campaign, kind=Job.Kind.SEND, requested_by=user,
-            params={"cost_per_sms": test.result.get("cost_per_sms"), "smoke_test": smoke_test},
+            params={"cost_per_sms": test.result.get("cost_per_sms"), "smoke_test": smoke_test,
+                    **_allowance(campaign)},
             settings_hash=test.settings_hash, not_before=at,
         )
 

@@ -218,12 +218,16 @@ class Worker:
             return (Job.State.CANCELLED, {"withdrawn": True, "stop_reason": "not_approved"},
                     "the settings changed after the test SMS was approved; nothing was sent")
         reporter = JobReporter(job)
+        # An admin changed the message of a campaign that has sent: the
+        # campaign DB accepts the new settings (the CLI's --allow-settings-change).
+        allow = bool(job.params.get("allow_settings_change"))
         if test:
-            runner = self.engine.runner(job.campaign, reporter, test_number=job.params["test_number"])
+            runner = self.engine.runner(job.campaign, reporter, test_number=job.params["test_number"],
+                                        allow_settings_change=allow)
         else:
             runner = self.engine.runner(
                 job.campaign, reporter, cost_per_sms=job.params.get("cost_per_sms"),
-                smoke_test=bool(job.params.get("smoke_test")),
+                smoke_test=bool(job.params.get("smoke_test")), allow_settings_change=allow,
             )
         reason = _StopReason()
 

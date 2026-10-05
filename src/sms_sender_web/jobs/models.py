@@ -28,6 +28,13 @@ class Campaign(models.Model):
         related_name="+",
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    # An admin opened the settings of a campaign that has sent (the CLI's
+    # --allow-settings-change), after a backup. It lasts until a send starts.
+    unlocked_at = models.DateTimeField(null=True, blank=True)
+    unlocked_by = models.ForeignKey(
+        django_settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
 
     def __str__(self) -> str:
         return self.slug

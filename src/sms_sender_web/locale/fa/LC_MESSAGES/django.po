@@ -860,9 +860,6 @@ msgstr "مقدار ثابت"
 msgid "It's outside the sending window ({start} to {end}, Tehran time); it's {now} now. Try again inside it."
 msgstr "اکنون خارج از بازه مجاز ارسال ({start} تا {end} به وقت تهران) است و ساعت {now} است. در بازه مجاز دوباره تلاش کنید."
 
-msgid "It's outside the sending window now; a test SMS or a send waits for it."
-msgstr "اکنون خارج از بازه مجاز ارسال است؛ پیامک آزمایشی یا ارسال باید تا آغاز بازه صبر کند."
-
 msgid "Job"
 msgstr "کار"
 
@@ -1982,3 +1979,129 @@ msgstr "پیش از آغاز پس گرفته شد: نه پیامکی ارسال 
 
 msgid "The message starts with a Latin word, so phones show it left to right, with its punctuation out of place. A Persian value (a translation) or a Persian word first keeps it right to left."
 msgstr "پیام با یک واژه لاتین شروع می‌شود، پس گوشی‌ها آن را از چپ به راست و با نشانه‌گذاری نابه‌جا نشان می‌دهند. اگر مقدار آغازین فارسی باشد (با یک ترجمه) یا پیام با واژه‌ای فارسی شروع شود، راست به چپ می‌ماند."
+
+msgid "A send is on its way, so the settings can't change until it ends."
+msgstr "ارسالی در جریان است، پس تا پایان آن تنظیمات تغییر نمی‌کند."
+
+#, python-format
+msgid "%(name)s (copy)"
+msgstr "%(name)s (رونوشت)"
+
+msgid "A new campaign with the same settings: the segment, the template and what fills its tokens, the link and its tracking values, the window and the rate. Its test SMS, approval and sends start afresh."
+msgstr "کمپینی تازه با همین تنظیمات: گروه مخاطبان، قالب و مقدار متغیرهایش، لینک و مقادیر ردیابی آن، بازه مجاز ارسال و نرخ ارسال. پیامک آزمایشی، تأیید و ارسال‌های آن از نو انجام می‌شود."
+
+msgid "A send is on its way. Change the list after it ends."
+msgstr "ارسالی در جریان است. پس از پایان آن گروه مخاطبان را تغییر دهید."
+
+msgid "Campaign duplicated"
+msgstr "ساخت کمپین مشابه"
+
+msgid "Campaign moved to another segment"
+msgstr "تغییر گروه مخاطبان کمپین"
+
+#, python-format
+msgid "Copied from “%(name)s”. Check its settings, then the list and a test SMS."
+msgstr "از روی «%(name)s» ساخته شد. تنظیماتش را بررسی کنید، سپس فهرست را ببینید و پیامک آزمایشی بفرستید."
+
+msgid "Duplicate"
+msgstr "ساخت کمپین مشابه"
+
+msgid "Duplicate the campaign"
+msgstr "ساخت کمپین مشابه"
+
+msgid "Not listed, because they lack a column this message uses:"
+msgstr "این گروه‌ها در فهرست نیستند، چون ستونی را که این پیام لازم دارد ندارند:"
+
+msgid "Send this message to another segment"
+msgstr "ارسال همین پیام به گروه مخاطبان دیگری"
+
+#, python-format
+msgid "The campaign now sends to “%(segment)s”. Check the list, then send a new test SMS."
+msgstr "کمپین اکنون به «%(segment)s» ارسال می‌کند. فهرست را بررسی کنید و سپس یک پیامک آزمایشی تازه بفرستید."
+
+msgid "The message stays the same, and a new test SMS comes first. Anyone this campaign already sent to is skipped."
+msgstr "پیام همان می‌ماند و نخست یک پیامک آزمایشی تازه لازم است. برای کسانی که این کمپین پیش‌تر به آن‌ها ارسال کرده، دوباره ارسال نمی‌شود."
+
+msgid "Use this segment"
+msgstr "استفاده از این گروه"
+
+msgid "from {before} to {after}"
+msgstr "از {before} به {after}"
+
+msgid "from {source}"
+msgstr "از روی {source}"
+
+msgid "Back up and change the message"
+msgstr "پشتیبان‌گیری و تغییر پیام"
+
+msgid "Backed up. The settings are open for you: what you save goes to those still waiting, after a new test SMS."
+msgstr "نسخه پشتیبان گرفته شد. تنظیمات برای شما باز است: آنچه ذخیره کنید، پس از یک پیامک آزمایشی تازه، برای گیرندگانی که هنوز در انتظارند ارسال می‌شود."
+
+msgid "Change the message for those still waiting"
+msgstr "تغییر پیام برای گیرندگانی که هنوز در انتظارند"
+
+msgid "Message opened for a change, after a backup"
+msgstr "باز کردن پیام برای تغییر، پس از پشتیبان‌گیری"
+
+msgid "Some recipients already got the earlier message. What you save goes to those still waiting, after a new test SMS; what went out stays as it was."
+msgstr "برخی گیرندگان پیام قبلی را دریافت کرده‌اند. آنچه ذخیره کنید، پس از یک پیامک آزمایشی تازه، برای گیرندگانی که هنوز در انتظارند ارسال می‌شود؛ پیامک‌های ارسال‌شده همان‌طور که بودند می‌مانند."
+
+msgid "Some recipients already got this message, and the rest would get another one. Everything is backed up first; then the settings open for you, and a new test SMS comes before any send."
+msgstr "برخی گیرندگان این پیام را دریافت کرده‌اند و بقیه پیام دیگری می‌گیرند. نخست از همه داده‌ها نسخه پشتیبان گرفته می‌شود؛ سپس تنظیمات برای شما باز می‌شود و پیش از هر ارسال، یک پیامک آزمایشی تازه لازم است."
+
+msgid "The backup failed, so nothing changed. The details are in the system log."
+msgstr "پشتیبان‌گیری انجام نشد، پس چیزی تغییر نکرد. جزئیات در گزارش سیستم است."
+
+msgid "The message is open for a change until the next send starts."
+msgstr "پیام تا آغاز ارسال بعدی برای تغییر باز است."
+
+msgid "To confirm, type the campaign's short name exactly as shown."
+msgstr "برای تأیید، نام کوتاه کمپین را دقیقاً همان‌طور که نشان داده شده بنویسید."
+
+msgid "To confirm, type the campaign's short name:"
+msgstr "برای تأیید، نام کوتاه کمپین را بنویسید:"
+
+msgid "backup {name}"
+msgstr "نسخه پشتیبان {name}"
+
+msgid "Nothing has gone out yet, so the settings can change as they are."
+msgstr "هنوز هیچ پیامکی فرستاده نشده است، پس تنظیمات همین حالا هم تغییر می‌کند."
+
+msgid "Closed now: a test SMS or a send waits for it to open."
+msgstr "اکنون بسته است: پیامک آزمایشی یا ارسال تا باز شدن آن صبر می‌کند."
+
+msgid "Done:"
+msgstr "انجام شد:"
+
+msgid "Every token the text uses is filled."
+msgstr "همه متغیرهایی که متن به کار می‌برد مقدار دارند."
+
+msgid "Fix what's marked below before a test SMS."
+msgstr "پیش از پیامک آزمایشی، موارد مشخص‌شده در زیر را برطرف کنید."
+
+msgid "Its text is in the library."
+msgstr "متن آن در کتابخانه قالب‌ها هست."
+
+msgid "Its text isn't in the library, so the message can't be shown here."
+msgstr "متن آن در کتابخانه قالب‌ها نیست، پس پیام اینجا نمایش داده نمی‌شود."
+
+msgid "Open now."
+msgstr "اکنون باز است."
+
+msgid "Problem:"
+msgstr "مشکل:"
+
+msgid "Warning:"
+msgstr "هشدار:"
+
+msgid "{n} to send."
+msgstr "{n} گیرنده برای ارسال."
+
+msgid "{n} valid numbers."
+msgstr "{n} شماره معتبر."
+
+msgid "About {cost} rials per recipient, from the price of the latest test SMS."
+msgstr "حدود {cost} ریال برای هر گیرنده، بر پایه قیمت آخرین پیامک آزمایشی."
+
+msgid "About {cost} rials per recipient, {total} rials for {n}, from the price of the latest test SMS."
+msgstr "حدود {cost} ریال برای هر گیرنده و {total} ریال برای {n} گیرنده، بر پایه قیمت آخرین پیامک آزمایشی."

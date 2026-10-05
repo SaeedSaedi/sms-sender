@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% load i18n ui %}
+{% block title %}{% translate "Duplicate the campaign" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="{% translate "Breadcrumb" %}"><ol>
+  <li><a href="{% url 'home' %}">{% translate "Campaigns" %}</a></li>
+  <li><a href="{% url 'campaign_detail' source.slug %}"><bdi>{{ source.name }}</bdi></a></li>
+  <li aria-current="page">{% translate "Duplicate" %}</li>
+</ol></nav>
+{% endblock %}
+{% block content %}
+<section class="card medium">
+  <h1>{% translate "Duplicate the campaign" %}</h1>
+  <p>{% translate "A new campaign with the same settings: the segment, the template and what fills its tokens, the link and its tracking values, the window and the rate. Its test SMS, approval and sends start afresh." %}</p>
+  <form method="post">
+    {% csrf_token %}
+    <label for="id_name">{% translate "Name" %}</label>
+    <input id="id_name" name="name" type="text" maxlength="200" required value="{{ form.name.value|default:'' }}"{% aria form.name %}>
+    {% field_errors form.name %}
+    <label for="id_slug">{% translate "Short name" %}</label>
+    <input id="id_slug" name="slug" type="text" dir="ltr" maxlength="64" required value="{{ form.slug.value|default:'' }}"{% aria form.slug hint=True %}>
+    <p class="hint" id="id_slug_hint">{% translate "Lowercase English letters, digits and dashes, e.g. coin-price-7. It names the campaign's records and tags its links, and can't change later." %}</p>
+    {% field_errors form.slug %}
+    <button type="submit">{% icon "copy" %}{% translate "Duplicate" %}</button>
+  </form>
+</section>
+{% endblock %}

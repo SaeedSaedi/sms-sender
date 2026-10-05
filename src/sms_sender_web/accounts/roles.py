@@ -28,6 +28,7 @@ _ADDS = {
     },
     ADMIN: {
         "requeue_review",       # needs_review → queue again (may send a duplicate)
+        "change_sent_message",  # continue a campaign with another message, after a backup
         "remove_suppression",
         "delete_campaign_data",
         "manage_users",

@@ -29,7 +29,7 @@ def test_a_send_is_set_for_tomorrow_and_taken_back(world, open_as):
     page.get_by_label(fa("Time (Tehran)"), exact=True).fill("10:00")
     page.get_by_role("button", name=fa("Schedule"), exact=True).click()
     dialog = page.get_by_role("dialog")
-    assert "۳" in dialog.inner_text()  # the three still waiting get it
+    assert "۶" in dialog.inner_text()  # the six still waiting get it
     with page.expect_navigation():
         dialog.get_by_role("button", name=fa("Schedule"), exact=True).click()
     page.get_by_text(fa("Scheduled for")).wait_for()
@@ -42,3 +42,18 @@ def test_a_send_is_set_for_tomorrow_and_taken_back(world, open_as):
     page.get_by_role("button", name=fa("Start sending"), exact=True).wait_for()
     job.refresh_from_db()
     assert job.state == Job.State.CANCELLED
+
+
+def test_an_admin_changes_the_message_for_those_still_waiting(world, open_as, sandbox, settings):
+    settings.BACKUP_DIR = sandbox / "backups"
+    page = open_as(world.users["admin"], "/campaigns/halted/")
+    page.get_by_text(fa("Change the message for those still waiting")).click()
+    page.get_by_label(fa("To confirm, type the campaign's short name:")).fill("halted")
+    with page.expect_navigation():
+        page.get_by_role("button", name=fa("Back up and change the message"), exact=True).click()
+    page.get_by_text(fa(
+        "Some recipients already got the earlier message. What you save goes to those still waiting, "
+        "after a new test SMS; what went out stays as it was."
+    )).wait_for()
+    assert page.url.endswith("/campaigns/halted/settings/")
+    assert len(list((sandbox / "backups").iterdir())) == 1

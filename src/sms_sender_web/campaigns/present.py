@@ -11,8 +11,8 @@ from ..dashboard.templatetags.fa import fa_digits, fa_number, jalali
 from ..jobs.models import Job
 from ..privacy import mask_phone
 from .terms import (
-    JOB_RESULTS, NOTES, SCHEDULED_FOR, SETTING_NAMES, TOP_ERROR, TOP_ERROR_NO_CODE, WITHDRAWN,
-    code_meaning, stop_reason,
+    CHECKLIST, CHECK_PROBLEMS, JOB_RESULTS, NOTES, SCHEDULED_FOR, SETTING_NAMES, TOP_ERROR,
+    TOP_ERROR_NO_CODE, WITHDRAWN, code_meaning, stop_reason,
 )
 
 _CODE = re.compile(r"^\[(\d+)\]")
@@ -121,3 +121,58 @@ def send_summary(job: Job | None) -> SendSummary | None:
         cancelled=r.get("cancelled", 0), cost=r.get("cost", 0),
         elapsed=_elapsed(r.get("elapsed_sec")), errors=top_errors(r),
     )
+
+
+# ---------- the check, as a checklist (plan 05, P2) ----------
+
+@dataclass(frozen=True)
+class ChecklistItem:
+    state: str          # "ok", "warn" (doesn't stop a test SMS) or "fail"
+    label: str
+    note: str = ""
+    value: str = ""     # what the line is about: a name, an address
+    ltr: bool = False   # the value is an identifier or an address
+
+
+def checklist(check, message, settings: dict | None, segment) -> list[ChecklistItem]:
+    """The check's findings, one line each: the list, the template, its
+    tokens, the link, the window and who's left to send to."""
+    s = settings or {}
+    problems = set(check.problems)
+    items = []
+    if "segment_missing" in problems:
+        items.append(ChecklistItem("fail", str(CHECKLIST["list"]), str(CHECK_PROBLEMS["segment_missing"])))
+    elif "columns_missing" in problems:
+        items.append(ChecklistItem("fail", str(CHECKLIST["list"]), str(CHECK_PROBLEMS["columns_missing"]),
+                                   value=segment.name if segment else ""))
+    else:
+        items.append(ChecklistItem("ok", str(CHECKLIST["list"]), say(CHECKLIST["valid"], {"n": check.valid}),
+                                   value=segment.name if segment else ""))
+    if "no_template" in problems:
+        items.append(ChecklistItem("fail", str(CHECKLIST["template"]), str(CHECK_PROBLEMS["no_template"])))
+    else:
+        known = message is not None and message.known
+        items.append(ChecklistItem(
+            "ok" if known else "warn", str(CHECKLIST["template"]),
+            str(CHECKLIST["text_known" if known else "text_unknown"]), value=s.get("template", ""), ltr=True,
+        ))
+        if known and message.problems:
+            items.append(ChecklistItem("fail", str(CHECKLIST["tokens"]), " ".join(message.problems)))
+        elif known:
+            items.append(ChecklistItem("ok", str(CHECKLIST["tokens"]), str(CHECKLIST["tokens_filled"])))
+    links = s.get("links") or {}
+    if links.get("token"):
+        bad = "bad_destination" in problems
+        items.append(ChecklistItem(
+            "fail" if bad else "ok", str(CHECKLIST["link"]),
+            str(CHECK_PROBLEMS["bad_destination"]) if bad else "", value=links.get("destination", ""), ltr=True,
+        ))
+    items.append(ChecklistItem(
+        "ok" if check.window_open else "warn", str(CHECKLIST["window"]),
+        str(CHECKLIST["window_open" if check.window_open else "window_closed"]),
+    ))
+    if "nobody_to_send" in problems:
+        items.append(ChecklistItem("fail", str(CHECKLIST["recipients"]), str(CHECK_PROBLEMS["nobody_to_send"])))
+    elif "segment_missing" not in problems and "columns_missing" not in problems:
+        items.append(ChecklistItem("ok", str(CHECKLIST["recipients"]), say(CHECKLIST["to_send"], {"n": check.to_send})))
+    return items

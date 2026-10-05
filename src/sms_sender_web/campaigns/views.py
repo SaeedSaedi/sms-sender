@@ -3,6 +3,8 @@ its approval, then sending with live progress and pause / resume / cancel.
 Every action is a job for the worker, and every one is in the activity log."""
 from __future__ import annotations
 
+import copy
+import logging
 import math
 
 from django.contrib import messages
@@ -18,6 +20,7 @@ from sms_sender.rate import parse_rate
 from sms_sender.sender import TOKEN_MAX_SPACES
 
 from ..accounts.decorators import forbidden, requires
+from ..backup import BackupError
 from ..accounts.models import test_phone_of
 from ..accounts.roles import can
 from ..audit.record import record
@@ -29,15 +32,19 @@ from ..jobs.engine import campaign_db
 from ..jobs.models import Campaign, Job
 from ..segments.models import Segment
 from .checks import check_campaign
-from .forms import SCHEDULE_ERRORS, TOKENS, NewCampaignForm, SettingsForm, combined, parse_when
-from .lifecycle import READY, lifecycle
+from .forms import (
+    SCHEDULE_ERRORS, TOKENS, DuplicateForm, NewCampaignForm, SettingsForm, combined, free_slug, parse_when,
+)
+from .lifecycle import CANCELLED, COMPLETED, PAUSED, READY, STOPPED, lifecycle
 from .models import MessageTemplate
-from .present import notes, result_line, say, send_summary
+from .present import checklist, notes, result_line, say, send_summary
 from .preview import ROW_CHOICES, preview_of, recipients
 from .terms import (
-    CHECK_PROBLEMS, CONFLICTS, FOLLOWUPS, INVALID_ROWS, LINKS_AT_SEND, NEXT_STEP, STAGES, STEPS,
-    stop_reason,
+    CHECK_PROBLEMS, CHECK_STATES, CONFLICTS, COST_EACH, COST_TOTAL, FOLLOWUPS, INVALID_ROWS, LINKS_AT_SEND,
+    NEXT_STEP, STAGES, STEPS, stop_reason,
 )
+
+logger = logging.getLogger(__name__)
 
 # Who may do what (spec 4.12).
 _ACTIONS = {
@@ -79,9 +86,92 @@ def campaign_new(request):
 
 @requires("edit_campaigns")
 @require_http_methods(["GET", "POST"])
+def campaign_duplicate(request, slug: str):
+    """A new campaign with this one's settings, under its own name."""
+    source = get_object_or_404(Campaign, slug=slug)
+    form = DuplicateForm(request.POST or None, initial={
+        "name": _("%(name)s (copy)") % {"name": source.name}, "slug": free_slug(source.slug),
+    })
+    if request.method == "POST" and form.is_valid():
+        campaign = Campaign.objects.create(
+            slug=form.cleaned_data["slug"], name=form.cleaned_data["name"], created_by=request.user,
+            settings=copy.deepcopy(source.settings),
+        )
+        record("campaign_duplicated", request=request, campaign=campaign.slug, source=source.slug)
+        messages.success(request, _("Copied from “%(name)s”. Check its settings, then the list and a test SMS.")
+                         % {"name": source.name})
+        return redirect("campaign_settings", slug=campaign.slug)
+    return render(request, "campaigns/duplicate.html", {"form": form, "source": source})
+
+
+def _other_segments(campaign: Campaign) -> tuple[list[Segment], list[Segment]]:
+    """Where this message can go next: ready segments other than the current
+    one, (with every column its tokens use, without)."""
+    s = campaign.settings or {}
+    needed = set((s.get("token_columns") or {}).values())
+    usable, lacking = [], []
+    for segment in Segment.objects.filter(status=Segment.Status.READY).exclude(slug=s.get("segment")).order_by("name"):
+        (usable if needed <= set(segment.token_columns or []) else lacking).append(segment)
+    return usable, lacking
+
+
+@requires("edit_campaigns")
+@require_POST
+def campaign_segment(request, slug: str):
+    """Another round: the same message to another segment (the CLI's
+    `send --campaign` with another `--input`). The approval covers the list,
+    so a new test SMS comes first, and anyone this campaign already sent to
+    is skipped."""
+    campaign = get_object_or_404(Campaign, slug=slug)
+    if Job.objects.filter(campaign=campaign, kind=Job.Kind.SEND, state__in=services.ACTIVE).exists():
+        messages.error(request, CONFLICTS["send_on_its_way"])
+        return redirect("campaign_detail", slug=slug)
+    usable, _lacking = _other_segments(campaign)
+    segment = next((seg for seg in usable if seg.slug == request.POST.get("segment")), None)
+    if segment is None:
+        raise Http404
+    before = campaign.settings.get("segment")
+    campaign.settings.update(
+        segment=segment.slug, input=str(segment.path), user_id_column=segment.user_id_column or None,
+    )
+    campaign.save()
+    record("segment_switched", request=request, campaign=slug, before=before, after=segment.slug)
+    messages.success(request, _("The campaign now sends to “%(segment)s”. Check the list, then send a new test SMS.")
+                     % {"segment": segment.name})
+    return redirect("campaign_detail", slug=slug)
+
+
+@requires("change_sent_message")
+@require_POST
+def campaign_unlock(request, slug: str):
+    """An admin continues with a changed message (the CLI's
+    --allow-settings-change): the short name typed to confirm, a backup
+    first, and an activity-log entry."""
+    campaign = get_object_or_404(Campaign, slug=slug)
+    if request.POST.get("confirm", "").strip() != campaign.slug:
+        messages.error(request, _("To confirm, type the campaign's short name exactly as shown."))
+        return redirect("campaign_detail", slug=slug)
+    try:
+        backup, superseded = services.unlock_message(campaign, request.user)
+    except services.JobConflict as e:
+        messages.error(request, CONFLICTS.get(e.code, CONFLICTS["busy"]))
+        return redirect("campaign_detail", slug=slug)
+    except (BackupError, OSError):
+        logger.exception("unlock_backup_failed", extra={"campaign": slug})
+        messages.error(request, _("The backup failed, so nothing changed. The details are in the system log."))
+        return redirect("campaign_detail", slug=slug)
+    record("message_unlocked", request=request, campaign=slug, backup=backup, superseded=superseded)
+    messages.success(request, _(
+        "Backed up. The settings are open for you: what you save goes to those still waiting, after a new test SMS."
+    ))
+    return redirect("campaign_settings", slug=slug)
+
+
+@requires("edit_campaigns")
+@require_http_methods(["GET", "POST"])
 def campaign_settings(request, slug: str):
     campaign = get_object_or_404(Campaign, slug=slug)
-    locked = services.settings_locked(campaign)
+    locked = services.settings_locked(campaign, request.user)
     if locked:
         messages.error(request, _locked_message(locked))
         return redirect("campaign_detail", slug=slug)
@@ -108,12 +198,14 @@ def campaign_settings(request, slug: str):
         if request.method == "POST" else initial["value_map_rows"]
     )
     return render(request, "campaigns/settings.html", {
+        # An admin unlocked a campaign that has sent: say what saving means.
+        "changing_sent_message": services.may_have_sent(campaign),
         "campaign": campaign, "form": form, "columns": columns, "ui": ui,
         "value_map_rows": rows + [{"column": "", "source": "", "target": ""}],
         "segments": Segment.objects.filter(status=Segment.Status.READY),
         "templates": MessageTemplate.objects.all(),
         "advanced": can(request.user, "manage_settings"),
-        "preview": preview_of(campaign.settings, segment),
+        **_with_cost("preview", preview_of(campaign.settings, segment)),
         "tokens": [
             {"name": name, "source": form[f"{name}_source"], "value": form[f"{name}_value"],
              "column": form[f"{name}_column"], "max_spaces": TOKEN_MAX_SPACES[name]}
@@ -141,12 +233,14 @@ def settings_preview(request, slug: str):
         "links": {"token": d.get("link_token"), "format": d.get("link_format") or "url"}
         if d.get("link_token") else None,
     }
-    return render(request, "campaigns/_preview.html", {"preview": preview_of(settings, segment)})
+    return render(request, "campaigns/_preview.html", _with_cost("preview", preview_of(settings, segment)))
 
 
 def _locked_message(why: str) -> str:
-    if why == "waiting":
+    if why == "scheduled":
         return _("A send is scheduled for this campaign. To change its settings, cancel the schedule first.")
+    if why == "waiting":
+        return _("A send is on its way, so the settings can't change until it ends.")
     return _("This campaign has started sending, so its settings can't change. For a different message, make a new campaign.")
 
 
@@ -170,6 +264,18 @@ def _links_progress(job: Job | None) -> dict | None:
         },
         "left": left,
     }
+
+
+def _with_cost(name: str, preview, recipients: int = 0) -> dict:
+    """The preview under `name`, and `<name>_cost`: about what one SMS costs,
+    and for `recipients` when known (an estimate from the latest test SMS;
+    the test gives the real figure)."""
+    line = ""
+    if preview.cost and recipients:
+        line = say(COST_TOTAL, {"cost": preview.cost, "total": preview.cost * recipients, "n": recipients})
+    elif preview.cost:
+        line = say(COST_EACH, {"cost": preview.cost})
+    return {name: preview, f"{name}_cost": line}
 
 
 def _links_note(campaign: Campaign, waiting: int) -> str:
@@ -223,6 +329,13 @@ def _live(request, campaign: Campaign, **preview) -> dict:
     ready = {}
     if life.stage == READY:  # the poll renders this step too, so it's built here
         ready = {**_check_context(campaign), **_preview_context(request, campaign, **preview)}
+        ready.update(_with_cost("message", ready["message"], ready["check"].to_send))
+        ready["checklist"] = checklist(
+            ready["check"], ready["message"], campaign.settings,
+            Segment.objects.filter(slug=campaign.settings.get("segment")).first(),
+        )
+    elif life.stage in (COMPLETED, CANCELLED) and can(request.user, "edit_campaigns"):
+        ready["other_segments"], ready["lacking_segments"] = _other_segments(campaign)
     return {
         **ready,
         "cancel_confirm": _(
@@ -256,7 +369,10 @@ def _live(request, campaign: Campaign, **preview) -> dict:
         "summary": summary,
         "status_order": STATUS_ORDER,
         "test_phone": test_phone_of(request.user),
-        "settings_locked": bool(services.settings_locked(campaign)),
+        "settings_locked": bool(services.settings_locked(campaign, request.user)),
+        "can_unlock": life.stage in (PAUSED, STOPPED, COMPLETED, CANCELLED)
+        and can(request.user, "change_sent_message") and services.can_unlock(campaign),
+        "message_unlocked": services.message_unlocked(campaign),
         "life": life,
         "stage_label": STAGES[life.stage],
         "stage_template": f"campaigns/stage/_{life.stage}.html",
@@ -279,6 +395,7 @@ def _check_context(campaign: Campaign) -> dict:
         "check": result,
         "check_problems": [CHECK_PROBLEMS[key] for key in result.problems],
         "check_invalid": [(INVALID_ROWS.get(key, key), n) for key, n in sorted(result.invalid.items())],
+        "check_states": CHECK_STATES,
     }
 
 
@@ -288,7 +405,7 @@ def _preview_context(request, campaign: Campaign, *, query: str = "", rows: int 
     nothing is sent, and no link is made."""
     s = campaign.settings
     segment = Segment.objects.filter(slug=s.get("segment")).first()
-    context = {"message": preview_of(s, segment)}
+    context = _with_cost("message", preview_of(s, segment))
     if can(request.user, "run_campaigns"):
         context.update(
             row_choices=ROW_CHOICES, rows=rows, preview_query=query,
@@ -374,7 +491,8 @@ def campaign_action(request, slug: str, action: str):
     campaign = get_object_or_404(Campaign, slug=slug)
     try:
         if action == "test":
-            services.request_test(campaign, request.user)
+            segment = Segment.objects.filter(slug=campaign.settings.get("segment")).first()
+            services.request_test(campaign, request.user, parts=preview_of(campaign.settings, segment).parts or None)
             record("test_requested", request=request, campaign=slug)
             messages.success(request, _("The test SMS is queued. Its result appears here."))
         elif action in ("approve", "reject"):
