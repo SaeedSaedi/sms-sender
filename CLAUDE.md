@@ -313,6 +313,11 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
     - replace the file (`segment_replace`).
   - **Replacing** is refused once any campaign DB may have sent from it (`StateStore.segment_may_have_sent`), or while a send that uses it is on its way. The new file goes through the columns step again. `Segment.version` goes up, and `services.settings_hash` includes it once it's above 0, so campaigns using the segment need a new test SMS and a queued send is withdrawn.
   - The upload → columns → summary pages share a stepper (`segments/_steps.html`).
+- **Operations (`system/operations.py`, admins):**
+  - `/system/backups/`: back up now (`keep=None`), list from the manifests, check one (`verify`). Restoring stays on the server, with both services stopped.
+  - Purge (`campaign_purge`, `delete_campaign_data`, the CLI's `purge`): the typed short name, refused while any of the campaign's jobs is on its way, a backup first, then the DB files deleted under the run lock, and the `Campaign` with them.
+  - Adopt (`campaign_adopt`, operators, from the home page): a `Campaign` for a DB the CLI made, its settings from the DB's bound ones. With no segment it's a draft. As it has sent, its message is fixed, so the draft offers the next segment like another round.
+  - The status page shows the version, the queue and the last backup.
 - **System settings (`system/`, `/system/`, `manage_settings`):** one `SystemSettings` row. For now it holds the frequency cap, which `Engine.runner` passes to every run and `checks.check_campaign` counts (`capped`, `cap`). Changes are recorded as `system_settings_changed`.
 - **Suppression list (`suppression/`):**
   - A `Suppression` row is a canonical phone, either global (`campaign` null) or for one campaign. Two partial unique constraints keep each number once per scope, because NULLs never collide in a plain UNIQUE.

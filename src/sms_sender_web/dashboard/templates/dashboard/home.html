@@ -70,7 +70,10 @@
           </ul>
         </td>
         <td data-label="{% translate "Last run" %}">{% if c.last_run_at %}{{ c.last_run_at|jalali }}{% else %}—{% endif %}</td>
-        <td>{% if c.counts %}<a href="{% url 'report' c.slug %}">{% translate "Report" %}</a>{% endif %}</td>
+        <td>{% if c.counts %}<a href="{% url 'report' c.slug %}">{% translate "Report" %}</a>{% endif %}
+          {% if not row.campaign and user|can:"edit_campaigns" %}
+            <form method="post" action="{% url 'campaign_adopt' c.slug %}" class="inline">{% csrf_token %}<button type="submit" class="small secondary">{% translate "Bring to the dashboard" %}</button></form>
+          {% endif %}</td>
       </tr>
     {% endwith %}{% endfor %}
     </tbody>

@@ -518,7 +518,13 @@ internal, multi-user tool built with Django and HTMX. So far it has:
   no phone numbers), with tokens an admin issues on «توکن‌های API»; every
   call is recorded;
 - a status page («وضعیت سرویس‌ها»): Kavenegar credit and account settings,
-  the short-link service, and whether the worker is running.
+  the short-link service, whether the worker is running, the job queue, the
+  version and the last backup;
+- for admins: backups made and checked from the dashboard (restoring stays
+  on the server), and deleting a campaign's records after a typed
+  confirmation and a backup (the CLI's `purge`);
+- campaigns the CLI made can be brought to the dashboard: their follow-ups
+  and reports at once, sending again after a segment and a test SMS.
 
 It works on phones (the menu moves into a drawer, tables become cards), by
 keyboard and with screen readers. It follows the system's dark mode.

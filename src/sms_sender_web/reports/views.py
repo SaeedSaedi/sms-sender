@@ -51,6 +51,7 @@ from ..jobs.models import Campaign, Job
 from ..jobs.sandbox import read_outbox
 from ..jobs.worker import last_seen, worker_alive
 from ..segments import files as segment_files
+from ..system import operations
 from ..segments.audience import make_audience, suggest_slug
 from ..segments.forms import UPLOAD_ERRORS, clean_slug
 from ..segments.models import Segment
@@ -466,7 +467,8 @@ def status(request):
         "shlink": shlink,
         "worker_alive": worker_alive(),
         "worker_seen": last_seen(),
-        "queued": Job.objects.filter(state=Job.State.QUEUED).count(),
-        "running": Job.objects.filter(state=Job.State.RUNNING).count(),
+        "queue": operations.queue(),
+        "version": operations.version(),
+        "last_backup": operations.last_backup(),
         "checked_at": dj_timezone.now(),
     })

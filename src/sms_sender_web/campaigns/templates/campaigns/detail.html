@@ -19,4 +19,16 @@
   </div>
 </header>
 {% include "campaigns/_live.html" %}
+{% if can_purge %}
+<details class="subsection danger-zone" id="purge">
+  <summary>{% icon "trash-2" %}{% translate "Delete the campaign and its records" %}</summary>
+  <p>{% translate "Everything it recorded goes, after a backup: who was sent, delivery, clicks, links. Its numbers become new to every later campaign, so a new send can reach them again." %}</p>
+  <form method="post" action="{% url 'campaign_purge' campaign.slug %}" id="purge-form">
+    {% csrf_token %}
+    <label for="id_confirm_purge">{% translate "To delete it, type the campaign's short name:" %} <code dir="ltr">{{ campaign.slug }}</code></label>
+    <input id="id_confirm_purge" name="confirm" type="text" dir="ltr" autocomplete="off" spellcheck="false" required pattern="{{ campaign.slug }}">
+    <div class="form-actions"><button type="submit" class="danger" data-cli="purge">{% icon "trash-2" %}{% translate "Back up and delete" %}</button></div>
+  </form>
+</details>
+{% endif %}
 {% endblock %}

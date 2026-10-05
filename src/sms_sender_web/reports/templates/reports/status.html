@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% load i18n fa ui %}
+{% extends "base.html" %}{% load roles i18n fa ui %}
 {% block title %}{% translate "Service status" %} · {% translate "SMS campaigns" %}{% endblock %}
 {% block content %}
 <header class="page-header">
@@ -64,6 +64,19 @@
   <h2>{% icon "settings" %}{% translate "Worker" %}</h2>
   {% if worker_alive %}<p class="ok">{% icon "circle-check" %} {% translate "Running" %} · {% translate "last seen" %} {{ worker_seen|jalali:"%H:%M:%S" }}</p>
   {% else %}<div class="callout callout-error">{% icon "circle-alert" %}<p>{% translate "Not running: jobs wait until it starts." %}{% if worker_seen %} {% translate "Last seen" %}: {{ worker_seen|jalali }}{% endif %}</p></div>{% endif %}
-  <p class="muted">{% translate "Jobs waiting" %}: <span class="num">{{ queued|fa_number }}</span> · {% translate "running" %}: <span class="num">{{ running|fa_number }}</span></p>
+  <dl class="figures">
+    <div><dt>{% translate "Jobs waiting" %}</dt><dd class="num">{{ queue.queued|fa_number }}</dd></div>
+    <div><dt>{% translate "Running" %}</dt><dd class="num">{{ queue.running|fa_number }}</dd></div>
+    <div><dt>{% translate "Paused" %}</dt><dd class="num">{{ queue.paused|fa_number }}</dd></div>
+  </dl>
+  {% if queue.oldest %}<p class="hint">{% translate "The oldest waiting since" %} {{ queue.oldest|jalali }}</p>{% endif %}
+</section>
+
+<section class="card step">
+  <h2>{% icon "info" %}{% translate "This installation" %}</h2>
+  <dl class="pairs">
+    <dt>{% translate "Version" %}</dt><dd><bdi dir="ltr">{{ version }}</bdi></dd>
+    <dt>{% translate "Last backup" %}</dt><dd>{% if last_backup %}{{ last_backup|jalali }}{% else %}{% translate "None yet" %}{% endif %}{% if user|can:"manage_settings" %} · <a href="{% url 'backups' %}">{% translate "Backups" %}</a>{% endif %}</dd>
+  </dl>
 </section>
 {% endblock %}
