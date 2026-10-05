@@ -12,14 +12,18 @@ apart as "missing user ID" (decided 2026-10-04).
 """
 from __future__ import annotations
 
+import logging
 import time
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Iterable, Iterator, Protocol
 
 from .delivery import STATUS_NAMES
-from .shortlink import LinkVisits
+from .shortlink import LinkVisits, ShlinkError
 from .state import StateStore
+
+logger = logging.getLogger(__name__)
 
 MISSING_USER_ID = "missing user ID"
 
@@ -27,12 +31,15 @@ MISSING_USER_ID = "missing user ID"
 class VisitSource(Protocol):
     def visits_by_tag(self, tag: str) -> Iterable[LinkVisits]: ...
 
+    def visit_times(self, tag: str, *, since: datetime | None = None) -> Iterable[datetime]: ...
+
 
 @dataclass(frozen=True)
 class ClickSync:
     links: int    # the campaign's links Shlink reported
     updated: int  # of ours, with a count stored
     clicks: int   # non-bot visits on them
+    hours: int = 0  # visits counted into hours afresh (clicks over time)
 
 
 @dataclass(frozen=True)
@@ -49,9 +56,29 @@ def sync_clicks(
     state: StateStore, source: VisitSource, campaign: str,
     now: Callable[[], float] = time.time,
 ) -> ClickSync:
-    counts = {v.short_code: v.non_bots for v in source.visits_by_tag(f"campaign-{campaign}")}
+    tag = f"campaign-{campaign}"
+    counts = {v.short_code: v.non_bots for v in source.visits_by_tag(tag)}
     updated = state.record_clicks(counts, now())
-    return ClickSync(links=len(counts), updated=updated, clicks=sum(counts.values()))
+    return ClickSync(links=len(counts), updated=updated, clicks=sum(counts.values()),
+                     hours=_sync_hours(state, source, tag))
+
+
+def _sync_hours(state: StateStore, source: VisitSource, tag: str) -> int:
+    """Clicks per hour, for clicks over time. Visits are read again from the
+    start of the latest stored hour, and every hour from there is counted
+    afresh, so a repeated sync never counts a visit twice. If Shlink can't
+    say when (an old version, a blip), the counts above still stand."""
+    start = state.latest_click_hour()
+    since = datetime.fromtimestamp(start, tz=timezone.utc) if start is not None else None
+    hours: Counter[int] = Counter()
+    try:
+        for when in source.visit_times(tag, since=since):
+            hours[int(when.timestamp()) // 3600 * 3600] += 1
+    except ShlinkError as e:
+        logger.warning("click_hours_unavailable", extra={"tag": tag, "detail": str(e)})
+        return 0
+    state.replace_click_hours(start or 0, hours)
+    return sum(n for h, n in hours.items() if h >= (start or 0))
 
 
 def click_report(state: StateStore) -> tuple[list[SegmentClicks], int]:

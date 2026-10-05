@@ -207,7 +207,9 @@ Destinations must be https on `SMS_SENDER_LINK_DOMAINS` (subdomains included), m
 
 ### Clicks ([clicks.py](src/sms_sender/clicks.py))
 
-`sms-sender clicks` polls Shlink (`visits_by_tag("campaign-<slug>")`; Shlink has had no webhooks since 4.0) and stores each link's `nonBots` count on its row. Updates go by an indexed `short_code`, in chunks of 500: `clicks` doesn't take the run lock, so it must never hold the write lock long enough to stall a send. Reports go per segment and join on `recipients.link_key`. Shared segment/campaign links count for the segment or campaign, never for a person. `export-attribution` (ref, user ID / "missing user ID", segment, link, ISO-8601 UTC time, delivery, clicks) has **no phone numbers**: it's for the backend. `export-clickers` has phones. Both write to `data/exports/` by default.
+`sms-sender clicks` polls Shlink (`visits_by_tag("campaign-<slug>")`; Shlink has had no webhooks since 4.0) and stores each link's `nonBots` count on its row. It also keeps clicks per hour (`click_hours`, schema v7) from `ShlinkClient.visit_times` (`/tags/{tag}/visits`, bots excluded):
+- it reads again from the start of the latest stored hour and counts every hour from there afresh (`replace_click_hours`), so a repeated sync never counts a visit twice;
+- if Shlink can't say when, the counts stand and the hours wait. Updates go by an indexed `short_code`, in chunks of 500: `clicks` doesn't take the run lock, so it must never hold the write lock long enough to stall a send. Reports go per segment and join on `recipients.link_key`. Shared segment/campaign links count for the segment or campaign, never for a person. `export-attribution` (ref, user ID / "missing user ID", segment, link, ISO-8601 UTC time, delivery, clicks) has **no phone numbers**: it's for the backend. `export-clickers` has phones. Both write to `data/exports/` by default.
 
 ### Error taxonomy (split across `sender.py` + `classifier.py`)
 
@@ -345,6 +347,11 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 - **Reports (`reports/`, read only):**
   - `/reports/<slug>/` reads any campaign DB in `data/db/`, the CLI's too, and never creates one.
   - It uses the CLI's own queries: `click_report`, `display_counts`, `delivery_counts`, `total_cost`, and `recipients_page` (by rowid, so no number appears in a URL).
+  - **Charts** (`reports/charts.py`, server-drawn, no script):
+    - the funnel: accepted → delivered → clicked (clicked only with links of one's own), as `<progress>` bars;
+    - clicks over time: SVG bars, per hour up to `HOURLY_UP_TO` (72), else per day (Tehran). Time runs right to left. Coordinates are formatted in Python, so no locale's decimal mark reaches an SVG attribute. A table holds the same numbers.
+
+    `/analytics/` puts every campaign DB side by side (the CLI's too): accepted, delivered, clicked, clicks, cost, cost per click.
   - **"Did anyone get it twice?"** (`check-sends`) runs `sendcheck.check_sends` on the report, for viewers too: twice, maybe, or OK, with masked numbers. Calls from before schema 2 are counted apart.
   - **The recipients list** filters with `state.RecipientFilter`, shared by `recipients_page`, `recipient_total` and `iter_recipients`. The filters:
     - status, as `display_counts` names it (`invalid` included);
@@ -366,6 +373,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - `Engine.sender()`, `Engine.link_client()` and `Engine.runner()` return `SandboxKavenegar` / `SandboxShlink`. `make_runner(make_sender=SandboxKavenegar)` builds the simulated sender, so no API key is read and no request is made. It reports each call to `on_attempt` like the real one (accepted / rejected / unknown), so `check-sends` works on sandbox campaigns.
   - `settings.DATA_DIR` becomes `<data>/sandbox`, the app DB included. A worker not in sandbox mode reads another DB and can't see a sandbox job.
   - The simulation is deterministic, so tests can rely on it:
+    - each link's visits come at fixed moments within 36 hours of its making (`visit_times`), as time passes;
     - numbers ending in `000` are rejected (411);
     - `999` are accepted but raise `UncertainSendError` (the reply is lost);
     - message IDs ending in 7 are undelivered;

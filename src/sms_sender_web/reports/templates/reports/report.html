@@ -88,6 +88,42 @@
   <p class="hint">{% translate "Files use English column names and Latin digits, for other systems. Every download is recorded in the activity log." %}</p>
 </section>
 
+{% if funnel %}
+<section class="card step" aria-labelledby="funnel-heading" id="funnel">
+  <h2 id="funnel-heading">{% icon "chart-column" %}{% translate "From accepted to clicked" %}</h2>
+  <ol class="funnel">
+    {% for step in funnel %}
+      <li>
+        <span class="funnel-label">{{ step.label }}</span>
+        <progress max="100" value="{{ step.share }}" aria-hidden="true"></progress>
+        <span class="num funnel-value">{{ step.n|fa_number }} ({{ step.share|fa_number }}٪)</span>
+      </li>
+    {% endfor %}
+  </ol>
+  <p class="hint">{% translate "Shares are of the accepted SMS. Delivery counts as far as it has been checked (Kavenegar answers for 48 hours); clicks only where people had links of their own." %}</p>
+</section>
+{% endif %}
+
+{% if chart %}
+<section class="card step" aria-labelledby="chart-heading" id="clicks-chart">
+  <h2 id="chart-heading">{% icon "chart-column" %}{% translate "Clicks over time" %}</h2>
+  <svg class="chart" viewBox="0 0 600 160" preserveAspectRatio="none" role="img" aria-labelledby="chart-heading chart-summary">
+    {% for bar in chart.bars %}<rect x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.w }}" height="{{ bar.h }}"><title>{{ bar.label|ltr }}: {{ bar.n|fa_number }}</title></rect>{% endfor %}
+  </svg>
+  <div class="chart-axis" aria-hidden="true"><span class="num">{{ chart.rows.0.0|ltr }}</span><span class="num">{{ chart.rows|last|first|ltr }}</span></div>
+  <p class="hint" id="chart-summary">{{ chart_summary }}</p>
+  <details class="subsection">
+    <summary>{% translate "As a table" %}</summary>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="{% translate "Clicks over time" %}">
+      <table>
+        <thead><tr><th scope="col">{% if chart.by_hour %}{% translate "Hour (Tehran)" %}{% else %}{% translate "Day" %}{% endif %}</th><th scope="col">{% translate "Clicks" %}</th></tr></thead>
+        <tbody>{% for label, n in chart.rows %}<tr><td class="num">{{ label|ltr }}</td><td class="num">{{ n|fa_number }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  </details>
+</section>
+{% endif %}
+
 {% if sends.sms or sends.maybe_twice or sends.unrecorded %}
 <section class="card step" data-cli="check-sends" aria-labelledby="twice-heading" id="sends-check">
   <h2 id="twice-heading">{% icon "shield-check" %}{% translate "Did anyone get it twice?" %}</h2>

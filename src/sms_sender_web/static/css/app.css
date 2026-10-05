@@ -895,6 +895,18 @@ details.advanced { margin-block-end: var(--s-5); }
 table.value-maps td { padding: var(--s-2); }
 table.value-maps select, table.value-maps input { min-inline-size: 7rem; }
 
+/* ---------- the report's charts (plan 05, P3) ---------- */
+
+.funnel { display: grid; gap: var(--s-3); margin: 0 0 var(--s-3); padding: 0; list-style: none; }
+.funnel li { display: grid; grid-template-columns: 8rem minmax(0, 1fr) auto; gap: var(--s-3); align-items: center; }
+.funnel progress { margin: 0; }
+.funnel-value { white-space: nowrap; }
+@media (max-width: 30rem) { .funnel li { grid-template-columns: minmax(0, 1fr) auto; } .funnel progress { grid-column: 1 / -1; grid-row: 2; } }
+.chart { display: block; inline-size: 100%; block-size: 10rem; margin-block-end: var(--s-2); }
+.chart rect { fill: var(--primary); }
+.chart-axis { display: flex; justify-content: space-between; margin-block-end: var(--s-2); color: var(--muted); font-size: var(--fs-xs); }
+.chart rect:hover { fill: var(--primary-hover, var(--primary)); opacity: .8; }
+
 /* ---------- the recipients list's filters (plan 05, P3) ---------- */
 
 form.filters { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: flex-end; margin-block-end: var(--s-3); }

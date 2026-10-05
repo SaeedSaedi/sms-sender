@@ -27,6 +27,7 @@ import secrets
 import string
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -55,6 +56,7 @@ _message_ids = itertools.count(int(time.time() * 1000))
 _lock = threading.Lock()
 # Links made in this process, by tag, so click updates have codes to count.
 _codes_by_tag: dict[str, set[str]] = {}
+_created: dict[str, float] = {}  # code → when the link was made (for its visits' times)
 
 
 def outbox_path() -> Path:
@@ -145,6 +147,7 @@ class SandboxShlink:
     def create(self, *, long_url: str, title: str, tags: list[str], valid_until: str) -> ShortLink:
         code = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(6))
         with _lock:
+            _created[code] = time.time()
             for tag in tags:
                 _codes_by_tag.setdefault(tag, set()).add(code)
         return ShortLink(short_code=code, short_url=f"{BASE_URL}/{code}", long_url=long_url,
@@ -161,6 +164,23 @@ class SandboxShlink:
             clicks = hashlib.sha256(code.encode()).digest()[0] % 4
             visits.append(LinkVisits(short_code=code, total=clicks + 1, non_bots=clicks))
         return visits
+
+    def visit_times(self, tag: str, *, since: datetime | None = None) -> list[datetime]:
+        """The same clicks as visits_by_tag, each at a fixed moment within 36
+        hours of its link being made, and only once that moment has come."""
+        with _lock:
+            codes = sorted((code, _created.get(code, 0.0)) for code in _codes_by_tag.get(tag, ()))
+        now = datetime.now(timezone.utc)
+        out = []
+        for code, created in codes:
+            digest = hashlib.sha256(code.encode()).digest()
+            for i in range(digest[0] % 4):
+                when = datetime.fromtimestamp(created, tz=timezone.utc) + timedelta(
+                    hours=digest[1 + i] % 36, minutes=digest[5 + i] % 60,
+                )
+                if when <= now and (since is None or when >= since):
+                    out.append(when)
+        return sorted(out)
 
     def health(self) -> str:
         return "sandbox"

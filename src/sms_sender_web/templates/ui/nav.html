@@ -4,6 +4,7 @@
     <li><a href="{% url 'home' %}"{% if nav_section == "campaigns" %} aria-current="true"{% endif %}>{% icon "megaphone" %}<span>{% translate "Campaigns" %}</span></a></li>
     <li><a href="{% url 'segment_list' %}"{% if nav_section == "segments" %} aria-current="true"{% endif %}>{% icon "users" %}<span>{% translate "Segments" %}</span></a></li>
     <li><a href="{% url 'template_list' %}"{% if nav_section == "templates" %} aria-current="true"{% endif %}>{% icon "file-text" %}<span>{% translate "Templates" %}</span></a></li>
+    <li><a href="{% url 'analytics' %}"{% if nav_section == "analytics" %} aria-current="true"{% endif %}>{% icon "chart-column" %}<span>{% translate "Analytics" %}</span></a></li>
   {% endif %}
   {% if user|can:"add_suppression" %}
     <li><a href="{% url 'suppression' %}"{% if nav_section == "suppression" %} aria-current="true"{% endif %}>{% icon "ban" %}<span>{% translate "Suppression list" %}</span></a></li>

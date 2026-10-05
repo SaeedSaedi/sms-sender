@@ -2225,3 +2225,45 @@ msgstr "{status}: {count}"
 
 msgid "To send each of them a second SMS, type the campaign's short name:"
 msgstr "برای ارسال پیامک دوم به هر یک از آن‌ها، نام کوتاه کمپین را بنویسید:"
+
+msgid "Analytics"
+msgstr "تحلیل‌ها"
+
+msgid "As a table"
+msgstr "به صورت جدول"
+
+msgid "Clicks over time"
+msgstr "کلیک‌ها در طول زمان"
+
+msgid "Cost per click"
+msgstr "هزینه هر کلیک"
+
+msgid "Costs in rials. “Clicked” counts people with links of their own; clicks on shared links count in “Clicks”."
+msgstr "هزینه‌ها به ریال است. «کلیک‌کرده» افرادی را می‌شمارد که لینک مخصوص خود داشتند؛ کلیک روی لینک‌های مشترک در «کلیک‌ها» شمرده می‌شود."
+
+msgid "Day"
+msgstr "روز"
+
+msgid "Every campaign side by side: what was accepted, delivered and clicked, and what it cost."
+msgstr "همه کمپین‌ها کنار هم: چه تعداد پذیرفته، تحویل و کلیک شد و هزینه آن چقدر بود."
+
+msgid "From accepted to clicked"
+msgstr "از پذیرش تا کلیک"
+
+msgid "Hour (Tehran)"
+msgstr "ساعت (به وقت تهران)"
+
+msgid "Once a campaign sends, its numbers appear here."
+msgstr "وقتی کمپینی ارسال کند، ارقام آن اینجا نمایش داده می‌شود."
+
+msgid "Shares are of the accepted SMS. Delivery counts as far as it has been checked (Kavenegar answers for 48 hours); clicks only where people had links of their own."
+msgstr "درصدها از پیامک‌های پذیرفته‌شده است. تحویل تا جایی شمرده می‌شود که بررسی شده باشد (کاوه‌نگار تا ۴۸ ساعت پاسخ می‌دهد)؛ کلیک فقط برای کسانی که لینک مخصوص خود داشتند."
+
+msgid "{total} clicks in all; the most in one day: {peak}, on {when}. The earliest is on the right."
+msgstr "در مجموع {total} کلیک؛ بیشترین در یک روز: {peak}، در {when}. قدیمی‌ترین در سمت راست است."
+
+msgid "{total} clicks in all; the most in one hour: {peak}, at {when}. The earliest is on the right."
+msgstr "در مجموع {total} کلیک؛ بیشترین در یک ساعت: {peak}، در {when}. قدیمی‌ترین در سمت راست است."
+
+msgid "Nothing sent yet"
+msgstr "هنوز ارسالی انجام نشده است"

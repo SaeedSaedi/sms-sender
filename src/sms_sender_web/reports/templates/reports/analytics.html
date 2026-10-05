@@ -1,0 +1,52 @@
+{% extends "base.html" %}{% load i18n fa ui %}
+{% block title %}{% translate "Analytics" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{% translate "Analytics" %}</h1>
+    <p class="page-meta">{% translate "Every campaign side by side: what was accepted, delivered and clicked, and what it cost." %}</p>
+  </div>
+</header>
+{% if rows %}
+<dl class="figures">
+  <div><dt>{% translate "Accepted" %}</dt><dd class="num">{{ totals.sent|fa_number }}</dd></div>
+  <div><dt>{% translate "Delivered" %}</dt><dd class="num">{{ totals.delivered|fa_number }}</dd></div>
+  <div><dt>{% translate "Clicks" %}</dt><dd class="num">{{ totals.clicks|fa_number }}</dd></div>
+  <div><dt>{% translate "Cost" %}</dt><dd class="num">{{ totals.cost|fa_number }} {% translate "rials" %}</dd></div>
+  <div><dt>{% translate "Cost per click" %}</dt><dd class="num">{% if totals.per_click %}{{ totals.per_click|fa_number }} {% translate "rials" %}{% else %}—{% endif %}</dd></div>
+</dl>
+<section class="card">
+  <div class="table-wrap" tabindex="0" role="region" aria-label="{% translate "Analytics" %}">
+    <table class="table-stack">
+      <thead>
+        <tr>
+          <th scope="col">{% translate "Campaign" %}</th>
+          <th scope="col">{% translate "Accepted" %}</th>
+          <th scope="col">{% translate "Delivered" %}</th>
+          <th scope="col">{% translate "Clicked" %}</th>
+          <th scope="col">{% translate "Clicks" %}</th>
+          <th scope="col">{% translate "Cost" %}</th>
+          <th scope="col">{% translate "Cost per click" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <th scope="row"><a href="{% url 'report' r.slug %}"><bdi>{{ r.name }}</bdi></a></th>
+          <td data-label="{% translate "Accepted" %}" class="num">{{ r.sent|fa_number }}</td>
+          <td data-label="{% translate "Delivered" %}" class="num">{{ r.delivered|fa_number }}{% if r.delivered_share is not None %} ({{ r.delivered_share|fa_number }}٪){% endif %}</td>
+          <td data-label="{% translate "Clicked" %}" class="num">{% if r.clicked is not None %}{{ r.clicked|fa_number }} ({{ r.clicked_share|fa_number }}٪){% else %}—{% endif %}</td>
+          <td data-label="{% translate "Clicks" %}" class="num">{{ r.clicks|fa_number }}</td>
+          <td data-label="{% translate "Cost" %}" class="num">{{ r.cost|fa_number }}</td>
+          <td data-label="{% translate "Cost per click" %}" class="num">{% if r.per_click %}{{ r.per_click|fa_number }}{% else %}—{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">{% translate "Costs in rials. “Clicked” counts people with links of their own; clicks on shared links count in “Clicks”." %}</p>
+</section>
+{% else %}
+<div class="empty-state">{% icon "chart-column" %}<h2>{% translate "Nothing sent yet" %}</h2><p>{% translate "Once a campaign sends, its numbers appear here." %}</p></div>
+{% endif %}
+{% endblock %}

@@ -169,6 +169,29 @@ def test_visits_by_tag_reads_every_page():
     ]
 
 
+def test_visit_times_read_every_page_and_leave_bots_out():
+    from datetime import datetime, timezone
+
+    def page(n, visits, pages=2):
+        return FakeResponse(200, {"visits": {"data": visits, "pagination": {"currentPage": n, "pagesCount": pages}}})
+
+    session = FakeSession(
+        page(1, [{"date": "2026-10-05T10:15:00+00:00", "potentialBot": False},
+                 {"date": "2026-10-05T10:20:00+00:00", "potentialBot": True},
+                 {"date": "not a date"}]),
+        page(2, [{"date": "2026-10-05T11:05:00Z"}]),
+    )
+    since = datetime(2026, 10, 5, 10, tzinfo=timezone.utc)
+    times = list(client(session).visit_times("campaign-coin-7", since=since, page_size=2))
+    assert times == [datetime(2026, 10, 5, 10, 15, tzinfo=timezone.utc),
+                     datetime(2026, 10, 5, 11, 5, tzinfo=timezone.utc)]
+    assert session.calls[0]["url"].endswith("/rest/v3/tags/campaign-coin-7/visits")
+    assert [c["params"] for c in session.calls] == [
+        {"page": n, "itemsPerPage": 2, "excludeBots": "true", "startDate": "2026-10-05T10:00:00+00:00"}
+        for n in (1, 2)
+    ]
+
+
 def test_health_reports_the_version():
     session = FakeSession(FakeResponse(200, {"status": "pass", "version": "5.1.7"}))
     assert client(session).health() == "5.1.7"

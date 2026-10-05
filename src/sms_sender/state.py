@@ -97,6 +97,9 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         "CREATE INDEX idx_links_short_code ON links(short_code)",
         "ALTER TABLE recipients ADD COLUMN link_key TEXT",
     ),
+    (  # 6 → 7: clicks per hour (UTC hour start, unix seconds), for clicks over time
+        "CREATE TABLE click_hours (hour INTEGER PRIMARY KEY, clicks INTEGER NOT NULL)",
+    ),
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)
@@ -302,6 +305,13 @@ class StateStore:
                 if "locked" not in str(e) or time.monotonic() >= deadline:
                     raise
                 time.sleep(0.02)
+
+    def close(self) -> None:
+        """Close this thread's connection; the next use opens a new one."""
+        conn = getattr(self._local, "conn", None)
+        if conn is not None:
+            conn.close()
+            self._local.conn = None
 
     def _conn(self) -> sqlite3.Connection:
         conn = getattr(self._local, "conn", None)
@@ -862,6 +872,23 @@ class StateStore:
                 updated += conn.total_changes - before
         return updated
 
+    def latest_click_hour(self) -> int | None:
+        row = self._conn().execute("SELECT MAX(hour) FROM click_hours").fetchone()
+        return row[0] if row and row[0] is not None else None
+
+    def replace_click_hours(self, from_hour: int, counts: dict[int, int]) -> None:
+        """The clicks of every hour from `from_hour` on, counted afresh."""
+        with self._tx() as conn:
+            conn.execute("DELETE FROM click_hours WHERE hour >= ?", (from_hour,))
+            conn.executemany(
+                "INSERT INTO click_hours (hour, clicks) VALUES (?, ?)",
+                sorted((h, n) for h, n in counts.items() if h >= from_hour and n),
+            )
+
+    def click_hours(self) -> list[tuple[int, int]]:
+        """(hour, clicks), oldest first."""
+        return [(r[0], r[1]) for r in self._conn().execute("SELECT hour, clicks FROM click_hours ORDER BY hour")]
+
     def clicks_by_segment(self) -> list[sqlite3.Row]:
         """Per segment, over sent recipients: how many, how many lack a user
         ID, and — for those sent a link of their own — who clicked and how
@@ -987,6 +1014,10 @@ class StateStore:
         """Every recipient the filter matches, in the list's order (exports)."""
         sql, args = (where or RecipientFilter()).where()
         yield from self._conn().execute(f"SELECT {_RECIPIENT_COLUMNS}{sql}ORDER BY r.rowid", args)
+
+    def last_sent_at(self) -> float | None:
+        row = self._conn().execute("SELECT MAX(sent_at) FROM recipients").fetchone()
+        return row[0] if row else None
 
     def segments_in_use(self) -> list[str]:
         rows = self._conn().execute(

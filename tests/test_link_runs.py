@@ -390,6 +390,9 @@ def test_reports_follow_the_link_each_recipient_actually_got(tmp_path):
         def visits_by_tag(self, tag):
             return [LinkVisits(segment_code, 9, 5)]
 
+        def visit_times(self, tag, *, since=None):
+            return []
+
     sync_clicks(state, Visits(), "coin-7")
     (vip,), _ = click_report(state)
     assert (vip.sent, vip.clicks, vip.clicked) == (2, 5, None)

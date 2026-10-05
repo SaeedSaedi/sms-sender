@@ -16,6 +16,7 @@ import logging
 import os
 import threading
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Callable, Iterator, TypeVar
 from urllib.parse import quote
 
@@ -245,12 +246,46 @@ class ShlinkClient:
                 return
             page += 1
 
+    def visit_times(
+        self, tag: str, *, since: datetime | None = None, page_size: int = 1000,
+    ) -> Iterator[datetime]:
+        """When each visit to a tag's links happened (UTC), bots left out,
+        page by page. `since`: from then on only (Shlink's startDate)."""
+        page = 1
+        while True:
+            params = {"page": page, "itemsPerPage": page_size, "excludeBots": "true"}
+            if since is not None:
+                params["startDate"] = since.astimezone(timezone.utc).isoformat()
+            data = self._call("list tag visits", lambda: self._request(
+                "GET", f"{self._api}/tags/{quote(tag, safe='')}/visits", params=params,
+            ))
+            block = data.get("visits") or {}
+            for item in block.get("data") or []:
+                when = _moment(item.get("date"))
+                if when is not None and not item.get("potentialBot"):
+                    yield when
+            pages = _int((block.get("pagination") or {}).get("pagesCount"))
+            if page >= pages:
+                return
+            page += 1
+
     def health(self) -> str | None:
         """Shlink's version if it reports itself healthy, else None. Needs no key."""
         def attempt() -> dict:
             return self._request("GET", f"{self.base_url}/rest/health")
         data = self._call("health check", attempt)
         return data.get("version") if data.get("status") == "pass" else None
+
+
+def _moment(value) -> datetime | None:
+    """Shlink's ISO-8601 dates ("…+00:00", or "…Z"), as aware datetimes."""
+    if not isinstance(value, str):
+        return None
+    try:
+        when = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return when if when.tzinfo else when.replace(tzinfo=timezone.utc)
 
 
 def _short_link(data: dict) -> ShortLink:
