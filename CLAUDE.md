@@ -336,9 +336,21 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - The live part (`_live.html`) polls `/campaigns/<slug>/live/` every 3 s with HTMX, only while a job is active.
 - **Reports (`reports/`, read only):**
   - `/reports/<slug>/` reads any campaign DB in `data/db/`, the CLI's too, and never creates one.
-  - It uses the CLI's own queries: `click_report`, `display_counts`, `delivery_counts`, `total_cost`, and `recipients_page` (by rowid, so no number appears in a URL or form).
+  - It uses the CLI's own queries: `click_report`, `display_counts`, `delivery_counts`, `total_cost`, and `recipients_page` (by rowid, so no number appears in a URL).
+  - **The recipients list** filters with `state.RecipientFilter`, shared by `recipients_page`, `recipient_total` and `iter_recipients`. The filters:
+    - status, as `display_counts` names it (`invalid` included);
+    - segment;
+    - delivery: a `state.DELIVERY_GROUPS` key, or `UNCHECKED`;
+    - clicked: only someone's own link counts;
+    - missing user ID.
+
+    Filters go in the address, with nothing personal in them. A number is searched with a POST, never a GET. A filter is offered only where it means something: several segments, personal links, user IDs. "Missing user ID" shows only where user IDs are used.
   - Numbers are masked. `reveal_phone` (operators) POSTs a rowid to `/reveal/` (HTMX swaps the cell) and records `phone_revealed`. Invalid input rows (`INVALID:…`) are never revealed.
-  - Downloads use English column names, Latin digits and a UTF-8 BOM. They're the same rows as the CLI's `export-attribution` / `export-clickers`. Each one records `report_downloaded`.
+  - Downloads use English column names, Latin digits and a UTF-8 BOM. They're the same rows as the CLI's `export-attribution` / `export-clickers`. Operators (`export_people`) also get:
+    - `recipients.csv`: the list with its filters, numbers in full;
+    - `failed.csv`: the CLI's `export-failed`, with `StateStore.FAILED_HEADER` shared by both.
+
+    Each download records `report_downloaded`, with the filters (never a number).
   - `/status/` asks Kavenegar (`account_info` / `account_config`) and Shlink (`health`) live, on every view.
   - Worker liveness is `jobs.WorkerBeat`: written every idle loop and with each job heartbeat. `worker_alive()` means seen within 60 s.
 - **Sandbox (`jobs/sandbox.py`, `SMS_SENDER_SANDBOX=1`):**

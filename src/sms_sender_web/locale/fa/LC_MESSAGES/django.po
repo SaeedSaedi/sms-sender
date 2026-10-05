@@ -2105,3 +2105,51 @@ msgstr "حدود {cost} ریال برای هر گیرنده، بر پایه قی
 
 msgid "About {cost} rials per recipient, {total} rials for {n}, from the price of the latest test SMS."
 msgstr "حدود {cost} ریال برای هر گیرنده و {total} ریال برای {n} گیرنده، بر پایه قیمت آخرین پیامک آزمایشی."
+
+msgid "All"
+msgstr "همه"
+
+msgid "All recipients, with phone numbers (CSV)"
+msgstr "همه گیرندگان، با شماره تلفن (CSV)"
+
+msgid "Apply"
+msgstr "اعمال"
+
+msgid "Clear the filters"
+msgstr "حذف فیلترها"
+
+msgid "Clicked"
+msgstr "کلیک‌کرده"
+
+msgid "Didn't click"
+msgstr "کلیک نکرده"
+
+msgid "Not delivered"
+msgstr "تحویل‌نشده"
+
+msgid "On its way"
+msgstr "در راه"
+
+msgid "Rejected and invalid rows, to fix and feed again (CSV)"
+msgstr "سطرهای ردشده و نامعتبر، برای اصلاح و ارسال دوباره (CSV)"
+
+msgid "These recipients, with phone numbers (CSV)"
+msgstr "همین گیرندگان، با شماره تلفن (CSV)"
+
+msgid "rejected rows, with phone numbers"
+msgstr "سطرهای ردشده، با شماره تلفن"
+
+msgid "{n} recipients in this campaign."
+msgstr "{n} گیرنده در این کمپین."
+
+msgid "{n} recipients match these filters."
+msgstr "{n} گیرنده با این فیلترها."
+
+msgid "No recipient matches these filters."
+msgstr "هیچ گیرنده‌ای با این فیلترها پیدا نشد."
+
+msgid "Only those without a user ID"
+msgstr "فقط گیرندگان بدون شناسه کاربر"
+
+msgid "recipients, filtered, with phone numbers"
+msgstr "گیرندگان فیلترشده، با شماره تلفن"

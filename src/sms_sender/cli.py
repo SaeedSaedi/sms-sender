@@ -708,7 +708,7 @@ def export_failed(db_path: str, out: str, campaign: str | None) -> None:
     n = 0
     with p.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["phone_or_raw", "raw", "status_code", "attempts", "last_error"])
+        w.writerow(StateStore.FAILED_HEADER)
         for row in store.iter_failed_permanent():
             w.writerow([row["phone"], row["raw"], row["status_code"], row["attempts"], row["last_error"]])
             n += 1

@@ -143,6 +143,66 @@ CLAIMABLE = (PENDING, FAILED_RETRIABLE)
 # is fixed (bind_campaign), unless a change is explicitly allowed.
 MAY_HAVE_SENT = (SENT, IN_FLIGHT, UNKNOWN, NEEDS_REVIEW)
 
+# What a delivery status means for the person, for filters and the funnel.
+# A code Kavenegar may still change (11 can turn into 10) counts where it
+# is now. UNCHECKED: accepted, delivery not asked about yet.
+DELIVERY_GROUPS: dict[str, tuple[int, ...]] = {
+    "delivered": (10,),
+    "not_delivered": (6, 11, 13, 14),
+    "on_its_way": (1, 2, 4, 5),
+    "expired": (100,),
+}
+UNCHECKED = "unchecked"
+
+# The status a person reads: an input row that wasn't valid is `invalid`,
+# whatever it's stored as (the same rule as display_counts).
+_SHOWN_STATUS = f"(CASE WHEN r.phone LIKE 'INVALID:%' THEN '{INVALID}' ELSE r.status END)"
+
+
+@dataclass(frozen=True)
+class RecipientFilter:
+    """Which recipients a list or an export shows; empty fields match all."""
+    status: str | None = None        # as display_counts names it, `invalid` included
+    segment: str | None = None
+    delivery: str | None = None      # a DELIVERY_GROUPS key, or UNCHECKED (accepted SMS only)
+    clicked: bool | None = None      # their own link clicked, or not; shared links never match
+    missing_user_id: bool = False
+    phone: str | None = None
+
+    def where(self) -> tuple[str, list]:
+        """A WHERE clause over `recipients r LEFT JOIN links l`, and its arguments."""
+        clauses: list[str] = []
+        args: list = []
+        if self.phone:
+            clauses.append("r.phone = ?")
+            args.append(self.phone)
+        if self.status:
+            clauses.append(f"{_SHOWN_STATUS} = ?")
+            args.append(self.status)
+        if self.segment:
+            clauses.append("r.segment = ?")
+            args.append(self.segment)
+        if self.delivery == UNCHECKED:
+            clauses.append("r.status = ? AND r.delivery_status IS NULL")
+            args.append(SENT)
+        elif self.delivery in DELIVERY_GROUPS:
+            codes = DELIVERY_GROUPS[self.delivery]
+            clauses.append(f"r.status = ? AND r.delivery_status IN ({', '.join('?' * len(codes))})")
+            args += [SENT, *codes]
+        if self.clicked is not None:
+            clauses.append(f"r.link_key = r.phone AND COALESCE(l.clicks, 0) {'>' if self.clicked else '='} 0")
+        if self.missing_user_id:
+            clauses.append("r.user_id IS NULL AND r.phone NOT LIKE 'INVALID:%'")
+        return ("WHERE " + " AND ".join(clauses) + " " if clauses else ""), args
+
+
+_RECIPIENT_COLUMNS = (
+    "r.rowid AS id, r.phone, r.raw, r.status, r.delivery_status, r.segment, "
+    "r.user_id, r.sent_at, r.cost, "
+    "CASE WHEN r.link_key = r.phone THEN COALESCE(l.clicks, 0) END AS clicks "
+    "FROM recipients r LEFT JOIN links l ON l.key = r.link_key "
+)
+
 _MAY_HAVE_SENT_SQL = (
     f"SELECT 1 FROM recipients WHERE status IN ({', '.join('?' * len(MAY_HAVE_SENT))}) LIMIT 1"
 )
@@ -903,27 +963,41 @@ class StateStore:
 
     def recipients_page(
         self, *, limit: int, offset: int = 0, phone: str | None = None,
+        where: RecipientFilter | None = None,
     ) -> list[sqlite3.Row]:
         """Recipients in the order they were added, for the dashboard's list:
         each row's status, delivery, segment, user ID and its own link's
         clicks (None for a shared link). `id` is the rowid, so a page can
         point at a row without putting the number in a URL."""
-        where, args = ("WHERE r.phone = ? ", [phone]) if phone else ("", [])
+        sql, args = (where or RecipientFilter(phone=phone)).where()
         return self._conn().execute(
-            "SELECT r.rowid AS id, r.phone, r.raw, r.status, r.delivery_status, r.segment, "
-            "r.user_id, r.sent_at, r.cost, "
-            "CASE WHEN r.link_key = r.phone THEN COALESCE(l.clicks, 0) END AS clicks "
-            "FROM recipients r LEFT JOIN links l ON l.key = r.link_key "
-            f"{where}ORDER BY r.rowid LIMIT ? OFFSET ?",
-            (*args, limit, offset),
+            f"SELECT {_RECIPIENT_COLUMNS}{sql}ORDER BY r.rowid LIMIT ? OFFSET ?", (*args, limit, offset),
         ).fetchall()
 
-    def recipient_total(self, phone: str | None = None) -> int:
-        if phone:
-            row = self._conn().execute("SELECT COUNT(*) FROM recipients WHERE phone=?", (phone,)).fetchone()
-        else:
-            row = self._conn().execute("SELECT COUNT(*) FROM recipients").fetchone()
+    def recipient_total(self, phone: str | None = None, where: RecipientFilter | None = None) -> int:
+        sql, args = (where or RecipientFilter(phone=phone)).where()
+        row = self._conn().execute(
+            f"SELECT COUNT(*) FROM recipients r LEFT JOIN links l ON l.key = r.link_key {sql}", args,
+        ).fetchone()
         return int(row[0])
+
+    def iter_recipients(self, where: RecipientFilter | None = None) -> Iterator[sqlite3.Row]:
+        """Every recipient the filter matches, in the list's order (exports)."""
+        sql, args = (where or RecipientFilter()).where()
+        yield from self._conn().execute(f"SELECT {_RECIPIENT_COLUMNS}{sql}ORDER BY r.rowid", args)
+
+    def segments_in_use(self) -> list[str]:
+        rows = self._conn().execute(
+            "SELECT DISTINCT segment FROM recipients WHERE segment IS NOT NULL AND segment != '' ORDER BY segment"
+        ).fetchall()
+        return [r[0] for r in rows]
+
+    def has_user_ids(self) -> bool:
+        return self._conn().execute("SELECT 1 FROM recipients WHERE user_id IS NOT NULL LIMIT 1").fetchone() is not None
+
+    def has_personal_links(self) -> bool:
+        """Whether anyone was given a link of their own (so clicks are per person)."""
+        return self._conn().execute("SELECT 1 FROM recipients WHERE link_key = phone LIMIT 1").fetchone() is not None
 
     def phone_of_row(self, row_id: int) -> str | None:
         row = self._conn().execute("SELECT phone FROM recipients WHERE rowid=?", (row_id,)).fetchone()
@@ -984,6 +1058,9 @@ class StateStore:
             phones,
         ):
             out[row["phone"]] = row["status"]
+
+    # `export-failed`'s columns, the CLI's file and the dashboard's download.
+    FAILED_HEADER = ("phone_or_raw", "raw", "status_code", "attempts", "last_error")
 
     def iter_failed_permanent(self) -> Iterator[sqlite3.Row]:
         yield from self._conn().execute(

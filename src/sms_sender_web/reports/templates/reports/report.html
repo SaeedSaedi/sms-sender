@@ -88,15 +88,48 @@
   <p class="hint">{% translate "Files use English column names and Latin digits, for other systems. Every download is recorded in the activity log." %}</p>
 </section>
 
-<section class="step">
-  <h2>{% translate "Recipients" %}</h2>
-  <form method="get" class="inline search">
+<section class="card step" id="recipients" aria-labelledby="recipients-heading">
+  <h2 id="recipients-heading">{% icon "users" %}{% translate "Recipients" %}</h2>
+  <form method="get" action="{% url 'report' slug %}#recipients" class="filters" id="filters">
+      <div class="filter"><label for="id_status">{% translate "Status" %}</label>
+        <select id="id_status" name="status">
+          <option value="">{% translate "All" %}</option>
+          {% for key, label, n in status_choices %}<option value="{{ key }}"{% if filters.status == key %} selected{% endif %}>{{ label }} ({{ n|fa_number }})</option>{% endfor %}
+        </select></div>
+      {% if segment_choices|length > 1 %}
+      <div class="filter"><label for="id_segment">{% translate "Segment" %}</label>
+        <select id="id_segment" name="segment" dir="ltr">
+          <option value="">{% translate "All" %}</option>
+          {% for segment in segment_choices %}<option value="{{ segment }}"{% if filters.segment == segment %} selected{% endif %}>{{ segment }}</option>{% endfor %}
+        </select></div>
+      {% endif %}
+      <div class="filter"><label for="id_delivery">{% translate "Delivery" %}</label>
+        <select id="id_delivery" name="delivery">
+          <option value="">{% translate "All" %}</option>
+          {% for key, label in delivery_choices %}<option value="{{ key }}"{% if filters.delivery == key %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></div>
+      {% if click_choices %}
+      <div class="filter"><label for="id_clicked">{% translate "Clicks" %}</label>
+        <select id="id_clicked" name="clicked">
+          <option value="">{% translate "All" %}</option>
+          {% for key, label in click_choices %}<option value="{{ key }}"{% if filters.clicked == key %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></div>
+      {% endif %}
+    {% if has_user_ids %}<label class="check"><input type="checkbox" name="missing" value="1"{% if filters.missing %} checked{% endif %}> {% translate "Only those without a user ID" %}</label>{% endif %}
+    <div class="form-actions">
+      <button type="submit" class="small secondary">{% icon "sliders-horizontal" %}{% translate "Apply" %}</button>
+      {% if filters %}<a href="{% url 'report' slug %}#recipients">{% translate "Clear the filters" %}</a>{% endif %}
+    </div>
+  </form>
+  <form method="post" action="{% url 'report' slug %}#recipients" class="inline search" id="find-number">
+    {% csrf_token %}
     <label for="id_q" class="visually-hidden">{% translate "Find a number" %}</label>
     <input id="id_q" name="q" type="search" dir="ltr" inputmode="tel" value="{{ query }}" placeholder="{% translate "Find a number" %}">
     <button type="submit" class="small secondary">{% icon "search" %}{% translate "Find" %}</button>
-    {% if query %}<a href="{% url 'report' slug %}">{% translate "Show all" %}</a>{% endif %}
+    {% if query %}<a href="{% url 'report' slug %}#recipients">{% translate "Show all" %}</a>{% endif %}
   </form>
   {% if query_invalid %}<p class="error" role="alert">{% translate "That isn't a valid mobile number." %}</p>{% endif %}
+  {% if not query %}<p class="hint" role="status">{{ matching }}</p>{% endif %}
   {% if rows %}
   <div class="table-wrap">
     <table class="table-stack">
@@ -130,7 +163,7 @@
           <td data-label="{% translate "Status" %}">{% if r.phone|slice:":8" == "INVALID:" %}{{ "invalid"|status_label }}{% else %}{{ r.status|status_label }}{% endif %}</td>
           <td data-label="{% translate "Delivery" %}">{% if r.status == "sent" %}{{ r.delivery_status|delivery_label }}{% else %}—{% endif %}</td>
           <td data-label="{% translate "Segment" %}">{% if r.segment %}{{ r.segment|ltr }}{% else %}—{% endif %}</td>
-          <td data-label="{% translate "User ID" %}">{% if r.user_id %}{{ r.user_id|copyable }}{% elif r.status == "sent" %}<span class="muted">{% translate "Missing user ID" %}</span>{% else %}—{% endif %}</td>
+          <td data-label="{% translate "User ID" %}">{% if r.user_id %}{{ r.user_id|copyable }}{% elif r.status == "sent" and has_user_ids %}<span class="muted">{% translate "Missing user ID" %}</span>{% else %}—{% endif %}</td>
           <td data-label="{% translate "Clicks" %}" class="num">{% if r.clicks is not None %}{{ r.clicks|fa_number }}{% else %}—{% endif %}</td>
           <td data-label="{% translate "Accepted at" %}">{% if r.sent_at %}{{ r.sent_at|jalali }}{% else %}—{% endif %}</td>
         </tr>
@@ -140,13 +173,21 @@
   </div>
   {% if pages > 1 %}
   <nav class="pager" aria-label="{% translate "Pages" %}">
-    {% if page > 1 %}<a href="?page={{ page|add:"-1" }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}">{% translate "Previous" %}</a>{% endif %}
+    {% if page > 1 %}<a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page|add:"-1" }}#recipients">{% translate "Previous" %}</a>{% endif %}
     <span class="num">{{ page|fa_number }} / {{ pages|fa_number }}</span>
-    {% if page < pages %}<a href="?page={{ page|add:"1" }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}">{% translate "Next" %}</a>{% endif %}
+    {% if page < pages %}<a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page|add:"1" }}#recipients">{% translate "Next" %}</a>{% endif %}
   </nav>
   {% endif %}
   {% elif query and not query_invalid %}
   <p class="empty">{% translate "This number isn't in this campaign." %}</p>
+  {% elif not query %}
+  <p class="empty">{% translate "No recipient matches these filters." %}</p>
+  {% endif %}
+  {% if user|can:"export_people" %}
+  <div class="actions downloads">
+    <a class="button secondary small" href="{% url 'report_recipients_csv' slug %}{% if filter_query %}?{{ filter_query }}{% endif %}">{% icon "download" %}{% if filters %}{% translate "These recipients, with phone numbers (CSV)" %}{% else %}{% translate "All recipients, with phone numbers (CSV)" %}{% endif %}</a>
+    {% if counts.failed_permanent or counts.invalid %}<a class="button secondary small" href="{% url 'report_failed_csv' slug %}" data-cli="export-failed">{% icon "download" %}{% translate "Rejected and invalid rows, to fix and feed again (CSV)" %}</a>{% endif %}
+  </div>
   {% endif %}
 </section>
 {% endblock %}

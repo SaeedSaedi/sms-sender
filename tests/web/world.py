@@ -82,7 +82,7 @@ PAGES: dict[str, tuple[str, str | None]] = {
     "campaign.halted.admin": ("/campaigns/halted/", "admin"),  # changing a sent message
     "campaign.completed": ("/campaigns/completed/", "operator"),
     "campaign.draft": ("/campaigns/draft-1/", "operator"),
-    "report": ("/reports/approved/", "viewer"),
+    "report": ("/reports/completed/", "viewer"),
     "templates": ("/templates/", "viewer"),
     "template.new": ("/templates/new/", "operator"),
     "status": ("/status/", "viewer"),

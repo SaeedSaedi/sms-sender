@@ -895,6 +895,14 @@ details.advanced { margin-block-end: var(--s-5); }
 table.value-maps td { padding: var(--s-2); }
 table.value-maps select, table.value-maps input { min-inline-size: 7rem; }
 
+/* ---------- the recipients list's filters (plan 05, P3) ---------- */
+
+form.filters { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: flex-end; margin-block-end: var(--s-3); }
+form.filters > .filter { flex: 0 1 13rem; min-inline-size: 9rem; }
+form.filters > .filter label { margin-block-start: 0; }
+form.filters > label.check { flex-basis: 100%; margin: 0; }
+form.filters > .form-actions { margin: 0; }
+
 /* ---------- check, preview and send (plan 05, P2) ---------- */
 
 .checklist { display: grid; gap: var(--s-2); margin: 0 0 var(--s-4); padding: 0; list-style: none; }

@@ -12,13 +12,15 @@ import json
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlencode
 
 from django.conf import settings as django_settings
 from django.http import Http404, HttpResponse
 from django.shortcuts import render
 from django.utils import timezone as dj_timezone
+from django.utils.translation import gettext_lazy as _
 from django.views.decorators.cache import never_cache
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods, require_POST
 
 from sms_sender.clicks import (
     ATTRIBUTION_HEADER,
@@ -32,18 +34,22 @@ from sms_sender.input_loader import SLUG_RE
 from sms_sender.phone import InvalidPhoneError, normalize
 from sms_sender.sender import HaltError, SendError
 from sms_sender.shortlink import ShlinkError
-from sms_sender.state import StateStore
+from sms_sender.state import DELIVERY_GROUPS, SENT, UNCHECKED, RecipientFilter, StateStore
 
 from ..accounts.decorators import requires
 from ..audit.record import record
+from ..campaigns.present import say
 from ..campaigns.terms import stop_reason
-from ..dashboard.terms import DELIVERY_STATUS, STATUS_ORDER
+from ..dashboard.terms import CLICK_FILTERS, DELIVERY_FILTERS, DELIVERY_STATUS, STATUS_ORDER
+from ..dashboard.templatetags.fa import status_label
 from ..jobs.engine import Engine
 from ..jobs.models import Campaign, Job
 from ..jobs.sandbox import read_outbox
 from ..jobs.worker import last_seen, worker_alive
 
 PAGE = 100
+MATCHING = _("{n} recipients match these filters.")
+EVERYONE = _("{n} recipients in this campaign.")
 
 
 def _store(slug: str) -> tuple[StateStore, Campaign | None]:
@@ -65,23 +71,50 @@ def _delivery_rows(counts: dict) -> list[tuple[str, int]]:
     return merged.most_common()
 
 
+def _filters(data) -> tuple[RecipientFilter, dict]:
+    """The list's filters, from the address (nothing personal is in it), and
+    their values for the form and the links."""
+    status = data.get("status", "")
+    delivery = data.get("delivery", "")
+    clicked = data.get("clicked", "")
+    values = {
+        "status": status if status in STATUS_ORDER else "",
+        "segment": data.get("segment", "").strip()[:64],
+        "delivery": delivery if delivery in (*DELIVERY_GROUPS, UNCHECKED) else "",
+        "clicked": clicked if clicked in ("yes", "no") else "",
+        "missing": "1" if data.get("missing") == "1" else "",
+    }
+    where = RecipientFilter(
+        status=values["status"] or None, segment=values["segment"] or None,
+        delivery=values["delivery"] or None,
+        clicked={"yes": True, "no": False}.get(values["clicked"]), missing_user_id=bool(values["missing"]),
+    )
+    return where, {k: v for k, v in values.items() if v}
+
+
 @requires("view_campaigns")
+@require_http_methods(["GET", "POST"])
 def report(request, slug: str):
+    """The campaign's report. The recipients list filters by the address; a
+    number is looked up with a POST, so it never appears in a URL or a log."""
     store, campaign = _store(slug)
-    query = request.GET.get("q", "").strip()
+    where, filters = _filters(request.GET)
+    query = request.POST.get("q", "").strip()[:32] if request.method == "POST" else ""
     phone, query_invalid = None, False
     if query:
         try:
             phone = normalize(query)
         except InvalidPhoneError:
             query_invalid = True
-    total = 0 if query_invalid else store.recipient_total(phone)
+        where, filters = RecipientFilter(phone=phone), {}
+    total = 0 if query_invalid else store.recipient_total(where=where)
     pages = max(1, -(-total // PAGE))
     try:
         number = min(max(1, int(request.GET.get("page", 1))), pages)
     except ValueError:
         number = 1
-    rows = [] if query_invalid else store.recipients_page(limit=PAGE, offset=(number - 1) * PAGE, phone=phone)
+    rows = [] if query_invalid else store.recipients_page(limit=PAGE, offset=(number - 1) * PAGE, where=where)
+    counts = store.display_counts()
     segments, campaign_clicks = click_report(store)
     stored = store.get_meta("settings")
     last_run = store.get_meta("last_run")
@@ -91,8 +124,17 @@ def report(request, slug: str):
         "name": campaign.name if campaign else (store.get_meta("campaign") or slug),
         "template": json.loads(stored).get("template") if stored else None,
         "last_run_at": json.loads(last_run).get("at") if last_run else None,
-        "counts": store.display_counts(),
+        "counts": counts,
         "status_order": STATUS_ORDER,
+        "status_choices": [(key, status_label(key), counts[key]) for key in STATUS_ORDER if counts.get(key)],
+        "segment_choices": store.segments_in_use(),
+        "delivery_choices": DELIVERY_FILTERS,
+        "click_choices": CLICK_FILTERS if store.has_personal_links() else (),
+        # "Missing user ID" means something only where user IDs are used.
+        "has_user_ids": store.has_user_ids() or bool(campaign and (campaign.settings or {}).get("user_id_column")),
+        "filters": filters,
+        "filter_query": urlencode(filters),
+        "matching": say(MATCHING if filters else EVERYONE, {"n": total}),
         "delivery": _delivery_rows(store.delivery_counts()),
         "total_cost": store.total_cost(),
         "average_cost": store.average_cost(),
@@ -174,6 +216,48 @@ def clickers_csv(request, slug: str):
     store, _ = _store(slug)
     record("report_downloaded", request=request, campaign=slug, kind="clickers")
     return _csv(f"{slug}-clickers.csv", CLICKERS_HEADER, clicker_rows(store))
+
+
+RECIPIENTS_HEADER = ["phone", "status", "delivery", "segment", "user_id", "clicks", "accepted_at", "cost_rials"]
+
+
+def _iso(moment: float | None) -> str:
+    return datetime.fromtimestamp(moment, tz=timezone.utc).isoformat(timespec="seconds") if moment else ""
+
+
+def _recipient_rows(store: StateStore, where: RecipientFilter):
+    """The list's rows as they're shown, with the full number: for the
+    systems an operator feeds them to."""
+    for r in store.iter_recipients(where):
+        invalid = r["phone"].startswith("INVALID:")
+        delivery = ""
+        if r["status"] == SENT:
+            delivery = STATUS_NAMES.get(r["delivery_status"], "") if r["delivery_status"] is not None else "not checked"
+        yield [
+            r["raw"] if invalid else r["phone"], "invalid" if invalid else r["status"], delivery,
+            r["segment"] or "", r["user_id"] or "", "" if r["clicks"] is None else r["clicks"],
+            _iso(r["sent_at"]), r["cost"] or "",
+        ]
+
+
+@requires("export_people")
+def recipients_csv(request, slug: str):
+    """The recipients list with its filters, numbers in full."""
+    store, _ = _store(slug)
+    where, filters = _filters(request.GET)
+    record("report_downloaded", request=request, campaign=slug, kind="recipients", filters=filters)
+    return _csv(f"{slug}-recipients.csv", RECIPIENTS_HEADER, _recipient_rows(store, where))
+
+
+@requires("export_people")
+def failed_csv(request, slug: str):
+    """The CLI's `export-failed`: the rows Kavenegar rejected and the input
+    rows that weren't valid, to fix and feed again."""
+    store, _ = _store(slug)
+    record("report_downloaded", request=request, campaign=slug, kind="failed")
+    rows = ([r["phone"], r["raw"], r["status_code"], r["attempts"], r["last_error"]]
+            for r in store.iter_failed_permanent())
+    return _csv(f"{slug}-failed.csv", list(StateStore.FAILED_HEADER), rows)
 
 
 def _expiry(value):

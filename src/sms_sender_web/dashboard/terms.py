@@ -32,3 +32,13 @@ DELIVERY_STATUS = {
     14: _("Blocked"),
     100: _("Beyond the status window"),
 }
+
+# The recipients list's delivery filter: what it means for the person.
+DELIVERY_FILTERS = (
+    ("delivered", _("Delivered")),
+    ("not_delivered", _("Not delivered")),
+    ("on_its_way", _("On its way")),
+    ("unchecked", _("Not checked")),
+    ("expired", _("Beyond the status window")),
+)
+CLICK_FILTERS = (("yes", _("Clicked")), ("no", _("Didn't click")))

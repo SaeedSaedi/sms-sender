@@ -63,7 +63,7 @@ PARITY: dict[str, tuple[Part, ...]] = {
     "send": (Control("campaign.approved"),),
     "retry-failed": (Planned("P3", "retry not sent (N), requeue rejected (N)"),),
     "status": (Control("report", VIEWER),),
-    "export-failed": (Planned("P3", "download rejected and not-sent rows"),),
+    "export-failed": (Control("report", note="rejected and invalid rows; any status through the filters"),),
     "reset": (Planned("P3", "requeue by status"),),
     "purge": (Planned("P5", "delete a campaign's records, with a backup first"),),
     "reconcile": (Control("campaign.approved"),),
