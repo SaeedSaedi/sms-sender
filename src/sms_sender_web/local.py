@@ -216,7 +216,9 @@ def _alive(pid: int) -> bool:
 
 def _command_line(pid: int) -> str:
     try:
-        out = subprocess.run(["ps", "-p", str(pid), "-o", "command="], capture_output=True, text=True, timeout=5)
+        # -ww: the whole line; piped, ps cuts it at 80 columns (Linux) or the window's width.
+        out = subprocess.run(["ps", "-ww", "-p", str(pid), "-o", "command="], capture_output=True, text=True,
+                             timeout=5)
     except (OSError, subprocess.SubprocessError):
         return ""
     return out.stdout.strip()
