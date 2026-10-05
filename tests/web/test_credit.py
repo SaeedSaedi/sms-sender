@@ -112,3 +112,11 @@ def test_a_send_that_cant_start_tells_the_targets(campaign, told):
     job = make_worker(FakeEngine()).run_once()
     assert job.state == Job.State.FAILED and job.result["stop_reason"] == "input_unreadable"
     assert len(told) == 1 and told[0].startswith("sms-sender: coin-7: the send stopped before sending anything:")
+
+
+def test_a_test_sms_that_went_out_waits_for_approval_and_the_targets_hear_it(campaign, told):
+    job = Job.objects.create(campaign=campaign, kind=Job.Kind.TEST, params={"test_number": "09120000099"})
+    ran = make_worker(FakeEngine()).run_once()
+    assert ran.pk == job.pk and ran.state == Job.State.DONE
+    assert told == ["sms-sender: coin-7: the test SMS went to 0912*****99. "
+                    "It waits for someone to approve or reject it on the dashboard."]

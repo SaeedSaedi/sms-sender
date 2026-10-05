@@ -152,6 +152,20 @@ def _announce_failure(job: Job, why: str) -> None:
         notify_text(target, f"sms-sender: {job.campaign.slug}: the send stopped before sending anything: {why}")
 
 
+def _announce_test(job: Job) -> None:
+    """A test SMS went out: the targets hear that it waits for someone to
+    approve or reject it (its number masked). Best-effort."""
+    from sms_sender.notify import notify_text
+
+    from ..privacy import mask_phone
+    from ..system.models import SystemSettings
+
+    phone = mask_phone(str(job.params.get("test_number", "")))
+    for target in SystemSettings.load().notify_targets:
+        notify_text(target, f"sms-sender: {job.campaign.slug}: the test SMS went to {phone}. "
+                            "It waits for someone to approve or reject it on the dashboard.")
+
+
 class Worker:
     def __init__(
         self, engine: Engine | None = None, *, worker_id: str | None = None,
@@ -373,6 +387,8 @@ class Worker:
             return Job.State.FAILED, result, why or reporter.last_note or "the run halted"
         if summary.stopped and not test:
             return Job.State.PAUSED, result, "the sending window closed; it continues when the window opens"
+        if test and summary.test_message_id is not None:
+            _announce_test(job)
         return Job.State.DONE, result, ""
 
     def _reconcile(self, job: Job):

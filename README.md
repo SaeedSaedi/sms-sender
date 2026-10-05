@@ -441,7 +441,8 @@ internal, multi-user tool built with Django and HTMX. So far it has:
   one number in so many days, across all campaigns. It's off until an admin
   sets it; the CLI's `--frequency-cap 2/7` does the same;
 - notifications (the CLI's `--notify`, on «تنظیمات سامانه»): Slack, Telegram
-  or a webhook hears how each send ended, or why it couldn't start. The
+  or a webhook hears how each send ended, or why it couldn't start, and when
+  a test SMS waits for approval. The
   addresses are shown masked, and each has a test button. The same page sets
   new campaigns' default window and rate, and a credit warning level: the
   worker checks Kavenegar's credit every 15 minutes, the campaign list warns
