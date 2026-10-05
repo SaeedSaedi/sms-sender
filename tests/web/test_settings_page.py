@@ -77,8 +77,26 @@ def test_a_wrong_window_is_explained_next_to_its_times(world, verified):
     client = signed_in(world.users["operator"], verified)
     html = client.post("/campaigns/fresh/settings/", {**FORM, "window_end": ""}).content.decode()
     assert 'id="id_send_window_error"' in html and 'aria-describedby="id_send_window_error"' in html
-    assert "بازه روزانه را به شکل" in html
+    assert "هر زمان را مانند" in html
     assert saved(world)["send_window"] != "09:30-"
+
+
+@pytest.mark.parametrize("start, end, stored", [
+    ("8", "24", "08:00-00:00"),        # whole hours, and 24 for midnight
+    ("۸", "۲:۳۰", "08:00-02:30"),       # Persian digits, past midnight
+    ("22:00", "24:00", "22:00-00:00"),
+])
+def test_a_window_may_end_at_or_past_midnight(world, verified, start, end, stored):
+    client = signed_in(world.users["operator"], verified)
+    client.post("/campaigns/fresh/settings/", {**FORM, "window_start": start, "window_end": end})
+    assert saved(world)["send_window"] == stored
+
+
+def test_the_whole_day_is_not_a_window(world, verified):
+    """The dashboard always keeps prohibited hours (the CLI alone has 'off')."""
+    client = signed_in(world.users["operator"], verified)
+    html = client.post("/campaigns/fresh/settings/", {**FORM, "window_start": "0", "window_end": "24"}).content.decode()
+    assert "هر زمان را مانند" in html
 
 
 def test_a_half_written_translation_is_refused(world, verified):

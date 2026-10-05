@@ -154,7 +154,7 @@ def test_settings_are_stored_in_the_clis_terms(operator_client, segment):
      "فقط یک متغیر می‌تواند لینک کوتاه را در خود داشته باشد"),
     ({"token2_source": "link", "link_destination": "https://evil.example/x"}, "جزو مقصدهای مجاز نیست"),
     ({"token2_source": "link", "link_destination": "http://kifpool.me/x"}, "نشانی باید با https:// آغاز شود"),
-    ({"send_window": "off"}, "بازه روزانه را به شکل"),
+    ({"send_window": "off"}, "هر زمان را مانند"),
     ({"rate": "fast"}, "سرعت را مانند"),
     ({"value_maps": "nonsense"}, "هر ترجمه را به شکل ستون:مقدار=ترجمه بنویسید"),
 ])
