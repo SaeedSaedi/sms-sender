@@ -43,8 +43,8 @@ services:
     logging: *logging
     restart: unless-stopped
 
-  # Runs the jobs the dashboard queues (sends, reconciliation, delivery and
-  # click updates), one at a time. Exactly one worker.
+  # Runs the jobs the dashboard queues: sends one at a time, and test SMS,
+  # reconciliation, delivery and click updates beside them. Exactly one worker.
   worker:
     image: sms-sender-dashboard:${IMAGE_TAG:-latest}
     command: ["python", "manage.py", "run_worker"]

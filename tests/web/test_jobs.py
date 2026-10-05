@@ -17,7 +17,7 @@ from sms_sender.state import CANCELLED, PENDING, SENT, StateStore  # noqa: E402
 from sms_sender_web.jobs import services  # noqa: E402
 from sms_sender_web.jobs.engine import Engine, campaign_db  # noqa: E402
 from sms_sender_web.jobs.models import Campaign, Job  # noqa: E402
-from sms_sender_web.jobs.worker import MAX_ATTEMPTS, Worker  # noqa: E402
+from sms_sender_web.jobs.worker import MAX_ATTEMPTS, SEND_KINDS, SHORT_KINDS, Worker  # noqa: E402
 
 from ..test_runner import FakeSender  # noqa: E402
 
@@ -303,3 +303,97 @@ def test_the_worker_leaves_a_heartbeat_for_the_cli(settings, tmp_path):
     data = json.loads((tmp_path / sharing.HEARTBEAT).read_text())
     assert data["worker"] == "w1" and data["kernel"] == sharing.kernel_id()
     assert sharing.foreign_worker(tmp_path) is None  # this kernel: nothing refused
+
+
+# ---------- two lanes: sends, and the short jobs beside them ----------
+
+def other_campaign(tmp_path, slug="coin-8"):
+    inp = tmp_path / f"{slug}.txt"
+    inp.write_text("09120001001\n09120001002\n", encoding="utf-8")
+    return Campaign.objects.create(slug=slug, name=slug, settings={"input": str(inp), "template": "t"})
+
+
+def test_each_lane_takes_only_its_kinds(campaign):
+    send = queue_send(campaign)
+    delivery = services.enqueue(campaign, Job.Kind.DELIVERY)
+    worker = make_worker(FakeEngine())
+    assert worker.claim(SHORT_KINDS).pk == delivery.pk
+    assert worker.claim(SEND_KINDS).pk == send.pk
+
+
+def test_a_test_sms_is_taken_while_another_campaign_sends(campaign, tmp_path):
+    other = other_campaign(tmp_path)
+    worker = make_worker(FakeEngine())
+    queue_send(campaign)
+    assert worker.claim(SEND_KINDS) is not None  # coin-7's send is running now
+    test = services.enqueue(other, Job.Kind.TEST, params={"test_number": "09120009999"})
+    assert worker.claim(SHORT_KINDS).pk == test.pk
+
+
+def test_a_campaigns_own_locking_jobs_wait_for_each_other(campaign):
+    worker = make_worker(FakeEngine())
+    send = queue_send(campaign)
+    assert worker.claim(SEND_KINDS).pk == send.pk
+    reconcile = services.enqueue(campaign, Job.Kind.RECONCILE)
+    delivery = services.enqueue(campaign, Job.Kind.DELIVERY)
+    # The reconcile would need the run lock the send holds: it waits. Delivery
+    # only writes its own columns, so it may go beside the send.
+    assert worker.claim(SHORT_KINDS).pk == delivery.pk
+    assert worker.claim(SHORT_KINDS) is None
+    Job.objects.filter(pk=send.pk).update(state=Job.State.DONE, lease_until=None, lease_owner="")
+    assert worker.claim(SHORT_KINDS).pk == reconcile.pk
+
+
+def test_a_send_waits_while_its_campaigns_test_runs(campaign):
+    worker = make_worker(FakeEngine())
+    test = services.enqueue(campaign, Job.Kind.TEST, params={"test_number": "09120009999"})
+    assert worker.claim(SHORT_KINDS).pk == test.pk
+    Job.objects.create(campaign=campaign, kind=Job.Kind.SEND, settings_hash=services.settings_hash(campaign))
+    assert worker.claim(SEND_KINDS) is None
+
+
+def test_a_dead_workers_send_is_still_taken_over(campaign):
+    send = queue_send(campaign)
+    assert make_worker(FakeEngine(), "dead").claim(SEND_KINDS).pk == send.pk
+    Job.objects.filter(pk=send.pk).update(lease_until=timezone.now() - timedelta(seconds=1))
+    assert make_worker(FakeEngine(), "w2").claim(SEND_KINDS).pk == send.pk
+
+
+def test_a_test_sms_finishes_while_a_long_send_runs(campaign, tmp_path):
+    """The real case: an hour-long send, and an urgent alert to test."""
+    import threading
+
+    release = threading.Event()
+    recipients = set(PHONES)
+
+    class SlowForTheSend(FakeKavenegar):
+        def send(self, phone, tokens=None):
+            if phone in recipients:
+                assert release.wait(30), "never released"
+            return super().send(phone, tokens)
+
+    engine = FakeEngine(SlowForTheSend())
+    other = other_campaign(tmp_path)
+    send = queue_send(campaign)
+    worker = make_worker(engine)
+    thread = threading.Thread(target=worker.run_forever, kwargs={"poll_sec": 0.05}, daemon=True)
+    thread.start()
+    try:
+        deadline = time.monotonic() + 10
+        while Job.objects.get(pk=send.pk).state != Job.State.RUNNING:
+            assert time.monotonic() < deadline
+            time.sleep(0.05)
+        test = services.enqueue(other, Job.Kind.TEST, params={"test_number": "09120009999"})
+        while Job.objects.get(pk=test.pk).state != Job.State.DONE:
+            assert time.monotonic() < deadline, Job.objects.get(pk=test.pk).state
+            time.sleep(0.05)
+        assert Job.objects.get(pk=send.pk).state == Job.State.RUNNING  # still sending
+    finally:
+        release.set()
+        deadline = time.monotonic() + 10
+        while Job.objects.get(pk=send.pk).state == Job.State.RUNNING and time.monotonic() < deadline:
+            time.sleep(0.05)
+        worker.stop.set()
+        thread.join(10)
+    assert Job.objects.get(pk=send.pk).state == Job.State.DONE
+    assert counts(campaign)[SENT] == len(PHONES)

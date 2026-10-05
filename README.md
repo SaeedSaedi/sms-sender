@@ -573,8 +573,9 @@ configuration, TLS and NetBird access, health checks, backups
 rollback, and a runbook.
 
 It also has a background **worker** (`python manage.py run_worker`, the
-`worker` service in Compose) that runs the jobs the dashboard queues: sends,
-reconciliation, and delivery and click updates, one at a time.
+`worker` service in Compose) that runs the jobs the dashboard queues: sends
+one at a time, and test SMS, reconciliation, and delivery and click updates
+beside them, so an urgent test never waits behind a long send.
 - **Pause** stops taking new recipients; requests already in flight finish
   and are recorded.
 - **Resume** continues from the campaign DB without sending anyone twice.
