@@ -66,6 +66,7 @@ from .shortlink import (
 )
 from .frequency import parse_cap
 from .window import DEFAULT_WINDOW, ENV_SEND_WINDOW, parse_window
+from . import sharing
 from .state import (
     CANCELLED,
     INVALID,
@@ -78,6 +79,8 @@ from .state import (
 )
 
 TEST_NUMBER_ENV = "SMS_SENDER_TEST_NUMBER"
+# Where the log goes when --log-file isn't given (tests point it at a temp folder).
+LOG_FILE_ENV = "SMS_SENDER_LOG_FILE"
 
 logger = logging.getLogger(__name__)
 
@@ -313,6 +316,30 @@ def _db_lock(db_path: str) -> Iterator[None]:
         lock.release()
 
 
+def _guard_folder(db_path: str, *, changes: bool = True) -> None:
+    """A dashboard worker on another kernel (Docker Desktop's VM) is using
+    this DB's folder: locks don't reach across, so a command that changes
+    rows could claim what the worker is sending. Refuse those (exit 2), and
+    warn for reads, which may see the folder a moment behind."""
+    other = sharing.foreign_worker(Path(db_path).parent)
+    if other is None:
+        return
+    where = Path(db_path).parent
+    if changes:
+        click.echo(
+            f"Error: the dashboard's worker ({other.get('worker', '?')}) is using {where} from another "
+            "system (for example inside Docker), and file locks don't reach across. Run this inside "
+            "the container instead (docker compose exec worker sms-sender ...), or stop the worker first.",
+            err=True,
+        )
+        sys.exit(2)
+    click.echo(
+        f"Warning: the dashboard's worker is using {where} from another system; what this shows may "
+        "be a moment behind. Inside the container it isn't (docker compose exec worker sms-sender ...).",
+        err=True,
+    )
+
+
 @click.group(invoke_without_command=True)
 @click.option(
     "--config", "config_path", default=None, type=click.Path(dir_okay=False),
@@ -411,7 +438,7 @@ def _send_options(f: F) -> F:
         ),
         click.option(
             "--log-file", default="./logs/sms-sender.log", show_default=True,
-            type=click.Path(dir_okay=False),
+            type=click.Path(dir_okay=False), envvar=LOG_FILE_ENV,
         ),
         click.option(
             "--smoke-test", is_flag=True,
@@ -512,6 +539,7 @@ def _do_send(
             param_hint="--segment",
         )
     db_path = _resolve_db_path(db_path, campaign)
+    _guard_folder(db_path)
     console_level = (
         logging.DEBUG if verbose else (logging.WARNING if quiet else logging.INFO)
     )
@@ -637,6 +665,7 @@ def retry_failed(include_permanent: bool, **kwargs: Any) -> None:
     subsequent `send` then claims them all (unless they were already sent).
     """
     kwargs["db_path"] = _resolve_db_path(kwargs["db_path"], kwargs.get("campaign"))
+    _guard_folder(kwargs["db_path"])
     store = StateStore(kwargs["db_path"])
     with _db_lock(kwargs["db_path"]):
         n = store.reset_status("failed_retriable")
@@ -655,6 +684,7 @@ def retry_failed(include_permanent: bool, **kwargs: Any) -> None:
 def status(db_path: str, campaign: str | None) -> None:
     """Print the campaign, its template and last run, and row counts by status."""
     db_path = _resolve_db_path(db_path, campaign)
+    _guard_folder(db_path, changes=False)
     if not Path(db_path).exists():
         click.echo(f"(no state DB at {db_path})")
         return
@@ -715,6 +745,7 @@ def status(db_path: str, campaign: str | None) -> None:
 def export_failed(db_path: str, out: str, campaign: str | None) -> None:
     """Dump permanent failures to a CSV the user can fix and re-feed."""
     db_path = _resolve_db_path(db_path, campaign)
+    _guard_folder(db_path, changes=False)
     store = StateStore(db_path)
     p = Path(out)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -754,6 +785,7 @@ def reset(db_path: str, from_status: str, yes: bool, campaign: str | None) -> No
     `unknown`, prefer `sms-sender reconcile`, which checks with Kavenegar.
     """
     db_path = _resolve_db_path(db_path, campaign)
+    _guard_folder(db_path)
     store = StateStore(db_path)
     risky = {
         "sent": "Resetting status=sent will cause the next `send` to deliver a "
@@ -789,6 +821,7 @@ def purge(db_path: str, yes: bool, campaign: str | None) -> None:
     undo.
     """
     db_path = _resolve_db_path(db_path, campaign)
+    _guard_folder(db_path)
     db = Path(db_path)
     sidecars = [db.with_name(db.name + s) for s in ("", "-wal", "-shm", "-journal")]
     existing = [p for p in sidecars if p.exists()]
@@ -824,7 +857,7 @@ def purge(db_path: str, yes: bool, campaign: str | None) -> None:
 @click.option("--timeout", default=15.0, show_default=True, type=float)
 @click.option(
     "--log-file", default="./logs/sms-sender.log", show_default=True,
-    type=click.Path(dir_okay=False),
+    type=click.Path(dir_okay=False), envvar=LOG_FILE_ENV,
 )
 @_campaign_option
 def reconcile(
@@ -840,6 +873,7 @@ def reconcile(
     """
     logging_config.setup(log_file=log_file, console_level=logging.WARNING)
     db_path = _resolve_db_path(db_path, campaign)
+    _guard_folder(db_path)
     if not Path(db_path).exists():
         raise click.UsageError(f"No state DB at {db_path}.")
     store = StateStore(db_path)
@@ -876,7 +910,7 @@ def reconcile(
 @click.option("--timeout", default=15.0, show_default=True, type=float)
 @click.option(
     "--log-file", default="./logs/sms-sender.log", show_default=True,
-    type=click.Path(dir_okay=False),
+    type=click.Path(dir_okay=False), envvar=LOG_FILE_ENV,
 )
 def delivery(db_path: str, campaign: str | None, timeout: float, log_file: str) -> None:
     """Fetch delivery reports for SMS sent in the last 48 h. Never sends anything.
@@ -887,6 +921,7 @@ def delivery(db_path: str, campaign: str | None, timeout: float, log_file: str) 
     """
     logging_config.setup(log_file=log_file, console_level=logging.WARNING)
     db_path = _resolve_db_path(db_path, campaign)
+    _guard_folder(db_path)
     if not Path(db_path).exists():
         raise click.UsageError(f"No state DB at {db_path}.")
     store = StateStore(db_path)
@@ -935,10 +970,11 @@ def check_sends_command(db_path: str, campaign: str | None) -> None:
     click.echo("OK: nobody got this campaign twice.")
 
 
-def _campaign_store(db_path: str, campaign: str | None) -> tuple[str, StateStore, str]:
+def _campaign_store(db_path: str, campaign: str | None, *, changes: bool = False) -> tuple[str, StateStore, str]:
     """(db path, store, campaign name) for commands that read a campaign's
     DB. Never creates one."""
     db_path = _resolve_db_path(db_path, campaign)
+    _guard_folder(db_path, changes=changes)
     if not Path(db_path).exists():
         raise click.UsageError(f"No state DB at {db_path}.")
     store = StateStore(db_path)
@@ -965,7 +1001,7 @@ def _write_csv(path: Path, header: list[str], rows: Iterator[list]) -> int:
 @click.option("--timeout", default=15.0, show_default=True, type=float)
 @click.option(
     "--log-file", default="./logs/sms-sender.log", show_default=True,
-    type=click.Path(dir_okay=False),
+    type=click.Path(dir_okay=False), envvar=LOG_FILE_ENV,
 )
 def clicks(db_path: str, campaign: str | None, timeout: float, log_file: str) -> None:
     """Fetch click counts from Shlink and show them per segment. Never sends anything.
@@ -973,7 +1009,7 @@ def clicks(db_path: str, campaign: str | None, timeout: float, log_file: str) ->
     Counts exclude bots and link-preview fetchers. Recipients without a user
     ID are shown as missing user ID."""
     logging_config.setup(log_file=log_file, console_level=logging.WARNING)
-    _, store, name = _campaign_store(db_path, campaign)
+    _, store, name = _campaign_store(db_path, campaign, changes=True)
     try:
         client = ShlinkClient(load_shlink_config(timeout=timeout))
     except RuntimeError as e:

@@ -69,6 +69,7 @@ secret store. Never put them in the image, the repository or a ticket.
   app.db              users, roles, two-step secrets, campaigns, jobs, activity log
   db/<campaign>.db    one per campaign: every recipient, what was sent, the call records
   db/<campaign>.db.lock   run lock; harmless to leave
+  db/.dashboard-worker.json   the worker's heartbeat, for the CLI (see below)
   segments/           uploaded recipient lists
   exports/            CSV downloads made from the CLI (made again on demand)
   backups/            manage.py backup (see below)
@@ -82,6 +83,28 @@ Never copy it to a laptop, a ticket or chat.
 The campaign DBs are the memory that stops a second SMS. A deleted or
 replaced campaign DB means the next send of that campaign goes to everyone
 again. Don't move, rename or delete files in `db/`.
+
+### Where the data may live
+
+Everything above is SQLite, by design: one host, one worker, files the CLI
+can also use. That holds as long as these do:
+
+- **A local disk.** Never NFS, SMB or another network filesystem: SQLite's
+  locks and its write-ahead log need a local disk, and on a network share
+  two writers can corrupt a DB without any error.
+- **One host.** Both services mount the same volume on the same machine.
+  A second web server or worker host is the point to move `app.db` to
+  PostgreSQL (the campaign DBs stay files, because the CLI and the rule
+  against a second SMS are built on them).
+- **The CLI runs inside the container**, not on the host:
+  `docker compose exec worker sms-sender …`. On a Linux host the two share
+  a kernel and their locks meet. On Docker Desktop (a Mac or Windows) the
+  containers run in a VM, and locks don't cross into it. The worker leaves
+  `db/.dashboard-worker.json` with its kernel's boot ID; a CLI on another
+  kernel refuses to change anything while that heartbeat is fresh (two
+  minutes), and warns when it only reads.
+- `SMS_SENDER_LOG_FILE` sets where the CLI writes its log (default
+  `./logs/sms-sender.log`).
 
 ## Network access and TLS
 
