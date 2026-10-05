@@ -11,7 +11,7 @@ One Docker image, `sms-sender-dashboard`, runs as two services from
 
 | Service | Command | Job |
 |---|---|---|
-| `web` | `migrate`, then gunicorn on port 8000 | The Persian dashboard. Applies database migrations on every start. |
+| `web` | `migrate`, then gunicorn on port 8000 (threaded workers) | The Persian dashboard. Applies database migrations on every start. Its workers are threaded (`gthread`) because browsers reach it directly: a sync worker would be held by a browser's idle connection until killed. |
 | `worker` | `python manage.py run_worker` | Runs what the dashboard queues: sends, reconciliation, delivery and click updates, one at a time. |
 
 Both share one volume, `/app/data` (`./data` on the host). Everything with

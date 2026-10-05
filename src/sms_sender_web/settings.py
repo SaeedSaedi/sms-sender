@@ -182,5 +182,8 @@ LOGGING = {
     "loggers": {
         "sms_sender": {"handlers": ["console"], "level": "INFO"},
         "sms_sender_web": {"handlers": ["console"], "level": "INFO"},
+        # A page that failed (500), with its traceback. Without it Django only
+        # mails admins, and nothing would reach `docker logs`.
+        "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
     },
 }
