@@ -88,7 +88,7 @@ class Engine:
             opt_out=frozenset(opt_out) or None,
             frequency_cap=SystemSettings.load().frequency_cap,
             send_window=parse_window(s.get("send_window", DEFAULT_WINDOW)),
-            user_id_column=s.get("user_id_column"),
+            user_id_column=s.get("user_id_column") or None,  # "" means none, as on a segment
             segment=s.get("segment"),
             links=links,
             link_client=self.link_client(campaign) if links else None,

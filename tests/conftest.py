@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from sms_sender.cli import TEST_NUMBER_ENV
+from sms_sender.cli import LOG_FILE_ENV, TEST_NUMBER_ENV
 from sms_sender.config import ENV_API_KEY
 from sms_sender.shortlink import ENV_API_KEY as SHLINK_KEY_ENV
 from sms_sender.shortlink import ENV_BASE_URL as SHLINK_BASE_ENV
@@ -23,7 +23,7 @@ def _dotenv_names() -> set[str]:
 
 
 @pytest.fixture(autouse=True)
-def _never_the_real_env(monkeypatch):
+def _never_the_real_env(monkeypatch, tmp_path):
     """`load_dotenv` never overrides a variable that's already set, even to
     "", so blanking every name in the real `.env` (keys, the test number)
     keeps its values out of every test. A test that needs one sets its own."""
@@ -36,3 +36,5 @@ def _never_the_real_env(monkeypatch):
     # Tests mustn't depend on the time of day: the CLI's default sending
     # window (08:00–21:00 Tehran) is off unless a test sets one.
     monkeypatch.setenv(ENV_SEND_WINDOW, "off")
+    # Never the real logs/: a CLI run in a test would rotate real history away.
+    monkeypatch.setenv(LOG_FILE_ENV, str(tmp_path / "logs" / "sms-sender.log"))

@@ -23,6 +23,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 
+from django.conf import settings as django_settings
 from django.db import close_old_connections, connection, transaction
 from django.db.models import F, Q, Value
 from django.db.models.functions import Coalesce
@@ -33,6 +34,7 @@ from sms_sender.delivery import FINAL, WINDOW_SEC, sync_delivery
 from sms_sender.input_loader import InputError
 from sms_sender.locking import RunLock, RunLockError
 from sms_sender.reconcile import DEFAULT_MIN_AGE_SEC, REQUEUE_NOT_FOUND, reconcile_unknown
+from sms_sender.sharing import write_heartbeat
 from sms_sender.state import CampaignMismatchError
 from sms_sender.window import DEFAULT_WINDOW, now_tehran, parse_window
 
@@ -136,6 +138,9 @@ class Worker:
 
     def beat(self) -> None:
         WorkerBeat.objects.update_or_create(worker_id=self.id, defaults={"seen_at": timezone.now()})
+        # So a CLI on another kernel (the host, outside Docker Desktop's VM)
+        # knows not to change this folder's DBs while it's busy here.
+        write_heartbeat(django_settings.SMS_SENDER_DB_DIR, self.id)
 
     # ---------- claiming ----------
 

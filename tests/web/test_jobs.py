@@ -289,3 +289,17 @@ def test_the_heartbeat_keeps_the_lease_alive(campaign):
 
     make_worker(FakeEngine(Slow()), lease=timedelta(seconds=30)).run_once()
     assert seen[-1] > seen[0]  # renewed while it ran
+
+
+def test_the_worker_leaves_a_heartbeat_for_the_cli(settings, tmp_path):
+    """A CLI outside Docker Desktop's VM reads it before changing any DB in
+    the folder (sharing.py)."""
+    import json
+
+    from sms_sender import sharing
+
+    settings.SMS_SENDER_DB_DIR = tmp_path
+    Worker(worker_id="w1").beat()
+    data = json.loads((tmp_path / sharing.HEARTBEAT).read_text())
+    assert data["worker"] == "w1" and data["kernel"] == sharing.kernel_id()
+    assert sharing.foreign_worker(tmp_path) is None  # this kernel: nothing refused
