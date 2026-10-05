@@ -301,6 +301,22 @@ FOLLOWUPS = {
 }
 
 # A message's length (campaigns/message.py), as people read it.
+# Who an alert reaches, in the composer (plan 06, L3).
+COUNTS = {
+    "to_send": _("{n} will get the SMS"),
+    "lists": _("{lists} segments · {n} numbers, each counted once"),
+    "repeated": _("{n} repeated numbers counted once"),
+    "suppressed": _("{n} on the suppression list"),
+    "capped": _("{n} over the frequency cap ({cap})"),
+    "already": _("{n} already got this alert"),
+    "not_allowed": _("{n} aren't allowed numbers (restricted sending)"),
+    "cost": _("About {total} rials in all"),
+    "invalid": _("{n} rows aren't valid numbers and are skipped"),
+}
+TEST_HINT = _("It goes to your own number, {phone}. Ctrl+Enter does the same.")
+SERIES = _("{n} alerts")
+SERIES_LAST = _("{n} alerts · the last on {date}")
+LACKS_COLUMNS = _("It lacks the column {columns}")
 LENGTH = _("{chars} characters · {parts} SMS")
 COST_EACH = _("About {cost} rials per recipient, from the price of the latest test SMS.")
 COST_TOTAL = _("About {cost} rials per recipient, {total} rials for {n}, from the price of the latest test SMS.")

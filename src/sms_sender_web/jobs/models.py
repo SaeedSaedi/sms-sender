@@ -35,6 +35,10 @@ class Campaign(models.Model):
         django_settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
         related_name="+",
     )
+    # The preset this alert was made from (plan 06, L3): its series.
+    preset = models.ForeignKey(
+        "campaigns.Preset", null=True, blank=True, on_delete=models.SET_NULL, related_name="campaigns",
+    )
 
     def __str__(self) -> str:
         return self.slug

@@ -21,7 +21,7 @@ from sms_sender.state import StateStore
 from sms_sender_web.accounts.models import Profile
 from sms_sender_web.accounts.roles import set_role
 from sms_sender_web.audit.record import record
-from sms_sender_web.campaigns.models import MessageTemplate
+from sms_sender_web.campaigns.models import MessageTemplate, Preset
 from sms_sender_web.jobs import services
 from sms_sender_web.jobs.engine import campaign_db
 from sms_sender_web.jobs.models import Campaign, Job
@@ -104,6 +104,15 @@ PAGES: dict[str, tuple[str, str | None]] = {
     "two_factor_setup": ("/2fa/setup/", "newcomer:password"),
     "forbidden": ("/campaigns/fresh/settings/", "viewer"),
     "not_found": ("/campaigns/nothing-here/", "viewer"),
+    # Presets and the composer (plan 06, L3).
+    "presets": ("/presets/", "viewer"),
+    "preset.new": ("/presets/new/", "operator"),
+    "preset.edit": ("/presets/coin-price/", "operator"),
+    "compose.start": ("/compose/", "operator"),
+    "compose": ("/compose/coin-price/", "operator"),
+    "compose.fresh": ("/compose/c/fresh/", "operator"),
+    "compose.awaiting": ("/compose/c/awaiting/", "operator"),
+    "compose.approved": ("/compose/c/approved/", "operator"),
 }
 
 
@@ -266,6 +275,13 @@ def build_world(data_dir: Path) -> World:
         name="coin-price", text="%token10 عزیز، قیمت %token امروز اعلام شد: %token20\nلغو۱۱",
         note="قیمت روزانه", updated_by=operator,
     )
+    # A preset, and three campaigns made from it (so their composer pages
+    # exist), without adding a campaign: the other pages' counts stay.
+    preset = Preset.objects.create(
+        slug="coin-price", name="قیمت سکه", settings={**SETTINGS, "input": str(vip.path), "send_window": open_window()},
+        labels={"token": "نام کالا"}, last_values={"token": "طلا"}, created_by=operator,
+    )
+    Campaign.objects.filter(slug__in=["fresh", "awaiting", "approved"]).update(preset=preset)
     Suppression.objects.create(phone="09120000050", note="درخواست مشتری")
     record("campaign_created", user=operator, campaign="approved")
     record("segment_uploaded", user=operator, segment="vip", file="vip.csv")

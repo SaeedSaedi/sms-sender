@@ -1421,3 +1421,66 @@ details.schedule .field-grid { max-inline-size: 24rem; }
 .health-state.is-ok::before { background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
 .health-state.is-bad { color: var(--danger); }
 .health-state.is-bad::before { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+
+/* ---------- Presets and the composer (plan 06, L3) ---------- */
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+  gap: var(--s-4);
+  margin: 0 0 var(--s-6);
+  padding: 0;
+  list-style: none;
+}
+.preset-card { display: flex; flex-direction: column; gap: var(--s-1); margin: 0; }
+.preset-card h2 { margin: 0; font-size: var(--fs-lg); }
+.preset-card h2 a { color: var(--text); text-decoration: none; }
+.preset-card h2 a:hover { color: var(--primary); text-decoration: underline; }
+.preset-card p { margin: 0; }
+.preset-card .chip { align-self: flex-start; }
+.preset-card .actions { margin-block-start: auto; padding-block-start: var(--s-3); }
+.preset-card.is-last { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
+
+.compose { display: flex; flex-wrap: wrap; gap: var(--s-5); align-items: flex-start; }
+.compose-main { flex: 999 1 32rem; min-inline-size: 0; display: flex; flex-direction: column; gap: var(--s-4); }
+.compose-main > .card { margin: 0; }
+.compose-side { flex: 1 1 21rem; min-inline-size: 0; display: flex; flex-direction: column; gap: var(--s-4); }
+.compose-side > .card { margin: 0; }
+@media (min-width: 1024px) {
+  .compose-side { position: sticky; inset-block-start: var(--s-4); }
+}
+.compose-step h2, .compose-panel h2, .compose-preview h2 { display: flex; align-items: center; gap: var(--s-2); }
+.step-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: var(--fs-sm);
+  flex: none;
+}
+.token-fixed .label { margin: 0 0 var(--s-1); font-weight: 600; }
+.token-source {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: 0;
+  min-block-size: 2.75rem;
+  padding: .5rem .75rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--muted);
+}
+.chips { display: flex; flex-wrap: wrap; gap: var(--s-2); margin: var(--s-3) 0 0; padding: 0; list-style: none; }
+.chip.is-main { background: var(--primary-soft); color: var(--primary); font-weight: 700; }
+.chip.is-warn { background: var(--warning-soft); color: var(--warning); }
+.phone {
+  padding: var(--s-4) var(--s-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface-2);
+}
+.phone .sms-bubble { margin: 0; }
+

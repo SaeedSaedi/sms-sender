@@ -1,0 +1,7 @@
+{% load i18n ui %}
+{% if check %}
+  <ul class="chips compose-counts">
+    {% for text, tone in count_lines %}<li class="chip{% if tone %} is-{{ tone }}{% endif %}">{{ text }}</li>{% endfor %}
+  </ul>
+  {% for problem in check_problems %}<div class="callout callout-error">{% icon "circle-alert" %}<p>{{ problem }}</p></div>{% endfor %}
+{% endif %}

@@ -1,0 +1,19 @@
+{% load i18n fa ui %}
+<h2 id="preview-title">{% icon "eye" %}{% translate "Message preview" %}</h2>
+{% if not message.template %}
+  <p class="muted">{% translate "Choose a template to see the message." %}</p>
+{% elif not message.known %}
+  <div class="callout">{% icon "info" %}
+    <p>{% translate "This template's text isn't in the library yet. Add it to see the message here." %}
+      <a href="{% url 'template_new' %}">{% translate "Add a template" %}</a></p>
+  </div>
+{% else %}
+  <div class="phone"><div class="sms-bubble" dir="auto">{{ message.text }}</div></div>
+  <p class="num sms-length">{{ message.length }}</p>
+  {% if message_cost %}<p class="hint num">{{ message_cost }}</p>{% endif %}
+  {% if message.sample %}<p class="hint">{% translate "With the values of" %} {{ message.sample|fa_digits|ltr }}</p>{% endif %}
+  {% if message.has_link %}<p class="hint">{% translate "The link's code here is an example." %}</p>{% endif %}
+  {% for problem in message.problems %}<div class="callout callout-error">{% icon "circle-alert" %}<p>{{ problem }}</p></div>{% endfor %}
+  {% for warning in message.warnings %}<div class="callout callout-warning">{% icon "triangle-alert" %}<p>{{ warning }}</p></div>{% endfor %}
+{% endif %}
+{% if oob %}{% for f in fields %}{% if f.kind == "value" %}<div id="err-{{ f.name }}" class="field-errors" hx-swap-oob="true">{% if f.problem %}<p class="error">{{ f.problem }}</p>{% endif %}</div>{% endif %}{% endfor %}{% endif %}

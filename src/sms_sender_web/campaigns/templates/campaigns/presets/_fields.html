@@ -1,0 +1,28 @@
+{% load i18n ui %}{% with f=preset_fields %}
+<fieldset>
+  <legend>{% translate "Preset" %}</legend>
+  <label for="id_preset_name">{% translate "Name" %}</label>
+  <input id="id_preset_name" name="name" type="text" maxlength="120" required dir="auto" value="{{ f.name.value|default:'' }}"{% aria f.name %}>
+  {% field_errors f.name alert=False %}
+  {% if not preset %}
+    <label for="id_preset_slug">{% translate "Short name" %}</label>
+    <input id="id_preset_slug" name="slug" type="text" maxlength="40" required dir="ltr" placeholder="coin-price" value="{{ f.slug.value|default:'' }}"{% aria f.slug hint=True %}>
+    <p class="hint" id="id_preset_slug_hint">{% translate "Lowercase English letters, digits and dashes. Each alert's short name starts with it, then the date: coin-price-1405-07-14." %}</p>
+    {% field_errors f.slug alert=False %}
+  {% endif %}
+  <label for="id_preset_pattern">{% translate "Each alert's name" %}</label>
+  <input id="id_preset_pattern" name="name_pattern" type="text" maxlength="160" dir="auto" placeholder="{name} · {date}" value="{{ f.name_pattern.value|default:'' }}"{% aria f.name_pattern hint=True %}>
+  <p class="hint" id="id_preset_pattern_hint">{% translate "{name} is the preset's name and {date} today's date. Empty: the name, then the date." %}</p>
+  {% field_errors f.name_pattern alert=False %}
+  <details class="subsection"{% if preset.labels %} open{% endif %}>
+    <summary>{% translate "Labels for the values each alert asks for (optional)" %}</summary>
+    <p class="hint">{% translate "A token with a fixed value is asked for in every new alert, its last value filled in. A label tells what it is, e.g. coin name." %}</p>
+    <div class="field-grid">
+      {% for field in f %}{% if field.name|slice:"-6:" == "_label" %}
+        <div><label for="{{ field.id_for_label }}"><code dir="ltr">%{{ field.name|cut:"_label" }}</code></label>
+          <input id="{{ field.id_for_label }}" name="{{ field.html_name }}" type="text" maxlength="60" dir="auto" value="{{ field.value|default:'' }}"></div>
+      {% endif %}{% endfor %}
+    </div>
+  </details>
+</fieldset>
+{% endwith %}

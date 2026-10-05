@@ -1,0 +1,18 @@
+{% load i18n fa roles ui %}
+<section class="card compose-panel" id="compose-panel" aria-label="{% translate "Test and send" %}" aria-live="polite"
+         {% if active %}hx-get="{% url 'compose_panel' campaign.slug %}" hx-trigger="every 3s" hx-swap="morph:outerHTML"{% endif %}>
+  {% if needs_test %}
+    <h2>{% icon "send" %}{% translate "Test and send" %}</h2>
+    {% if test_outdated %}
+      <div class="callout callout-warning">{% icon "triangle-alert" %}<p>{% translate "The values or segments changed after the test SMS. Send a new one: its approval covers these exact settings." %}</p></div>
+    {% elif test.decision == "rejected" %}
+      <div class="callout">{% icon "info" %}<p>{% translate "You said the test SMS wasn't right. Change what's needed, then send a new one." %}</p></div>
+    {% elif test_reason %}
+      <div class="callout callout-error">{% icon "circle-alert" %}<p>{{ test_reason }}</p></div>
+    {% endif %}
+    {% include "campaigns/compose/_test_button.html" %}
+  {% else %}
+    {% include stage_template %}
+  {% endif %}
+  <p class="hint"><a href="{% url 'campaign_detail' campaign.slug %}">{% translate "Its history and every other option: the campaign page" %}</a></p>
+</section>

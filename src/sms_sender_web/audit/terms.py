@@ -63,6 +63,10 @@ ACTION_LABELS = {
     "campaign_imported": _("Campaign made from a CLI profile"),
     "sending_held": _("All sending held"),
     "sending_released": _("Hold on sending lifted"),
+    "preset_created": _("Preset made"),
+    "preset_changed": _("Preset changed"),
+    "preset_archived": _("Preset put away"),
+    "preset_restored": _("Preset brought back"),
     "job_requested": _("Update requested"),
     "job_paused": _("Paused"),
     "job_resumed": _("Resumed"),
@@ -142,6 +146,8 @@ def describe(event) -> str:
         return format_html(gettext_now("from {source}"), source=_who(d.get("source", "")))
     if event.action == "sending_held" and d.get("sends") is not None:
         return format_html(gettext_now("{count} sends stopped"), count=fa_number(d["sends"]))
+    if event.action.startswith("preset_") and d.get("preset"):
+        return _who(d["preset"])
     if event.action == "sending_released":
         return format_html(gettext_now("{count} sends continued"), count=fa_number(d.get("resumed", 0)))
     if event.action == "campaign_imported":
