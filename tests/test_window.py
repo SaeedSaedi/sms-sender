@@ -41,3 +41,17 @@ def test_window_across_midnight():
     w = parse_window("22:00-02:00")
     assert w.contains(at(23, 0)) and w.contains(at(1, 59))
     assert not w.contains(at(2, 0)) and not w.contains(at(12, 0))
+
+
+def test_24_00_is_midnight():
+    w = parse_window("08:00-24:00")
+    assert w == SendWindow(time(8, 0), time(0, 0))
+    assert w.contains(at(23, 59)) and w.contains(at(8, 0))
+    assert not w.contains(at(0, 0)) and not w.contains(at(7, 59))
+    assert parse_window("24:00-08:00") == parse_window("00:00-08:00")
+    assert parse_window("20:00-24:00") == parse_window("20:00-00:00")
+    with pytest.raises(ValueError, match="whole day"):
+        parse_window("00:00-24:00")
+    with pytest.raises(ValueError):
+        parse_window("08:00-24:30")
+

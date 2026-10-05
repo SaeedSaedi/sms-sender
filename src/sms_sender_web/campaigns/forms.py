@@ -215,7 +215,10 @@ class SettingsForm(forms.Form):
         except ValueError:
             window = None
         if window is None:  # "off" is for the CLI only (decided: prohibited hours apply)
-            raise forms.ValidationError(_("Write the daily window as 08:00-21:00 (Tehran time)."))
+            raise forms.ValidationError(_(
+                "Write each time like 08:00 or 21:30 (Tehran time). Midnight is 00:00 or 24:00, and a "
+                "window may run past it, e.g. from 08:00 until 02:00."
+            ))
         return f"{window.start:%H:%M}-{window.end:%H:%M}"
 
     def clean_rate(self) -> str:
@@ -374,6 +377,13 @@ class SettingsForm(forms.Form):
         return settings
 
 
+def _clock(text: str) -> str:
+    """One time box: "8", "21", "24" or "۸" is that hour sharp; anything
+    else ("8:30") goes to the window's own check as it is."""
+    text = text.strip().translate(_ASCII_DIGITS)
+    return f"{int(text):02d}:00" if text.isdigit() and len(text) <= 2 else text
+
+
 def combined(data):
     """The settings page's split controls, back into the form's fields: the
     window's two times, the rate's number and unit, the link format's
@@ -381,9 +391,7 @@ def combined(data):
     the combined fields (the CLI-shaped form) passes through unchanged."""
     data = data.copy()
     if "window_start" in data or "window_end" in data:
-        start = data.get("window_start", "").strip().translate(_ASCII_DIGITS)
-        end = data.get("window_end", "").strip().translate(_ASCII_DIGITS)
-        data["send_window"] = f"{start}-{end}"
+        data["send_window"] = f"{_clock(data.get('window_start', ''))}-{_clock(data.get('window_end', ''))}"
     if "rate_value" in data:
         value = data.get("rate_value", "").strip().translate(_ASCII_DIGITS)
         data["rate"] = f"{value}/{data.get('rate_unit') or 's'}" if value else ""

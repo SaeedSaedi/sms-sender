@@ -1166,9 +1166,6 @@ msgstr "هر ترجمه را به شکل ستون:مقدار=ترجمه بنوی
 msgid "Write the address the short link opens."
 msgstr "نشانی مقصد لینک کوتاه را بنویسید."
 
-msgid "Write the daily window as 08:00-21:00 (Tehran time)."
-msgstr "بازه روزانه را به شکل ۰۸:۰۰-۲۱:۰۰ (به وقت تهران) بنویسید."
-
 msgid "Write the rate like 10/s, 600/m or 3600/h."
 msgstr "سرعت را مانند ۱۰/s، ۶۰۰/m یا ۳۶۰۰/h بنویسید."
 
@@ -3247,3 +3244,6 @@ msgstr "ارسال محدود: شماره شما برای پیامک آزمای�
 
 msgid "Restricted sending is set wrongly: SMS_SENDER_ALLOWED_NUMBERS holds something that isn't a phone number, so nothing is sent."
 msgstr "ارسال محدود درست تنظیم نشده است: در SMS_SENDER_ALLOWED_NUMBERS چیزی هست که شماره تلفن نیست، پس هیچ پیامکی فرستاده نمی‌شود."
+
+msgid "Write each time like 08:00 or 21:30 (Tehran time). Midnight is 00:00 or 24:00, and a window may run past it, e.g. from 08:00 until 02:00."
+msgstr "هر زمان را مانند ۰۸:۰۰ یا ۲۱:۳۰ (به وقت تهران) بنویسید. نیمه‌شب ۰۰:۰۰ یا ۲۴:۰۰ است و بازه می‌تواند از آن بگذرد؛ مثلاً از ۰۸:۰۰ تا ۰۲:۰۰."

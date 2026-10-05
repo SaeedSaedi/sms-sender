@@ -34,13 +34,18 @@ class SendWindow:
 
 
 def parse_window(spec: str | None) -> SendWindow | None:
-    """'08:00-21:00' → a SendWindow; 'off', '' or None → no restriction."""
+    """'08:00-21:00' → a SendWindow; 'off', '' or None → no restriction.
+    A window may cross midnight ('22:00-02:00'), and 24:00 is midnight."""
     if spec is None or spec.strip().lower() in ("", "off", "none"):
         return None
     match = _SPEC_RE.match(spec.strip())
     if not match:
         raise ValueError(f"sending window must look like 08:00-21:00 or 'off'; got {spec!r}")
     h1, m1, h2, m2 = (int(g) for g in match.groups())
+    if (h1, m1, h2, m2) == (0, 0, 24, 0):
+        raise ValueError(f"sending window {spec!r} is the whole day: use 'off'")
+    # 24:00 is the midnight that ends a day: the same moment as 00:00.
+    h1, h2 = (0 if (h, m) == (24, 0) else h for h, m in ((h1, m1), (h2, m2)))
     try:
         start, end = time(h1, m1), time(h2, m2)
     except ValueError as e:
