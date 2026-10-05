@@ -13,6 +13,7 @@ from sms_sender.input_loader import InputError, TokenColumns
 from sms_sender.links import token_value
 from sms_sender.shortlink import shlink_base_url
 
+from ..jobs.engine import more_inputs
 from ..jobs.models import Job
 from ..privacy import mask_phone
 from .message import check, fill, length, shows_left_to_right
@@ -50,9 +51,10 @@ def price_per_part() -> float | None:
 
 
 def load_segment(settings: dict | None, segment):
-    """The segment's file as a send would read it (its token columns and
-    value maps, its user-ID column), or None when it can't be read. A page
-    that needs it several times reads it once (100,000 rows take ~0.5 s)."""
+    """The campaign's list as a send would read it: the segment's file, then
+    those of its more segments, with its token columns and value maps and
+    each list's user-ID column. None when one can't be read. A page that
+    needs it several times reads it once (100,000 rows take ~0.5 s)."""
     settings = settings or {}
     if segment is None or not segment.path.exists():
         return None
@@ -61,7 +63,7 @@ def load_segment(settings: dict | None, segment):
         TokenColumns(columns=dict(columns), value_maps=dict(settings.get("value_maps") or {})) if columns else None
     )
     try:
-        return input_loader.load(segment.path, token_columns, segment.user_id_column or None)
+        return input_loader.load_parts([segment.part(), *more_inputs(settings)], token_columns)
     except (InputError, OSError):
         return None
 
@@ -189,7 +191,8 @@ def recipients(settings: dict | None, segment, campaign: str, *, limit: int = 5,
     link = None
     if links.get("token") and loaded.valid:
         first = (rows or loaded.valid)[0]
-        planned = plan_link(LinkSettings(**links), campaign=campaign, key=first.phone, segment=segment.slug)
+        planned = plan_link(LinkSettings(**links), campaign=campaign, key=first.phone,
+                            segment=loaded.segments.get(first.phone, segment.slug))
         link = LinkPreview(planned.long_url, planned.title, ", ".join(planned.tags),
                            datetime.fromisoformat(planned.valid_until), personal=planned.ref is not None)
     return RecipientsPreview(rows=out, total=len(loaded.valid), asked=asked, found=found, link=link)

@@ -8,7 +8,7 @@ from django.conf import settings as django_settings
 
 from sms_sender import input_loader
 from sms_sender.config import load_api_key
-from sms_sender.input_loader import TokenColumns
+from sms_sender.input_loader import InputError, InputPart, TokenColumns
 from sms_sender.links import DEFAULT_RATE as DEFAULT_LINK_RATE
 from sms_sender.links import LinkSettings
 from sms_sender.rate import parse_rate
@@ -18,6 +18,7 @@ from sms_sender.shortlink import ShlinkClient, load_shlink_config
 from sms_sender.state import StateStore
 from sms_sender.window import DEFAULT_WINDOW, parse_window
 
+from ..segments.models import campaign_slugs, ready_segments
 from ..suppression.service import phones_for
 from ..system.models import SystemSettings
 from .models import Campaign
@@ -26,6 +27,18 @@ from .sandbox import SandboxKavenegar, SandboxShlink
 
 def campaign_db(campaign: Campaign) -> Path:
     return Path(django_settings.SMS_SENDER_DB_DIR) / f"{campaign.slug}.db"
+
+
+def more_inputs(settings: dict) -> list[InputPart]:
+    """The lists a send reads after its segment's (`more_segments`), in
+    order. One that isn't ready stops the run before anything is read."""
+    slugs = [slug for slug in campaign_slugs(settings) if slug != settings.get("segment")]
+    parts = []
+    for slug, segment in zip(slugs, ready_segments(slugs)):
+        if segment is None:
+            raise InputError(f"segment {slug} isn't ready, or its file is missing")
+        parts.append(segment.part())
+    return parts
 
 
 def _timeout(campaign: Campaign | None) -> float:
@@ -90,6 +103,7 @@ class Engine:
             send_window=parse_window(s.get("send_window", DEFAULT_WINDOW)),
             user_id_column=s.get("user_id_column") or None,  # "" means none, as on a segment
             segment=s.get("segment"),
+            more_inputs=more_inputs(s),
             links=links,
             link_client=self.link_client(campaign) if links else None,
             link_rate_per_sec=parse_rate(s.get("link_rate", DEFAULT_LINK_RATE)),

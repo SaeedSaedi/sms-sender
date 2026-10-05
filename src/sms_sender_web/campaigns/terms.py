@@ -144,6 +144,7 @@ def stop_reason(key: str | None, fields: dict | None) -> str:
 
 CHECK_PROBLEMS = {
     "segment_missing": _("The campaign's segment isn't ready or its file is missing."),
+    "more_segment_missing": _("One of the more segments isn't ready, or its file is missing."),
     "no_template": _("The campaign has no template."),
     "columns_missing": _("A column the tokens use isn't in the segment's file."),
     "nobody_to_send": _("Nobody is left to send to."),
@@ -153,6 +154,7 @@ CHECK_PROBLEMS = {
 # The check's lines (present.checklist).
 CHECKLIST = {
     "list": _("Segment"),
+    "lists": _("Segments"),
     "valid": _("{n} valid numbers."),
     "template": _("Template"),
     "text_known": _("Its text is in the library."),
@@ -171,6 +173,7 @@ CHECK_STATES = {"ok": _("Done:"), "warn": _("Warning:"), "fail": _("Problem:")}
 # Setting names, for the activity log's "settings changed" line.
 SETTING_NAMES = {
     "segment": _("segment"),
+    "more_segments": _("more segments"),
     "template": _("template"),
     "tokens": _("tokens"),
     "token_columns": _("tokens"),

@@ -140,14 +140,18 @@ def checklist(check, message, settings: dict | None, segment) -> list[ChecklistI
     s = settings or {}
     problems = set(check.problems)
     items = []
+    # One send may read several segments: the line names them all, in order.
+    label = str(CHECKLIST["lists" if s.get("more_segments") else "list"])
+    names = "، ".join(name for name, _n in check.segments) or (segment.name if segment else "")
     if "segment_missing" in problems:
-        items.append(ChecklistItem("fail", str(CHECKLIST["list"]), str(CHECK_PROBLEMS["segment_missing"])))
+        items.append(ChecklistItem("fail", label, str(CHECK_PROBLEMS["segment_missing"])))
+    elif "more_segment_missing" in problems:
+        items.append(ChecklistItem("fail", label, str(CHECK_PROBLEMS["more_segment_missing"]),
+                                   value=", ".join(check.missing_segments), ltr=True))
     elif "columns_missing" in problems:
-        items.append(ChecklistItem("fail", str(CHECKLIST["list"]), str(CHECK_PROBLEMS["columns_missing"]),
-                                   value=segment.name if segment else ""))
+        items.append(ChecklistItem("fail", label, str(CHECK_PROBLEMS["columns_missing"]), value=names))
     else:
-        items.append(ChecklistItem("ok", str(CHECKLIST["list"]), say(CHECKLIST["valid"], {"n": check.valid}),
-                                   value=segment.name if segment else ""))
+        items.append(ChecklistItem("ok", label, say(CHECKLIST["valid"], {"n": check.valid}), value=names))
     if "no_template" in problems:
         items.append(ChecklistItem("fail", str(CHECKLIST["template"]), str(CHECK_PROBLEMS["no_template"])))
     else:
@@ -173,6 +177,6 @@ def checklist(check, message, settings: dict | None, segment) -> list[ChecklistI
     ))
     if "nobody_to_send" in problems:
         items.append(ChecklistItem("fail", str(CHECKLIST["recipients"]), str(CHECK_PROBLEMS["nobody_to_send"])))
-    elif "segment_missing" not in problems and "columns_missing" not in problems:
+    elif not problems & {"segment_missing", "more_segment_missing", "columns_missing"}:
         items.append(ChecklistItem("ok", str(CHECKLIST["recipients"]), say(CHECKLIST["to_send"], {"n": check.to_send})))
     return items

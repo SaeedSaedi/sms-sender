@@ -214,6 +214,13 @@ Destinations must be https on `SMS_SENDER_LINK_DOMAINS` (subdomains included), m
 
 `--user-id-column COLUMN` reads a header CSV (first column = phone). A blank ID is still sent and reported as "missing user ID" (`LoadResult.missing_user_id`, `RunSummary`, `status`, exports). A phone with two different non-blank IDs is in `LoadResult.conflicts`: every one of its rows is invalid and it isn't sent. `Runner._apply_user_ids` also checks against IDs stored by earlier imports (`StateStore.assign_user_ids`) and takes conflicting phones out of the queue (`StateStore.exclude` → `failed_permanent`). Rows already `sent` are never touched. `--segment` (default: slug of the file name) is stored on each recipient (`upsert_pending(segment=…)`); it feeds `utm_content`, segment links and reports.
 
+**Several lists in one send** (the dashboard's more segments): `Runner(more_inputs=[InputPart(path, segment, user_id_column), …])` reads them after `input_path`, through `input_loader.load_parts`:
+- every list is loaded and seeded into the DB before anything is sent, so there's one credit estimate, one link stage, and a cancel reaches everyone;
+- a phone in two lists keeps the first list's row, tokens and segment (`LoadResult.segments`); the later rows count as duplicates;
+- user IDs that disagree across lists, or a conflict within one list, make the phone a conflict everywhere, as within one file. Its user ID is whichever one its lists carry.
+
+The CLI still sends one `--input` per run.
+
 ### Clicks ([clicks.py](src/sms_sender/clicks.py))
 
 `sms-sender clicks` polls Shlink (`visits_by_tag("campaign-<slug>")`; Shlink has had no webhooks since 4.0) and stores each link's `nonBots` count on its row. It also keeps clicks per hour (`click_hours`, schema v7) from `ShlinkClient.visit_times` (`/tags/{tag}/visits`, bots excluded):
@@ -315,7 +322,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - `files.parse` reads UTF-8 (with or without a BOM), UTF-16 and Windows-1256, with `,` `;` or tab separators, and refuses `.xlsx` / `.xls` by their magic bytes. Windows-1256 has no Persian «ی», so text read that way gets the Arabic «ي»/«ى» turned into «ی».
   - `files.summarize` counts with `input_loader.load`, exactly as a send would. Its invalid-row sample is stored masked.
   - The slug follows the CLI's `--segment` rules (`SLUG_RE`). `upload` is reserved, because of `/segments/upload/`.
-  - A segment that a `Campaign` names in `settings["segment"]` can't be deleted.
+  - A segment that a `Campaign` sends to, as its segment or in `more_segments` (`segments.views.campaigns_using`; the JSON list is searched in Python, as SQLite has no JSON `contains`), can't be deleted.
   - **Actions:**
     - start a campaign from it (`/campaigns/new/?segment=`);
     - download the prepared copy (`export_people`, with a BOM, recorded);
@@ -340,6 +347,11 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 - **`accounts.decorators.forbidden(request)`** renders the Persian 403. Use it for checks inside a view, such as an action only admins may take.
 - **Campaign pages (`campaigns/`, spec 3):**
   - Settings are stored in `Campaign.settings` in the CLI's terms: `segment`, `input`, `user_id_column`, `template`, `tokens`, `token_columns`, `value_maps`, `links` (LinkSettings fields), `send_window`, `rate`, `workers`. The engine (`jobs/engine.Engine.runner`) turns them into the CLI's runner.
+  - **More segments** (`more_segments`, review G1): ready segments sent after the campaign's own, in name order, in one send with one test SMS.
+    - `segments.models.campaign_slugs` / `campaign_segments` give a campaign's segments in order; `Segment.part()` is one as the runner's `InputPart`, and `engine.more_inputs` builds the rest (one that isn't ready raises `InputError`, which the worker records as `input_unreadable` before anything is read).
+    - The form keeps only segments with every column the tokens use, and never the campaign's own segment again (`app.js` hides it too).
+    - The check (`checks.check_campaign`) and the preview (`preview.load_segment`) read every list as a send would; `CheckResult.segments` counts what each one adds, and `more_segment_missing` stops the check.
+    - The settings hash adds `more_segments` with each one's version, only when there are any, so earlier approvals keep their hash.
   - The flow: check (`checks.check_campaign`: read only, no API, never creates the campaign DB) → test SMS (`Job.Kind.TEST`) → approval (`services.decide_test`) → send (`services.start_send`).
   - A test job runs the runner with `test_only=True`: prepare, window, account checks, the test SMS's own link, then the approval test to the requester's `Profile.test_phone`. It stops there, without recording a "last run".
   - A send needs `services.approval(campaign)`: the latest test, approved, with the same `settings_hash`. The hash covers `APPROVED_SETTINGS` (segment, template, tokens, token columns, value maps, links without expiry). It doesn't cover the window, rate or workers. The send gets the test's `cost_per_sms` for the credit estimate.
@@ -350,7 +362,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 
     A send that failed before sending anything locks nothing, so a wrong template can still be fixed. The page and its POST both refuse.
   - **Rounds:** a finished send whose `settings_hash` isn't the campaign's current one belongs to an earlier round (`lifecycle`). The campaign then starts again from the check and the test SMS. Three ways lead there:
-    - **Another segment** (`campaign_segment`, operators): only `segment`, `input` and `user_id_column` change, and only to a ready segment that has every column the tokens use. Offered in the completed and cancelled steps. The campaign DB skips anyone already sent; rows of the old list that aren't in the new input wait.
+    - **Another segment** (`campaign_segment`, operators): only `segment`, `input`, `user_id_column` and `more_segments` change, and only to ready segments that have every column the tokens use. Several chosen make one send: the first in name order is the segment, the rest `more_segments`; one chosen drops any earlier `more_segments`. Offered in the completed and cancelled steps. The campaign DB skips anyone already sent; rows of the old list that aren't in the new input wait.
     - **An admin's changed message** (`campaign_unlock`, capability `change_sent_message`, the CLI's `--allow-settings-change`). It needs the typed short name, then `services.unlock_message`:
       - a full backup first (`make_backup(keep=None)`, which prunes nothing); if it fails, nothing changes;
       - a paused send is superseded (`CANCELLED`, `result.superseded`, nobody cancelled);
@@ -375,7 +387,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - **Cost before the test:** a test job records its message's `params.parts` (from the template library). `preview.price_per_part()` is the latest such test's `cost_per_sms` divided by its parts. The previews show `parts × price` per recipient, and the total in the ready step, as an estimate.
   - **Ready step:** `_live()` adds the check (as `present.checklist`: one ✓ / ⚠ / ✗ line per finding, its state also in hidden text), the message and `preview.recipients` whenever the stage is READY, so the poll renders the same step. Only `run_campaigns` gets each recipient's message and the number search. The search is a POST to `campaign_preview` (no number ever goes in a URL), answered with the `#recipients-preview` fragment for HTMX. Viewers see the message only.
   - `services.JobConflict.code` picks the Persian message in `campaigns/terms.CONFLICTS`.
-  - The live part (`_live.html`) polls `/campaigns/<slug>/live/` every 3 s with HTMX, only while a job is active.
+  - The live part (`_live.html`) polls `/campaigns/<slug>/live/` every 3 s with HTMX, only while a job is active. Everything it shows comes from `_live()`, the side card too (`_sends`: the segments and what fills each token), or the poll would blank it.
 - **Reports (`reports/`, read only):**
   - `/reports/<slug>/` reads any campaign DB in `data/db/`, the CLI's too, and never creates one.
   - It uses the CLI's own queries: `click_report`, `display_counts`, `delivery_counts`, `total_cost`, and `recipients_page` (by rowid, so no number appears in a URL).

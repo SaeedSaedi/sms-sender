@@ -277,14 +277,19 @@ class Worker:
         # An admin changed the message of a campaign that has sent: the
         # campaign DB accepts the new settings (the CLI's --allow-settings-change).
         allow = bool(job.params.get("allow_settings_change"))
-        if test:
-            runner = self.engine.runner(job.campaign, reporter, test_number=job.params["test_number"],
-                                        allow_settings_change=allow)
-        else:
-            runner = self.engine.runner(
-                job.campaign, reporter, cost_per_sms=job.params.get("cost_per_sms"),
-                smoke_test=bool(job.params.get("smoke_test")), allow_settings_change=allow,
-            )
+        try:
+            if test:
+                runner = self.engine.runner(job.campaign, reporter, test_number=job.params["test_number"],
+                                            allow_settings_change=allow)
+            else:
+                runner = self.engine.runner(
+                    job.campaign, reporter, cost_per_sms=job.params.get("cost_per_sms"),
+                    smoke_test=bool(job.params.get("smoke_test")), allow_settings_change=allow,
+                )
+        except (InputError, FileNotFoundError) as e:
+            # A list it can't read (a segment being replaced, an opt-out file
+            # gone): nothing was read or sent.
+            return Job.State.FAILED, {"stop_reason": "input_unreadable"}, str(e)
         reason = _StopReason()
 
         def on_stop(why: str) -> None:

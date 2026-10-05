@@ -13,7 +13,7 @@ from .terms import DELIVERY_STATUS, SUBMISSION_STATUS
 
 # What each of the campaign page's five steps (campaigns.terms.STEPS) is for.
 STEP_HELP = (
-    _("Choose the segment, the template and what fills its tokens."),
+    _("Choose the segment (or several, for one send), the template and what fills its tokens."),
     _("The check reads the list as a send would: the valid numbers, the template, the tokens, the short link and the sending window. The preview shows each recipient's final text."),
     _("One SMS to your own number, set on “My account”, with the final text and link. Check it on your phone, then approve it or reject it."),
     _("A send needs a test SMS approved for these exact settings. It starts now or at a set time: the short links are made first, then the SMS go out inside the sending window."),

@@ -217,6 +217,13 @@
     form.querySelectorAll("[data-when-format]").forEach((part) => {
       part.hidden = !kind || part.dataset.whenFormat !== kind.value;
     });
+    // The campaign's own segment isn't one of its "more segments".
+    const first = form.querySelector("select[name=segment]");
+    form.querySelectorAll("[data-more-segment]").forEach((item) => {
+      const same = Boolean(first) && item.dataset.moreSegment === first.value;
+      item.hidden = same;
+      if (same) item.querySelector("input").checked = false;
+    });
   }
   document.addEventListener("change", (event) => {
     const form = event.target.form;

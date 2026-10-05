@@ -7,6 +7,8 @@ from django.conf import settings as django_settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+from sms_sender.input_loader import InputPart
+
 
 class Segment(models.Model):
     class Status(models.TextChoices):
@@ -58,3 +60,25 @@ class Segment(models.Model):
     def delete_files(self) -> None:
         for path in (self.path, self.upload_path):
             path.unlink(missing_ok=True)
+
+    def part(self) -> InputPart:
+        """This list as one of a send's lists (its segment, its user IDs)."""
+        return InputPart(self.path, self.slug, self.user_id_column or None)
+
+
+def campaign_slugs(settings: dict | None) -> list[str]:
+    """A campaign's segments, in the order its send reads them: `segment`,
+    then `more_segments` (one test SMS and one send for them all)."""
+    s = settings or {}
+    return list(dict.fromkeys(slug for slug in [s.get("segment"), *(s.get("more_segments") or [])] if slug))
+
+
+def ready_segments(slugs: list[str]) -> list[Segment | None]:
+    """Each segment named, in order; None where one isn't ready (its file
+    being replaced) or its file is gone."""
+    ready = {seg.slug: seg for seg in Segment.objects.filter(slug__in=slugs, status=Segment.Status.READY)}
+    return [seg if seg is not None and seg.path.exists() else None for seg in map(ready.get, slugs)]
+
+
+def campaign_segments(settings: dict | None) -> list[Segment | None]:
+    return ready_segments(campaign_slugs(settings))

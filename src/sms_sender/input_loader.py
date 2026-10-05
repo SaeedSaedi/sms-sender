@@ -21,6 +21,7 @@ its rows is invalid and the phone is not sent (`LoadResult.conflicts`).
 from __future__ import annotations
 
 import csv
+import dataclasses
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -89,6 +90,17 @@ class LoadResult:
     conflicts: frozenset[str] = frozenset()
     # Valid rows whose user-ID cell was blank (only with a user-ID column).
     missing_user_id: int = 0
+    # With several lists (`load_parts`): each valid phone's segment.
+    segments: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class InputPart:
+    """One list of a send that reads several, in order (the dashboard's
+    segments): its file, its segment name and its user-ID column."""
+    path: Path
+    segment: str
+    user_id_column: str | None = None
 
 
 def _iter_text_lines(path: Path) -> Iterable[tuple[int, str]]:
@@ -243,6 +255,60 @@ def _load_header_csv(
     return LoadResult(
         valid=valid, invalid=invalid, duplicates_collapsed=duplicates,
         conflicts=conflicts, missing_user_id=missing_ids,
+    )
+
+
+def load_parts(parts: list[InputPart], token_columns: TokenColumns | None = None) -> LoadResult:
+    """Several lists as one send, each read as `load` reads it. A phone in
+    more than one keeps its first list's row (its tokens, and its segment
+    in `segments`); the later rows count as duplicates. As within one file,
+    a phone with two different user IDs across the lists isn't sent: every
+    one of its rows is invalid. One part gives what `load` gives."""
+    results = [load(part.path, token_columns, part.user_id_column) for part in parts]
+    if len(parts) == 1:
+        (result,) = results
+        return dataclasses.replace(result, segments={r.phone: parts[0].segment for r in result.valid})
+
+    user_ids: dict[str, set[str]] = {}
+    expects_id: set[str] = set()  # in a list that has a user-ID column
+    for part, result in zip(parts, results):
+        for r in result.valid:
+            if r.user_id:
+                user_ids.setdefault(r.phone, set()).add(r.user_id)
+            if part.user_id_column is not None:
+                expects_id.add(r.phone)
+    # Two IDs within one list already made a phone a conflict there; two
+    # across the lists make it one too, and it's never sent from any list.
+    conflicts = set().union(*(result.conflicts for result in results))
+    conflicts |= {phone for phone, ids in user_ids.items() if len(ids) > 1}
+
+    valid: list[LoadedRow] = []
+    invalid: list[InvalidRow] = []
+    segments: dict[str, str] = {}
+    duplicates = 0
+    for part, result in zip(parts, results):
+        invalid.extend(result.invalid)
+        duplicates += result.duplicates_collapsed
+        for r in result.valid:
+            if r.phone in conflicts:
+                ids = sorted(user_ids.get(r.phone, ()))
+                invalid.append(InvalidRow(
+                    raw=r.raw, line_no=0, key="conflicting_user_ids",
+                    reason=f"conflicting user IDs ({', '.join(ids)}); not sent" if len(ids) > 1
+                    else "conflicting user IDs; not sent",
+                ))
+                continue
+            if r.phone in segments:
+                duplicates += 1
+                continue
+            segments[r.phone] = part.segment
+            # Its user ID is whichever one its lists carry (at most one here).
+            (user_id,) = user_ids.get(r.phone) or {None}
+            valid.append(dataclasses.replace(r, user_id=user_id))
+    return LoadResult(
+        valid=valid, invalid=invalid, duplicates_collapsed=duplicates, conflicts=frozenset(conflicts),
+        missing_user_id=sum(1 for r in valid if r.user_id is None and r.phone in expects_id),
+        segments=segments,
     )
 
 

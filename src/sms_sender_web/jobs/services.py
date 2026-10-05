@@ -52,6 +52,12 @@ def settings_hash(campaign: Campaign) -> str:
     version = Segment.objects.filter(slug=s.get("segment")).values_list("version", flat=True).first()
     if version:
         approved["segment_version"] = version
+    # One send for several segments: the approval covers each list and its
+    # file. (Only when there are more: other approvals keep their hash.)
+    more = list(s.get("more_segments") or [])
+    if more:
+        versions = dict(Segment.objects.filter(slug__in=more).values_list("slug", "version"))
+        approved["more_segments"] = [[slug, versions.get(slug, 0)] for slug in more]
     return hashlib.sha256(json.dumps(approved, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
