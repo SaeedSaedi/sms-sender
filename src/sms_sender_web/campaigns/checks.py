@@ -2,6 +2,7 @@
 only — no API call, and the campaign DB isn't created or changed."""
 from __future__ import annotations
 
+import time
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -9,13 +10,14 @@ from sms_sender import input_loader
 from sms_sender.input_loader import InputError, TokenColumns
 from sms_sender.links import allowed_domains, destination_issue
 from sms_sender.shortlink import shlink_base_url
-from sms_sender.state import CLAIMABLE, SENT, StateStore
+from sms_sender.state import CAPPED, CLAIMABLE, SENT, StateStore, folder_sends_since
 from sms_sender.window import now_tehran, parse_window
 
 from ..jobs.engine import campaign_db
 from ..jobs.models import Campaign
 from ..segments.models import Segment
 from ..suppression.service import phones_for
+from ..system.models import SystemSettings
 
 
 @dataclass
@@ -26,6 +28,8 @@ class CheckResult:
     duplicates: int = 0
     missing_user_id: int = 0
     suppressed: int = 0
+    capped: int = 0        # over the frequency cap, held back by the next send
+    cap: str = ""          # the cap, when one is set ("2/7")
     already_sent: int = 0
     settled: int = 0       # in the campaign DB and not to be sent again
     to_send: int = 0
@@ -72,9 +76,16 @@ def check_campaign(campaign: Campaign) -> CheckResult:
         statuses = StateStore(db).status_for_phones(phones)
     result.already_sent = sum(1 for status in statuses.values() if status == SENT)
     result.settled = sum(1 for status in statuses.values() if status not in CLAIMABLE)
-    result.to_send = sum(
-        1 for phone in phones - suppressed if statuses.get(phone, CLAIMABLE[0]) in CLAIMABLE
-    )
+    waiting = {phone for phone in phones - suppressed if statuses.get(phone, CLAIMABLE[0]) in CLAIMABLE
+               or statuses.get(phone) == CAPPED}
+    cap = SystemSettings.load().frequency_cap
+    if cap is not None:
+        # As the next send counts it: across every campaign DB, this one too.
+        sends = folder_sends_since(campaign_db(campaign).parent, time.time() - cap.seconds)
+        over = {phone for phone in waiting if sends.get(phone, 0) >= cap.sms}
+        result.capped, result.cap = len(over), str(cap)
+        waiting -= over
+    result.to_send = len(waiting)
     if result.to_send == 0:
         result.problems.append("nobody_to_send")
 

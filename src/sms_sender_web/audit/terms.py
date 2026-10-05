@@ -53,6 +53,7 @@ ACTION_LABELS = {
     "api_token_created": _("API token issued"),
     "api_token_revoked": _("API token revoked"),
     "api_called": _("Attribution API called"),
+    "system_settings_changed": _("System settings changed"),
     "job_requested": _("Update requested"),
     "job_paused": _("Paused"),
     "job_resumed": _("Resumed"),
@@ -97,6 +98,10 @@ def describe(event) -> str:
         return _who(d.get("name", ""))
     if event.action in ("api_token_created", "api_token_revoked"):
         return format_html("{} · {}", d.get("name", ""), _who(f"{d.get('prefix', '')}…"))
+    if event.action == "system_settings_changed" and d.get("frequency_cap"):
+        cap = d["frequency_cap"]
+        return format_html(gettext_now("frequency cap: from {before} to {after}"),
+                           before=_who(cap.get("before", "")), after=_who(cap.get("after", "")))
     if event.action == "api_called":
         return format_html("{} · {}", _who(d.get("path", "")), fa_number(d.get("rows", 0)))
     if event.action == "conversions_imported":

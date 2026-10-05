@@ -73,15 +73,20 @@ def test_the_list_shows_numbers_masked(operator_client):
     assert 'name="action" value="remove"' not in html  # operators can't remove
 
 
-def test_finding_a_number(operator_client):
+def test_finding_a_number_never_puts_it_in_a_url(operator_client):
     Suppression.objects.create(phone="09120000001")
     Suppression.objects.create(phone="09120000002")
-    html = operator_client.get("/suppression/", {"q": "+98 912 000 0001"}).content.decode()
+
+    def find(q: str) -> str:
+        return operator_client.post("/suppression/", {"action": "find", "q": q}).content.decode()
+
+    html = find("+98 912 000 0001")
     assert "۰۹۱۲*****۰۱" in html and "۰۹۱۲*****۰۲" not in html
-    html = operator_client.get("/suppression/", {"q": "09120009999"}).content.decode()
-    assert "این شماره در فهرست عدم ارسال نیست" in html
-    html = operator_client.get("/suppression/", {"q": "hello"}).content.decode()
-    assert "این شماره موبایل معتبر نیست" in html
+    assert "این شماره در فهرست عدم ارسال نیست" in find("09120009999")
+    assert "این شماره موبایل معتبر نیست" in find("hello")
+    # The form posts it; a number in the address is ignored.
+    html = operator_client.get("/suppression/", {"q": "09120000001"}).content.decode()
+    assert "۰۹۱۲*****۰۲" in html and 'method="post" action="/suppression/" class="inline search"' in html
 
 
 def test_only_admins_remove_numbers(operator_client, admin_client):

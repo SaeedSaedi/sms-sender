@@ -2425,3 +2425,48 @@ msgstr "این کمپین‌ها از آن استفاده می‌کنند و ب�
 
 msgid "Only while nobody has been sent from it. The new file goes through the columns step again, and campaigns using this segment need a new test SMS."
 msgstr "فقط پیش از نخستین ارسال از آن. فایل تازه دوباره از مرحله انتخاب ستون‌ها می‌گذرد و کمپین‌هایی که از این گروه استفاده می‌کنند به پیامک آزمایشی تازه نیاز دارند."
+
+msgid "At most (SMS)"
+msgstr "حداکثر (پیامک)"
+
+msgid "At most so many SMS to one number in so many days, counted across every campaign. Recipients over it are held back, and counted again at the next send. Test SMS don't count."
+msgstr "حداکثر چند پیامک به یک شماره در چند روز، با شمارش همه کمپین‌ها. گیرندگانی که از آن بیشتر شوند کنار گذاشته می‌شوند و در ارسال بعدی دوباره شمرده می‌شوند. پیامک‌های آزمایشی شمرده نمی‌شوند."
+
+msgid "Choose a campaign from the list."
+msgstr "یک کمپین از فهرست انتخاب کنید."
+
+msgid "For every campaign. Only admins change them, and each change is recorded."
+msgstr "برای همه کمپین‌ها. فقط مدیران آن‌ها را تغییر می‌دهند و هر تغییر ثبت می‌شود."
+
+msgid "Frequency cap"
+msgstr "سقف ارسال"
+
+msgid "In (days)"
+msgstr "در (روز)"
+
+msgid "Last changed"
+msgstr "آخرین تغییر"
+
+msgid "Over the frequency cap"
+msgstr "بیش از سقف ارسال"
+
+msgid "Saved. It applies to the next check and the next send of every campaign."
+msgstr "ذخیره شد. در بررسی و ارسال بعدی همه کمپین‌ها اعمال می‌شود."
+
+msgid "System settings"
+msgstr "تنظیمات سامانه"
+
+msgid "System settings changed"
+msgstr "تغییر تنظیمات سامانه"
+
+msgid "Use a frequency cap"
+msgstr "سقف ارسال اعمال شود"
+
+msgid "Write at most 1 to 20 SMS, in 1 to 90 days."
+msgstr "حداکثر ۱ تا ۲۰ پیامک در ۱ تا ۹۰ روز بنویسید."
+
+msgid "frequency cap: from {before} to {after}"
+msgstr "سقف ارسال: از {before} به {after}"
+
+msgid "{n} recipients already got {sms} SMS in the last {days} days (the frequency cap) and won't be sent this time."
+msgstr "{n} گیرنده در {days} روز گذشته {sms} پیامک گرفته‌اند (سقف ارسال) و این بار برایشان ارسال نمی‌شود."

@@ -1,0 +1,29 @@
+{% extends "base.html" %}{% load i18n fa ui %}
+{% block title %}{% translate "System settings" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{% translate "System settings" %}</h1>
+    <p class="page-meta">{% translate "For every campaign. Only admins change them, and each change is recorded." %}</p>
+  </div>
+</header>
+<section class="card medium" aria-labelledby="cap-heading">
+  <h2 id="cap-heading">{% icon "sliders-horizontal" %}{% translate "Frequency cap" %}</h2>
+  <p>{% translate "At most so many SMS to one number in so many days, counted across every campaign. Recipients over it are held back, and counted again at the next send. Test SMS don't count." %}</p>
+  <form method="post" id="cap-form">
+    {% csrf_token %}
+    {% if error %}<div class="field-errors" id="cap-error" role="alert" tabindex="-1" data-autofocus><p class="error">{{ error }}</p></div>{% endif %}
+    <label class="check"><input type="checkbox" name="cap" data-cli="send --frequency-cap"{% if settings.frequency_cap or post.cap == "on" %} checked{% endif %}> {% translate "Use a frequency cap" %}</label>
+    <div class="field-grid">
+      <div><label for="id_cap_sms">{% translate "At most (SMS)" %}</label>
+        <input id="id_cap_sms" name="cap_sms" type="text" dir="ltr" inputmode="numeric" maxlength="2" placeholder="2"
+               value="{% if post.cap_sms %}{{ post.cap_sms }}{% elif settings.frequency_cap_sms %}{{ settings.frequency_cap_sms }}{% endif %}"{% if error %} aria-describedby="cap-error"{% endif %}></div>
+      <div><label for="id_cap_days">{% translate "In (days)" %}</label>
+        <input id="id_cap_days" name="cap_days" type="text" dir="ltr" inputmode="numeric" maxlength="2" placeholder="7"
+               value="{% if post.cap_days %}{{ post.cap_days }}{% elif settings.frequency_cap_days %}{{ settings.frequency_cap_days }}{% endif %}"{% if error %} aria-describedby="cap-error"{% endif %}></div>
+    </div>
+    <div class="form-actions"><button type="submit">{% translate "Save" %}</button></div>
+  </form>
+  {% if settings.updated_by %}<p class="hint">{% translate "Last changed" %}: {{ settings.updated_at|jalali }} · {{ settings.updated_by.get_username|ltr }}</p>{% endif %}
+</section>
+{% endblock %}

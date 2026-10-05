@@ -158,6 +158,10 @@ INVALID = "invalid"
 # claimable; `reset --status cancelled` brings it back.
 CANCELLED = "cancelled"
 
+# Over the frequency cap (frequency.py): held back by this run, counted
+# afresh at the next one. Not claimable.
+CAPPED = "capped"
+
 CLAIMABLE = (PENDING, FAILED_RETRIABLE)
 # Rows an SMS may have gone out for. Once one exists, the campaign's message
 # is fixed (bind_campaign), unless a change is explicitly allowed.
@@ -177,6 +181,41 @@ UNCHECKED = "unchecked"
 # The status a person reads: an input row that wasn't valid is `invalid`,
 # whatever it's stored as (the same rule as display_counts).
 _SHOWN_STATUS = f"(CASE WHEN r.phone LIKE 'INVALID:%' THEN '{INVALID}' ELSE r.status END)"
+
+
+def folder_sends_since(folder: Path, since: float) -> dict[str, int]:
+    """SMS accepted for each number since `since`, across every campaign DB
+    in `folder`: accepted send calls, and unknown ones reconciliation found
+    sent (test SMS aside). Read only (query_only); a DB from before calls
+    were recorded counts its sent rows; unreadable files are skipped."""
+    totals: dict[str, int] = {}
+    for path in sorted(Path(folder).glob("*.db")):
+        try:
+            conn = sqlite3.connect(str(path), timeout=5)
+            try:
+                conn.execute("PRAGMA query_only = ON")
+                tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                if "attempts" in tables:
+                    rows = conn.execute(
+                        "SELECT phone, COUNT(*) FROM attempts WHERE started_at >= ? AND ("
+                        "(kind = 'send' AND outcome = 'accepted') OR "
+                        "(kind = 'reconcile' AND outcome = 'reconciled_sent')) GROUP BY phone",
+                        (since,),
+                    )
+                elif "recipients" in tables:
+                    rows = conn.execute(
+                        "SELECT phone, COUNT(*) FROM recipients WHERE status = 'sent' AND sent_at >= ? "
+                        "GROUP BY phone", (since,),
+                    )
+                else:
+                    continue
+                for phone, n in rows:
+                    totals[phone] = totals.get(phone, 0) + n
+            finally:
+                conn.close()
+        except sqlite3.Error:
+            continue
+    return totals
 
 
 @dataclass(frozen=True)
@@ -485,6 +524,17 @@ class StateStore:
         change — a row that was already sent stays `sent`. Returns rows
         changed."""
         return self._move_claimable(phones, SUPPRESSED, "on the opt-out list")
+
+    def cap(self, phones: Iterable[str]) -> int:
+        """Hold back claimable rows over the frequency cap. Returns rows changed."""
+        return self._move_claimable(phones, CAPPED, "over the frequency cap")
+
+    def uncap(self) -> int:
+        """Every capped row back in the queue, to be counted afresh."""
+        with self._tx() as conn:
+            return conn.execute(
+                "UPDATE recipients SET status=?, last_error=NULL WHERE status=?", (PENDING, CAPPED),
+            ).rowcount
 
     def reset_status(self, from_status: str) -> int:
         """Promote rows in `from_status` back to pending. Returns rows changed.

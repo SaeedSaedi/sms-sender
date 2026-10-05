@@ -23,6 +23,20 @@ class AddForm(forms.Form):
     numbers = forms.CharField(widget=forms.Textarea, required=False)
     file = forms.FileField(required=False)
     note = forms.CharField(max_length=200, required=False)
+    # Empty: every campaign. A campaign's short name: only that one (the
+    # CLI's --opt-out for one campaign, numbers or a file).
+    scope = forms.CharField(max_length=64, required=False)
+
+    def clean_scope(self):
+        from ..jobs.models import Campaign
+
+        slug = (self.cleaned_data.get("scope") or "").strip()
+        if not slug:
+            return None
+        campaign = Campaign.objects.filter(slug=slug).first()
+        if campaign is None:
+            raise forms.ValidationError(_("Choose a campaign from the list."))
+        return campaign
 
     def clean(self):
         data = super().clean()

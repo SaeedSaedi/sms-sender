@@ -93,7 +93,7 @@ PARITY: dict[str, tuple[Part, ...]] = {
     "send --timeout": (_ADVANCED,),
     "send --backoff-max": (_ADVANCED,),
     "send --campaign": (Control("campaign.new"),),
-    "send --opt-out": (Control("suppression"), Planned("P4", "per-campaign numbers and files")),
+    "send --opt-out": (Control("suppression", note="numbers or a file, for every campaign or one"),),
     "send --send-window": (
         Control("campaign.settings"),
         Excluded("'off' isn't offered: prohibited hours are a decided compliance rule."),
@@ -109,6 +109,7 @@ PARITY: dict[str, tuple[Part, ...]] = {
         Excluded("A safety bypass for offline development: the dashboard always checks the account."),
     ),
     "send --rate": (Control("campaign.settings"),),
+    "send --frequency-cap": (Control("system", ADMIN, note="for every campaign; off until an admin sets it"),),
     "send --notify": (Planned("P5", "notifications"),),
     "send --link-url": (Control("campaign.settings"),),
     "send --link-token": (Control("campaign.settings"),),

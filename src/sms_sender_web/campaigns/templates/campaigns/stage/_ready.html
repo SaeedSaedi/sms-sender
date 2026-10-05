@@ -26,6 +26,7 @@
     <div><dt>{% translate "Valid numbers" %}</dt><dd class="num">{{ check.valid|fa_number }}</dd></div>
     <div><dt>{% translate "Invalid rows" %}</dt><dd class="num">{{ check.invalid_total|fa_number }}</dd></div>
     <div><dt>{% translate "On the suppression list" %}</dt><dd class="num">{{ check.suppressed|fa_number }}</dd></div>
+    {% if check.cap %}<div><dt>{% translate "Over the frequency cap" %}</dt><dd class="num">{{ check.capped|fa_number }}</dd></div>{% endif %}
     <div><dt>{% translate "Already sent" %}</dt><dd class="num">{{ check.already_sent|fa_number }}</dd></div>
     {% if segment.user_id_column %}<div><dt>{% translate "Missing user ID" %}</dt><dd class="num">{{ check.missing_user_id|fa_number }}</dd></div>{% endif %}
   </dl>

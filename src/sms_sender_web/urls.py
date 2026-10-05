@@ -16,4 +16,5 @@ urlpatterns = [
     path("", include("sms_sender_web.suppression.urls")),
     path("", include("sms_sender_web.dashboard.urls")),
     path("", include("sms_sender_web.api.urls")),
+    path("", include("sms_sender_web.system.urls")),
 ]

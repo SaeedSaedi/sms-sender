@@ -244,6 +244,7 @@ NOTES = {
     "settings_changed": _("The campaign's settings changed: {changed}."),
     "orphans": _("{n} recipients were mid-send when the last run stopped: they're marked unknown and not sent again."),
     "suppressed": _("{n} recipients are on the suppression list and won't be sent."),
+    "capped": _("{n} recipients already got {sms} SMS in the last {days} days (the frequency cap) and won't be sent this time."),
     "not_in_input": _("{n} queued recipients aren't in the segment's file, so they were skipped."),
     "missing_user_id": _("{n} recipients have no user ID: they're sent, and reported as missing user ID."),
     "user_id_conflicts": _("{n} numbers came with two different user IDs and won't be sent."),

@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     "sms_sender_web.campaigns",
     "sms_sender_web.reports",
     "sms_sender_web.api",
+    "sms_sender_web.system",
 ]
 
 MIDDLEWARE = [
