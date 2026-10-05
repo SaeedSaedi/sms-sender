@@ -1,0 +1,17 @@
+{% load i18n fa ui %}
+<h2>{% icon "eye" %}{% translate "Message preview" %}</h2>
+{% if not preview.template %}
+  <p class="muted">{% translate "Choose a template to see the message." %}</p>
+{% elif not preview.known %}
+  <div class="callout">{% icon "info" %}
+    <p>{% translate "This template's text isn't in the library yet. Add it to see the message here." %}
+      <a href="{% url 'template_new' %}">{% translate "Add a template" %}</a></p>
+  </div>
+{% else %}
+  <div class="sms-bubble" dir="auto">{{ preview.text }}</div>
+  <p class="num sms-length">{{ preview.length }}</p>
+  {% if preview.sample %}<p class="hint">{% translate "With the values of" %} {{ preview.sample|fa_digits|ltr }}</p>{% endif %}
+  {% if preview.has_link %}<p class="hint">{% translate "The link's code here is an example." %}</p>{% endif %}
+  {% for problem in preview.problems %}<div class="callout callout-error">{% icon "circle-alert" %}<p>{{ problem }}</p></div>{% endfor %}
+  {% for warning in preview.warnings %}<div class="callout callout-warning">{% icon "triangle-alert" %}<p>{{ warning }}</p></div>{% endfor %}
+{% endif %}

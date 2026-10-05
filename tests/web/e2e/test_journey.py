@@ -76,13 +76,19 @@ def test_an_operator_runs_a_campaign_from_a_list_to_its_report(sandbox, sandbox_
     page.get_by_label(fa("Segment"), exact=True).select_option("vip")
     page.get_by_label(fa("Template"), exact=True).fill("coin-price")
     page.get_by_role("button", name=fa("Next: the message's tokens"), exact=True).click()
-    page.get_by_label(f"{fa('Filled with')}: token", exact=True).select_option(label=fa("A fixed value"))
+    def source(token: str, choice: str) -> None:
+        group = page.get_by_role("radiogroup", name=f"{fa('Filled with')}: {token}", exact=True)
+        group.get_by_label(fa(choice), exact=True).check()
+
+    source("token", "A fixed value")
     page.get_by_label(f"{fa('Fixed value')}: token", exact=True).fill("نفت")
-    page.get_by_label(f"{fa('Filled with')}: token10", exact=True).select_option(label=fa("A column of the segment"))
+    source("token10", "A column of the segment")
     page.get_by_label(f"{fa('Column')}: token10", exact=True).select_option("first_name")
-    page.get_by_label(f"{fa('Filled with')}: token20", exact=True).select_option(label=fa("The short link"))
+    source("token20", "The short link")
     page.get_by_label(fa("The address it opens"), exact=True).fill("https://kifpool.me/wallet")
-    page.get_by_label(fa("Sending window (Tehran time)"), exact=True).fill(open_window())
+    start, end = open_window().split("-")
+    page.get_by_label(fa("From"), exact=True).fill(start)
+    page.get_by_label(fa("Until"), exact=True).fill(end)
     page.get_by_role("button", name=fa("Save"), exact=True).click()
 
     # The check, then a test SMS to my own number, which I approve.

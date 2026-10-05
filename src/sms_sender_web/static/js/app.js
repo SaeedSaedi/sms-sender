@@ -158,6 +158,115 @@
     name.textContent = input.files.length ? input.files[0].name : name.dataset.empty;
   });
 
+  // ---------- SMS length and tokens (template editor, settings) ----------
+
+  // The same rule as campaigns/message.py: GSM 7-bit text is 160 per SMS
+  // (153 per part), anything else (Persian) 70 (67 per part).
+  const GSM7 = new Set("@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡" +
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà");
+  const GSM7_EXT = new Set("^{}\\[~]|€\f");
+  function smsLength(text) {
+    const chars = [...text];
+    if (chars.every((c) => GSM7.has(c) || GSM7_EXT.has(c))) {
+      const units = chars.reduce((n, c) => n + (GSM7_EXT.has(c) ? 2 : 1), 0);
+      return { units, parts: units <= 160 ? 1 : Math.ceil(units / 153) };
+    }
+    const units = text.length;  // UTF-16 units, as the network counts them
+    return { units, parts: units <= 70 ? 1 : Math.ceil(units / 67) };
+  }
+  const faNumber = (n) => n.toLocaleString("en-US").replace(/,/g, "\u066c")
+    .replace(/[0-9]/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]);
+
+  document.addEventListener("input", (event) => {
+    const area = event.target;
+    if (!area.dataset || !area.dataset.smsLength) return;
+    const out = document.getElementById(area.dataset.smsLength);
+    const { units, parts } = smsLength(area.value);
+    out.textContent = out.dataset.template.replace("{chars}", faNumber(units)).replace("{parts}", faNumber(parts));
+  });
+
+  // A token button puts its placeholder where the cursor is.
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-insert]");
+    if (!button) return;
+    const area = document.getElementById(button.dataset.into);
+    const start = area.selectionStart ?? area.value.length;
+    const end = area.selectionEnd ?? start;
+    area.value = area.value.slice(0, start) + button.dataset.insert + area.value.slice(end);
+    area.focus();
+    area.selectionStart = area.selectionEnd = start + button.dataset.insert.length;
+    area.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  // ---------- the campaign settings form ----------
+
+  // Show only what applies: each token's value or column by its source,
+  // the short-link section when a token carries the link, the translations
+  // when a token uses a column, the pattern when the format is one. Without
+  // this script everything shows, and the server still checks it all.
+  function syncSettings(form) {
+    form.querySelectorAll("[data-token]").forEach((row) => {
+      const checked = row.querySelector("input[type=radio]:checked");
+      const source = checked ? checked.value : "";
+      row.querySelectorAll("[data-when]").forEach((part) => { part.hidden = part.dataset.when !== source; });
+    });
+    const uses = (value) => Boolean(form.querySelector(`[data-token] input[type=radio][value=${value}]:checked`));
+    form.querySelectorAll("[data-needs-link]").forEach((part) => { part.hidden = !uses("link"); });
+    form.querySelectorAll("[data-needs-column]").forEach((part) => { part.hidden = !uses("column"); });
+    const kind = form.querySelector("input[name=link_format_kind]:checked");
+    form.querySelectorAll("[data-when-format]").forEach((part) => {
+      part.hidden = !kind || part.dataset.whenFormat !== kind.value;
+    });
+  }
+  document.addEventListener("change", (event) => {
+    const form = event.target.form;
+    if (form && form.hasAttribute("data-settings")) syncSettings(form);
+  });
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll("form[data-settings]").forEach(syncSettings);
+  });
+
+  // Translation rows: add one from the page's <template>, or remove one.
+  document.addEventListener("click", (event) => {
+    const add = event.target.closest("[data-add-row]");
+    if (add) {
+      const body = document.getElementById(add.dataset.addRow);
+      const row = document.getElementById("value-map-row").content.firstElementChild.cloneNode(true);
+      body.appendChild(row);
+      row.querySelector("select, input").focus();
+      return;
+    }
+    const remove = event.target.closest("[data-remove-row]");
+    if (remove) {
+      const row = remove.closest("tr");
+      const form = row.closest("form");
+      if (row.parentElement.children.length > 1) {
+        row.remove();
+      } else {
+        row.querySelectorAll("input, select").forEach((field) => { field.value = ""; });
+      }
+      if (form) form.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
+
+  // ---------- unsaved changes ----------
+
+  // A form marked data-guard asks before its changes are left behind.
+  let unsaved = null;
+  document.addEventListener("input", (event) => {
+    const form = event.target.form;
+    if (form && form.hasAttribute("data-guard")) unsaved = form;
+  });
+  document.addEventListener("submit", (event) => {
+    if (event.target === unsaved) unsaved = null;
+  });
+  window.addEventListener("beforeunload", (event) => {
+    if (unsaved) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  });
+
   // ---------- after a page loads ----------
 
   // A form that came back with errors says so first: focus its summary, so

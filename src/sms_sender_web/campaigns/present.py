@@ -18,6 +18,8 @@ _CODE = re.compile(r"^\[(\d+)\]")
 
 
 def _shown(name: str, value) -> str:
+    if name == "token":  # an identifier: %token2 keeps its Latin digit
+        return str(value)
     if name == "phone":
         return fa_digits(mask_phone(str(value)))
     if name == "changed":

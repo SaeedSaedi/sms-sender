@@ -27,6 +27,7 @@ _SECTIONS = {
     "segment_list": "segments", "segment_upload": "segments", "segment_detail": "segments",
     "segment_map": "segments", "suppression": "suppression", "status": "status",
     "users": "users", "audit_log": "activity", "my_account": "account", "password_change": "account",
+    "template_list": "templates", "template_new": "templates", "template_edit": "templates",
 }
 
 

@@ -10,6 +10,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods, require_POST
 
+from sms_sender.sender import TOKEN_MAX_SPACES
+
 from ..accounts.decorators import forbidden, requires
 from ..accounts.models import test_phone_of
 from ..accounts.roles import can
@@ -22,9 +24,11 @@ from ..jobs.engine import campaign_db
 from ..jobs.models import Campaign, Job
 from ..segments.models import Segment
 from .checks import check_campaign
-from .forms import TOKENS, NewCampaignForm, SettingsForm
+from .forms import TOKENS, NewCampaignForm, SettingsForm, combined
 from .lifecycle import lifecycle
+from .models import MessageTemplate
 from .present import notes, result_line, say, send_summary
+from .preview import preview_of
 from .terms import (
     CHECK_PROBLEMS, CONFLICTS, FOLLOWUPS, INVALID_ROWS, NEXT_STEP, STAGES, STEPS, stop_reason,
 )
@@ -80,8 +84,10 @@ def campaign_settings(request, slug: str):
         return redirect("campaign_detail", slug=slug)
     segment = Segment.objects.filter(slug=campaign.settings.get("segment")).first()
     columns = segment.token_columns if segment else []
+    initial = SettingsForm.initial_from(campaign.settings)
     form = SettingsForm(
-        request.POST or None, columns=columns, initial=SettingsForm.initial_from(campaign.settings),
+        combined(request.POST) if request.method == "POST" else None, columns=columns, initial=initial,
+        advanced=can(request.user, "manage_settings"),
     )
     if request.method == "POST" and form.is_valid():
         before = dict(campaign.settings)
@@ -91,15 +97,48 @@ def campaign_settings(request, slug: str):
         if changed:
             record("campaign_changed", request=request, campaign=slug, changed=changed)
         return redirect("campaign_detail", slug=slug)
+    ui = request.POST if request.method == "POST" else initial
+    rows = (
+        [{"column": c, "source": f, "target": t} for c, f, t in zip(
+            request.POST.getlist("vm_column"), request.POST.getlist("vm_source"),
+            request.POST.getlist("vm_target"))]
+        if request.method == "POST" else initial["value_map_rows"]
+    )
     return render(request, "campaigns/settings.html", {
-        "campaign": campaign, "form": form, "columns": columns,
+        "campaign": campaign, "form": form, "columns": columns, "ui": ui,
+        "value_map_rows": rows + [{"column": "", "source": "", "target": ""}],
         "segments": Segment.objects.filter(status=Segment.Status.READY),
+        "templates": MessageTemplate.objects.all(),
+        "advanced": can(request.user, "manage_settings"),
+        "preview": preview_of(campaign.settings, segment),
         "tokens": [
             {"name": name, "source": form[f"{name}_source"], "value": form[f"{name}_value"],
-             "column": form[f"{name}_column"]}
+             "column": form[f"{name}_column"], "max_spaces": TOKEN_MAX_SPACES[name]}
             for name in TOKENS
         ],
     })
+
+
+@requires("edit_campaigns")
+@require_POST
+def settings_preview(request, slug: str):
+    """The message as these (unsaved) settings would send it, for the
+    settings page's preview panel. Saves nothing."""
+    campaign = get_object_or_404(Campaign, slug=slug)
+    data = combined(request.POST)
+    segment = Segment.objects.filter(slug=data.get("segment")).first()
+    form = SettingsForm(data, columns=segment.token_columns if segment else [],
+                        initial=SettingsForm.initial_from(campaign.settings))
+    form.is_valid()  # the preview uses whatever is filled in, errors or not
+    d = form.cleaned_data
+    settings = {
+        "template": (data.get("template") or "").strip(),
+        "tokens": d.get("tokens", {}), "token_columns": d.get("token_columns", {}),
+        "value_maps": d.get("value_maps_parsed", {}),
+        "links": {"token": d.get("link_token"), "format": d.get("link_format") or "url"}
+        if d.get("link_token") else None,
+    }
+    return render(request, "campaigns/_preview.html", {"preview": preview_of(settings, segment)})
 
 
 def _locked_message() -> str:

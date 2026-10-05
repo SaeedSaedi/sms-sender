@@ -88,10 +88,21 @@ class SettingsForm(forms.Form):
     send_window = forms.CharField(max_length=20)
     rate = forms.CharField(max_length=20, required=False)
     workers = forms.IntegerField(min_value=1, max_value=20)
+    # Tracking values added to the link (empty: sms, sms, the campaign, the segment).
+    utm_source = forms.CharField(max_length=100, required=False)
+    utm_medium = forms.CharField(max_length=100, required=False)
+    utm_campaign = forms.CharField(max_length=100, required=False)
+    utm_content = forms.CharField(max_length=100, required=False)
+    # Advanced, for admins: how a run retries and waits (the CLI's flags).
+    max_attempts = forms.IntegerField(min_value=1, max_value=10, required=False)
+    timeout = forms.FloatField(min_value=5, max_value=120, required=False)
+    backoff_max = forms.FloatField(min_value=1, max_value=300, required=False)
+    link_rate = forms.CharField(max_length=20, required=False)
 
-    def __init__(self, *args, columns: list[str], **kwargs):
+    def __init__(self, *args, columns: list[str], advanced: bool = False, **kwargs):
         super().__init__(*args, **kwargs)
         self.columns = columns
+        self.advanced = advanced  # the advanced settings apply only from an admin
         self.fields["segment"].queryset = _ready_segments()
         self.fields["segment"].error_messages["invalid_choice"] = _("Choose a segment whose columns are set.")
         for name in TOKENS:
@@ -117,7 +128,28 @@ class SettingsForm(forms.Form):
             "send_window": settings.get("send_window", DEFAULT_WINDOW),
             "rate": settings.get("rate") or "",
             "workers": settings.get("workers", 5),
+            "utm_source": links.get("utm_source") or "",
+            "utm_medium": links.get("utm_medium") or "",
+            "utm_campaign": links.get("utm_campaign") or "",
+            "utm_content": links.get("utm_content") or "",
+            "max_attempts": settings.get("max_attempts"),
+            "timeout": settings.get("timeout"),
+            "backoff_max": settings.get("backoff_max"),
+            "link_rate": settings.get("link_rate") or "",
         }
+        # The page's split controls for the combined settings (ui_fields).
+        start, _sep, end = initial["send_window"].partition("-")
+        initial.update(window_start=start, window_end=end)
+        value, _sep, unit = initial["rate"].partition("/")
+        initial.update(rate_value=value, rate_unit=unit or "s")
+        fmt = initial["link_format"]
+        initial.update(link_format_kind=fmt if fmt in ("url", "code") else "pattern",
+                       link_pattern="" if fmt in ("url", "code") else fmt)
+        initial["value_map_rows"] = [
+            {"column": column, "source": source, "target": target}
+            for column, mapping in (settings.get("value_maps") or {}).items()
+            for source, target in mapping.items()
+        ]
         for name in TOKENS:
             if name in (settings.get("tokens") or {}):
                 initial[f"{name}_source"] = "value"
@@ -151,6 +183,30 @@ class SettingsForm(forms.Form):
             except ValueError as e:
                 raise forms.ValidationError(_("Write the rate like 10/s, 600/m or 3600/h.")) from e
         return value
+
+    def clean_link_rate(self) -> str:
+        value = self.cleaned_data["link_rate"].strip().translate(_ASCII_DIGITS)
+        if value:
+            try:
+                parse_rate(value)
+            except ValueError as e:
+                raise forms.ValidationError(_("Write the rate like 10/s, 600/m or 3600/h.")) from e
+        return value
+
+    def _clean_utm(self, name: str) -> str:
+        return persian_text(self.cleaned_data[name].strip())
+
+    def clean_utm_source(self) -> str:
+        return self._clean_utm("utm_source")
+
+    def clean_utm_medium(self) -> str:
+        return self._clean_utm("utm_medium")
+
+    def clean_utm_campaign(self) -> str:
+        return self._clean_utm("utm_campaign")
+
+    def clean_utm_content(self) -> str:
+        return self._clean_utm("utm_content")
 
     def clean(self):
         data = super().clean()
@@ -243,6 +299,38 @@ class SettingsForm(forms.Form):
                 "destination": d["link_destination"], "token": d["link_token"],
                 "format": d["link_format"], "strategy": d["link_strategy"],
                 "expiry_days": d["link_expiry_days"],
-                "utm_source": "sms", "utm_medium": "sms", "utm_campaign": None, "utm_content": None,
+                "utm_source": d.get("utm_source") or "sms", "utm_medium": d.get("utm_medium") or "sms",
+                "utm_campaign": d.get("utm_campaign") or None, "utm_content": d.get("utm_content") or None,
             }
+        if self.advanced:
+            for key in ("max_attempts", "timeout", "backoff_max", "link_rate"):
+                if d.get(key) in (None, ""):
+                    settings.pop(key, None)  # the engine's default
+                else:
+                    settings[key] = d[key]
         return settings
+
+
+def combined(data):
+    """The settings page's split controls, back into the form's fields: the
+    window's two times, the rate's number and unit, the link format's
+    choice and pattern, and the translation rows. A post that already has
+    the combined fields (the CLI-shaped form) passes through unchanged."""
+    data = data.copy()
+    if "window_start" in data or "window_end" in data:
+        start = data.get("window_start", "").strip().translate(_ASCII_DIGITS)
+        end = data.get("window_end", "").strip().translate(_ASCII_DIGITS)
+        data["send_window"] = f"{start}-{end}"
+    if "rate_value" in data:
+        value = data.get("rate_value", "").strip().translate(_ASCII_DIGITS)
+        data["rate"] = f"{value}/{data.get('rate_unit') or 's'}" if value else ""
+    if "link_format_kind" in data:
+        kind = data.get("link_format_kind")
+        data["link_format"] = kind if kind in ("url", "code") else data.get("link_pattern", "").strip()
+    if "vm_column" in data:
+        rows = zip(data.getlist("vm_column"), data.getlist("vm_source"), data.getlist("vm_target"))
+        data["value_maps"] = "\n".join(
+            f"{column}:{source}={target}" for column, source, target in rows
+            if column.strip() or source.strip() or target.strip()
+        )
+    return data

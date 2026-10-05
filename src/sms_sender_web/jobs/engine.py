@@ -27,20 +27,27 @@ def campaign_db(campaign: Campaign) -> Path:
     return Path(django_settings.SMS_SENDER_DB_DIR) / f"{campaign.slug}.db"
 
 
+def _timeout(campaign: Campaign | None) -> float:
+    """The campaign's timeout for calls to Kavenegar and Shlink (the CLI's
+    --timeout), else the default."""
+    return float(((campaign.settings or {}).get("timeout") if campaign else None) or 15.0)
+
+
 class Engine:
     def state(self, campaign: Campaign) -> StateStore:
         return StateStore(campaign_db(campaign))
 
-    def sender(self) -> Sender:
-        """For lookups only (delivery, reconciliation): no template needed."""
+    def sender(self, campaign: Campaign | None = None) -> Sender:
+        """For lookups only (delivery, reconciliation): no template needed.
+        A campaign's own timeout (advanced settings) applies to its lookups."""
         if django_settings.SANDBOX:
             return SandboxKavenegar()
-        return Sender(SenderConfig(api_key=load_api_key(), template=""))
+        return Sender(SenderConfig(api_key=load_api_key(), template="", timeout=_timeout(campaign)))
 
-    def link_client(self) -> ShlinkClient:
+    def link_client(self, campaign: Campaign | None = None) -> ShlinkClient:
         if django_settings.SANDBOX:
             return SandboxShlink()
-        return ShlinkClient(load_shlink_config())
+        return ShlinkClient(load_shlink_config(timeout=_timeout(campaign)))
 
     def runner(
         self, campaign: Campaign, reporter: Reporter, *,
@@ -81,7 +88,7 @@ class Engine:
             user_id_column=s.get("user_id_column"),
             segment=s.get("segment"),
             links=links,
-            link_client=self.link_client() if links else None,
+            link_client=self.link_client(campaign) if links else None,
             link_rate_per_sec=parse_rate(s.get("link_rate", DEFAULT_LINK_RATE)),
             reporter=reporter,
             install_signal_handlers=False,  # the worker handles signals

@@ -19,6 +19,7 @@ from sms_sender.state import StateStore
 from sms_sender_web.accounts.models import Profile
 from sms_sender_web.accounts.roles import set_role
 from sms_sender_web.audit.record import record
+from sms_sender_web.campaigns.models import MessageTemplate
 from sms_sender_web.jobs import services
 from sms_sender_web.jobs.engine import campaign_db
 from sms_sender_web.jobs.models import Campaign, Job
@@ -80,6 +81,8 @@ PAGES: dict[str, tuple[str, str | None]] = {
     "campaign.completed": ("/campaigns/completed/", "operator"),
     "campaign.draft": ("/campaigns/draft-1/", "operator"),
     "report": ("/reports/approved/", "viewer"),
+    "templates": ("/templates/", "viewer"),
+    "template.new": ("/templates/new/", "operator"),
     "status": ("/status/", "viewer"),
     "account": ("/account/", "operator"),
     "password": ("/password/", "operator"),
@@ -213,6 +216,10 @@ def build_world(data_dir: Path) -> World:
     draft_campaign = Campaign.objects.create(slug="draft-1", name="پیش‌نویس", settings={"segment": "vip"})
     campaigns["draft"] = draft_campaign
 
+    MessageTemplate.objects.create(
+        name="coin-price", text="%token10 عزیز، قیمت %token امروز اعلام شد: %token20\nلغو۱۱",
+        note="قیمت روزانه", updated_by=operator,
+    )
     Suppression.objects.create(phone="09120000050", note="درخواست مشتری")
     record("campaign_created", user=operator, campaign="approved")
     record("segment_uploaded", user=operator, segment="vip", file="vip.csv")

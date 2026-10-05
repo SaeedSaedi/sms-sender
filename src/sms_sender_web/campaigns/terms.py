@@ -143,6 +143,10 @@ SETTING_NAMES = {
     "send_window": _("sending window"),
     "rate": _("sending rate"),
     "workers": _("parallel sends"),
+    "max_attempts": _("advanced settings"),
+    "timeout": _("advanced settings"),
+    "backoff_max": _("advanced settings"),
+    "link_rate": _("advanced settings"),
 }
 
 # ---------- the campaign's stage (lifecycle.py) ----------
@@ -226,3 +230,8 @@ FOLLOWUPS = {
     "needs_review": _("{n} recipients need review: Kavenegar's records weren't clear, so an admin decides."),
     "rejected": _("Kavenegar rejected {n} recipients; the most common reasons are above."),
 }
+
+# A message's length (campaigns/message.py), as people read it.
+LENGTH = _("{chars} characters · {parts} SMS")
+PREVIEW_MISSING = _("The text uses {token}, but nothing fills it: Kavenegar would refuse the SMS.")
+PREVIEW_UNUSED = _("{token} is filled, but the template's text doesn't use it.")
