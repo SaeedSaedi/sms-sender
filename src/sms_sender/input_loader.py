@@ -186,10 +186,11 @@ def _load_header_csv(
 ) -> LoadResult:
     rows: list[_CsvRow] = []
     with p.open("r", encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
+        # A plain reader and the few columns needed: a dict per row (DictReader)
+        # costs more than everything else here, on a 100,000-row list.
+        reader = csv.reader(f)
         # Excel exports sometimes pad header cells; match on the trimmed names.
-        header = [h.strip() for h in reader.fieldnames or []]
-        reader.fieldnames = header
+        header = [h.strip() for h in next(reader, [])]
         needed = list(spec.columns.values()) if spec else []
         if user_id_column is not None:
             needed.append(user_id_column)
@@ -205,17 +206,30 @@ def _load_header_csv(
                 f"{p.name}: {user_id_column!r} is the phone column (the first one), "
                 "not a user-ID column"
             )
-        for row in reader:
-            raw = (row.get(phone_column) or "").strip()
+        # Each name's column (its last one, as a dict of the row would have it);
+        # a short row has nothing in the columns it lacks.
+        where = {name: i for i, name in enumerate(header)}
+        phone_at = where[phone_column]
+        id_at = where[user_id_column] if user_id_column else None
+        token_at = {column: where[column] for column in (spec.columns.values() if spec else ())}
+
+        def cell(cells: list[str], i: int) -> str | None:
+            return cells[i] if i < len(cells) else None
+
+        for cells in reader:
+            if not cells:
+                continue  # a blank line
+            raw = (cell(cells, phone_at) or "").strip()
             if not raw or raw.startswith("#"):
                 continue
-            user_id = (row.get(user_id_column) or "").strip() if user_id_column else ""
+            user_id = (cell(cells, id_at) or "").strip() if id_at is not None else ""
             try:
                 canonical = normalize(raw)
             except InvalidPhoneError as e:
                 rows.append(_CsvRow(reader.line_num, raw, None, str(e), {}, user_id))
                 continue
-            tokens, reason, key = _row_tokens(row, spec) if spec else ({}, None, "")
+            values = {column: cell(cells, i) for column, i in token_at.items()}
+            tokens, reason, key = _row_tokens(values, spec) if spec else ({}, None, "")
             rows.append(_CsvRow(reader.line_num, raw, canonical, reason, tokens, user_id, key))
 
     # A phone's user ID is whichever non-blank one its rows carry; two

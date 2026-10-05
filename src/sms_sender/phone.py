@@ -8,6 +8,8 @@ from __future__ import annotations
 import re
 
 CANONICAL_RE = re.compile(r"^09\d{9}$")
+# Already canonical, in ASCII digits: the usual case, answered at once.
+_ALREADY = re.compile(r"09[0-9]{9}")
 _DIGITS_RE = re.compile(r"\D+")
 
 # Persian/Arabic-Indic digits → ASCII (CSV exports from Excel often carry these)
@@ -29,6 +31,8 @@ def normalize(raw: str) -> str:
     """
     if raw is None:
         raise InvalidPhoneError("empty")
+    if _ALREADY.fullmatch(raw):
+        return raw
     s = raw.strip().translate(_DIGIT_TRANSLATION)
     if not s:
         raise InvalidPhoneError("empty")
