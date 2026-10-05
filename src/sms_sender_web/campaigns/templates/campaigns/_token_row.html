@@ -1,0 +1,20 @@
+{% load i18n ui %}<fieldset class="token-row" data-token="{{ t.name }}">
+  <legend><code dir="ltr">{{ t.name }}</code></legend>
+  <div class="segmented" role="radiogroup" aria-label="{% translate "Filled with" %}: {{ t.name }}">
+    {% for value, label in t.source.field.choices %}
+      <label class="segment-option"><input type="radio" name="{{ t.name }}_source" value="{{ value }}"{% if t.source.value|default:'' == value %} checked{% endif %}{% if value == "link" %} data-cli="send --link-token"{% endif %}>{{ label }}</label>
+    {% endfor %}
+  </div>
+  {% field_errors t.source alert=False %}
+  <div data-when="value">
+    <input name="{{ t.name }}_value" type="text" data-cli="send --{{ t.name }}" value="{{ t.value.value|default:'' }}" aria-label="{% translate "Fixed value" %}: {{ t.name }}"{% aria t.value %}>
+    {% field_errors t.value alert=False %}
+  </div>
+  <div data-when="column">
+    <select name="{{ t.name }}_column" data-cli="send --token-column" aria-label="{% translate "Column" %}: {{ t.name }}"{% aria t.column %}>
+      <option value="">—</option>
+      {% for column in columns %}<option value="{{ column }}"{% if t.column.value == column %} selected{% endif %}>{{ column }}</option>{% endfor %}
+    </select>
+    {% field_errors t.column alert=False %}
+  </div>
+</fieldset>

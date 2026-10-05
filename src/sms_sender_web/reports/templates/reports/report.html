@@ -16,6 +16,17 @@
   {% if campaign %}<div class="page-actions"><a class="button secondary" href="{% url 'campaign_detail' slug %}">{% translate "Campaign page" %}</a></div>{% endif %}
 </header>
 
+
+<nav class="tabs" data-tabs aria-label="{% translate "Report sections" %}">
+  <ul role="tablist">
+    <li role="presentation"><a role="tab" href="#overview" id="tab-overview" aria-controls="overview">{% icon "chart-column" %}{% translate "Overview" %}</a></li>
+    <li role="presentation"><a role="tab" href="#recipients" id="tab-recipients" aria-controls="recipients">{% icon "users" %}{% translate "Recipients" %}</a></li>
+    {% if links %}<li role="presentation"><a role="tab" href="#links" id="tab-links" aria-controls="links">{% icon "link" %}{% translate "Short links and clicks" %}</a></li>{% endif %}
+    <li role="presentation"><a role="tab" href="#files" id="tab-files" aria-controls="files">{% icon "download" %}{% translate "Downloads" %}</a></li>
+  </ul>
+</nav>
+
+<div id="overview" class="tab-panel" role="tabpanel" aria-labelledby="tab-overview" data-tab-panel>
 <dl class="figures">
   <div><dt>{% translate "Recipients" %}</dt><dd class="num">{{ total|fa_number }}</dd></div>
   <div><dt>{% translate "Accepted" %}</dt><dd class="num">{{ counts|get:"sent"|fa_number }}</dd></div>
@@ -25,9 +36,10 @@
 
 <section class="card step" data-cli="status">
   <h2>{% icon "activity" %}{% translate "Statuses" %}</h2>
-  <ul class="badges">
+  <div class="statusbar" aria-hidden="true">{% for status in status_order %}{% with n=counts|get:status %}{% if n %}<span class="sb-{{ status|status_tone }}" style="flex-grow: {{ n }}"></span>{% endif %}{% endwith %}{% endfor %}</div>
+  <ul class="legend">
     {% for status in status_order %}{% with n=counts|get:status %}{% if n %}
-      <li class="badge status-{{ status }}">{{ status|status_label }} <span class="num">{{ n|fa_number }}</span></li>
+      <li class="sb-{{ status|status_tone }}">{{ status|status_label }} <span class="num">{{ n|fa_number }}</span></li>
     {% endif %}{% endwith %}{% endfor %}
   </ul>
   <p class="hint"><a href="{% url 'help' %}#statuses">{% translate "What does each status mean?" %}</a></p>
@@ -38,55 +50,6 @@
     </ul>
     <p class="hint">{% translate "Kavenegar reports delivery only for 48 hours after sending." %} <a href="{% url 'help' %}#delivery">{% translate "What does each delivery status mean?" %}</a></p>
   {% endif %}
-</section>
-
-{% if links %}
-<section class="card step">
-  <h2>{% icon "link" %}{% translate "Short links and clicks" %}</h2>
-  <p class="muted">{% translate "Links" %}:
-    {% for status, n in links.items %}{% if status == "ready" %}{% translate "ready" %}{% elif status == "pending" %}{% translate "waiting" %}{% else %}{% translate "refused" %}{% endif %} {{ n|fa_number }}{% if not forloop.last %} · {% endif %}{% endfor %}
-    {% if last_click_sync %} · {% translate "Clicks updated" %}: {{ last_click_sync|jalali }}{% endif %}</p>
-  {% if segments %}
-  <div class="table-wrap">
-    <table class="table-stack">
-      <thead>
-        <tr>
-          <th scope="col">{% translate "Segment" %}</th>
-          <th scope="col">{% translate "Accepted" %}</th>
-          <th scope="col">{% translate "Clicks" %}</th>
-          <th scope="col">{% translate "People who clicked" %}</th>
-          <th scope="col">{% translate "Missing user ID" %}</th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for s in segments %}
-        <tr>
-          <th scope="row">{{ s.segment|ltr }}</th>
-          <td data-label="{% translate "Accepted" %}" class="num">{{ s.sent|fa_number }}</td>
-          <td data-label="{% translate "Clicks" %}" class="num">{{ s.clicks|fa_number }}</td>
-          <td data-label="{% translate "People who clicked" %}" class="num">{% if s.clicked is not None %}{{ s.clicked|fa_number }}{% else %}—{% endif %}</td>
-          <td data-label="{% translate "Missing user ID" %}" class="num">{{ s.missing_user_id|fa_number }}{% if s.clicked_missing_user_id %} ({% translate "clicked" %} {{ s.clicked_missing_user_id|fa_number }}){% endif %}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
-  {% if campaign_clicks %}<p>{% translate "Clicks on the campaign-wide link" %}: {{ campaign_clicks|fa_number }}</p>{% endif %}
-  <p class="hint">{% translate "Clicks leave out bots and link previews. A shared link's clicks belong to its segment or campaign, never to a person." %}</p>
-</section>
-{% endif %}
-
-<section class="card step">
-  <h2>{% icon "download" %}{% translate "Downloads" %}</h2>
-  <div class="actions">
-    {% if user|can:"download_aggregates" %}<a class="button secondary" href="{% url 'report_summary_csv' slug %}">{% icon "download" %}{% translate "Summary (CSV)" %}</a>{% endif %}
-    {% if user|can:"export_people" %}
-      <a class="button secondary" href="{% url 'report_attribution_csv' slug %}" data-cli="export-attribution">{% icon "download" %}{% translate "Attribution, no phone numbers (CSV)" %}</a>
-      <a class="button secondary" href="{% url 'report_clickers_csv' slug %}" data-cli="export-clickers">{% icon "download" %}{% translate "People who clicked, with phone numbers (CSV)" %}</a>
-    {% endif %}
-  </div>
-  <p class="hint">{% translate "Files use English column names and Latin digits, for other systems. Every download is recorded in the activity log." %}</p>
 </section>
 
 {% if funnel %}
@@ -102,28 +65,6 @@
     {% endfor %}
   </ol>
   <p class="hint">{% translate "Shares are of the accepted SMS. Delivery counts as far as it has been checked (Kavenegar answers for 48 hours); clicks only where people had links of their own." %}</p>
-</section>
-{% endif %}
-
-{% if conversions or user|can:"update_campaigns" and counts.sent %}
-<section class="card step" aria-labelledby="conversions-heading" id="conversions">
-  <h2 id="conversions-heading">{% icon "circle-check" %}{% translate "Conversions" %}</h2>
-  {% if conversions %}
-    <dl class="figures">
-      <div><dt>{% translate "People who converted" %}</dt><dd class="num">{{ conversions.people|fa_number }}{% if conversions.share is not None %} ({{ conversions.share|fa_number }}٪){% endif %}</dd></div>
-      <div><dt>{% translate "Conversions" %}</dt><dd class="num">{{ conversions.conversions|fa_number }}</dd></div>
-      <div><dt>{% translate "Their value" %}</dt><dd class="num">{{ conversions.value|fa_number }}</dd></div>
-    </dl>
-  {% endif %}
-  {% if user|can:"update_campaigns" %}
-    <form method="post" action="{% url 'report_conversions' slug %}" enctype="multipart/form-data" id="conversions-form">
-      {% csrf_token %}
-      <p class="hint">{% translate "A CSV from your own records, with a column r (the link's reference) or user_id, and optionally value and converted_at. Each row counts for a recipient who was sent the SMS; a file imported twice adds nothing twice. It needs no phone numbers." %}</p>
-      <label for="id_conversions_file">{% translate "File" %}</label>
-      <input id="id_conversions_file" name="file" type="file" accept=".csv,.txt,text/csv" required>
-      <div class="form-actions"><button type="submit" class="secondary">{% icon "upload" %}{% translate "Import conversions" %}</button></div>
-    </form>
-  {% endif %}
 </section>
 {% endif %}
 
@@ -164,7 +105,30 @@
 </section>
 {% endif %}
 
-<section class="card step" id="recipients" aria-labelledby="recipients-heading">
+{% if conversions or user|can:"update_campaigns" and counts.sent %}
+<section class="card step" aria-labelledby="conversions-heading" id="conversions">
+  <h2 id="conversions-heading">{% icon "circle-check" %}{% translate "Conversions" %}</h2>
+  {% if conversions %}
+    <dl class="figures">
+      <div><dt>{% translate "People who converted" %}</dt><dd class="num">{{ conversions.people|fa_number }}{% if conversions.share is not None %} ({{ conversions.share|fa_number }}٪){% endif %}</dd></div>
+      <div><dt>{% translate "Conversions" %}</dt><dd class="num">{{ conversions.conversions|fa_number }}</dd></div>
+      <div><dt>{% translate "Their value" %}</dt><dd class="num">{{ conversions.value|fa_number }}</dd></div>
+    </dl>
+  {% endif %}
+  {% if user|can:"update_campaigns" %}
+    <form method="post" action="{% url 'report_conversions' slug %}" enctype="multipart/form-data" id="conversions-form">
+      {% csrf_token %}
+      <p class="hint">{% translate "A CSV from your own records, with a column r (the link's reference) or user_id, and optionally value and converted_at. Each row counts for a recipient who was sent the SMS; a file imported twice adds nothing twice. It needs no phone numbers." %}</p>
+      <label for="id_conversions_file">{% translate "File" %}</label>
+      <input id="id_conversions_file" name="file" type="file" accept=".csv,.txt,text/csv" required>
+      <div class="form-actions"><button type="submit" class="secondary">{% icon "upload" %}{% translate "Import conversions" %}</button></div>
+    </form>
+  {% endif %}
+</section>
+{% endif %}
+</div>
+
+<section class="card step tab-panel" id="recipients" role="tabpanel" aria-labelledby="tab-recipients" data-tab-panel>
   <h2 id="recipients-heading">{% icon "users" %}{% translate "Recipients" %}</h2>
   {% if audiences %}
   <nav class="audiences" aria-label="{% translate "Ready-made audiences" %}">
@@ -287,4 +251,55 @@
   </div>
   {% endif %}
 </section>
+
+{% if links %}<div id="links" class="tab-panel" role="tabpanel" aria-labelledby="tab-links" data-tab-panel>
+<section class="card step" aria-labelledby="links-heading">
+  <h2 id="links-heading">{% icon "link" %}{% translate "Short links and clicks" %}</h2>
+  <p class="muted">{% translate "Links" %}:
+    {% for status, n in links.items %}{% if status == "ready" %}{% translate "ready" %}{% elif status == "pending" %}{% translate "waiting" %}{% else %}{% translate "refused" %}{% endif %} {{ n|fa_number }}{% if not forloop.last %} · {% endif %}{% endfor %}
+    {% if last_click_sync %} · {% translate "Clicks updated" %}: {{ last_click_sync|jalali }}{% endif %}</p>
+  {% if segments %}
+  <div class="table-wrap">
+    <table class="table-stack">
+      <thead>
+        <tr>
+          <th scope="col">{% translate "Segment" %}</th>
+          <th scope="col">{% translate "Accepted" %}</th>
+          <th scope="col">{% translate "Clicks" %}</th>
+          <th scope="col">{% translate "People who clicked" %}</th>
+          <th scope="col">{% translate "Missing user ID" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for s in segments %}
+        <tr>
+          <th scope="row">{{ s.segment|ltr }}</th>
+          <td data-label="{% translate "Accepted" %}" class="num">{{ s.sent|fa_number }}</td>
+          <td data-label="{% translate "Clicks" %}" class="num">{{ s.clicks|fa_number }}</td>
+          <td data-label="{% translate "People who clicked" %}" class="num">{% if s.clicked is not None %}{{ s.clicked|fa_number }}{% else %}—{% endif %}</td>
+          <td data-label="{% translate "Missing user ID" %}" class="num">{{ s.missing_user_id|fa_number }}{% if s.clicked_missing_user_id %} ({% translate "clicked" %} {{ s.clicked_missing_user_id|fa_number }}){% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% if campaign_clicks %}<p>{% translate "Clicks on the campaign-wide link" %}: {{ campaign_clicks|fa_number }}</p>{% endif %}
+  <p class="hint">{% translate "Clicks leave out bots and link previews. A shared link's clicks belong to its segment or campaign, never to a person." %}</p>
+</section>
+</div>{% endif %}
+
+<div id="files" class="tab-panel" role="tabpanel" aria-labelledby="tab-files" data-tab-panel>
+<section class="card step">
+  <h2>{% icon "download" %}{% translate "Downloads" %}</h2>
+  <div class="actions">
+    {% if user|can:"download_aggregates" %}<a class="button secondary" href="{% url 'report_summary_csv' slug %}">{% icon "download" %}{% translate "Summary (CSV)" %}</a>{% endif %}
+    {% if user|can:"export_people" %}
+      <a class="button secondary" href="{% url 'report_attribution_csv' slug %}" data-cli="export-attribution">{% icon "download" %}{% translate "Attribution, no phone numbers (CSV)" %}</a>
+      <a class="button secondary" href="{% url 'report_clickers_csv' slug %}" data-cli="export-clickers">{% icon "download" %}{% translate "People who clicked, with phone numbers (CSV)" %}</a>
+    {% endif %}
+  </div>
+  <p class="hint">{% translate "Files use English column names and Latin digits, for other systems. Every download is recorded in the activity log." %}</p>
+</section>
+</div>
 {% endblock %}

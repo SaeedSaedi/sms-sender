@@ -41,6 +41,7 @@ from .forms import (
     free_slug, parse_when,
 )
 from .lifecycle import CANCELLED, COMPLETED, DRAFT, PAUSED, READY, STOPPED, lifecycle
+from .message import placeholders
 from .models import MessageTemplate
 from .present import checklist, notes, result_line, say, send_summary
 from .preview import ROW_CHOICES, load_segment, preview_of, recipients
@@ -270,6 +271,17 @@ def campaign_settings(request, slug: str):
             request.POST.getlist("vm_target"))]
         if request.method == "POST" else initial["value_map_rows"]
     )
+    # The tokens the template's text uses come first; when its text is in
+    # the library, the rest wait under "the tokens the text doesn't use"
+    # (any of them already filled in stays in view).
+    known = MessageTemplate.objects.filter(name=(form["template"].value() or "").strip()).first()
+    used = set(placeholders(known.text)) if known else None
+    tokens = [
+        {"name": name, "source": form[f"{name}_source"], "value": form[f"{name}_value"],
+         "column": form[f"{name}_column"], "max_spaces": TOKEN_MAX_SPACES[name],
+         "shown": used is None or name in used or bool(form[f"{name}_source"].value())}
+        for name in TOKENS
+    ]
     return render(request, "campaigns/settings.html", {
         # An admin unlocked a campaign that has sent: say what saving means.
         "changing_sent_message": services.may_have_sent(campaign),
@@ -279,11 +291,8 @@ def campaign_settings(request, slug: str):
         "templates": MessageTemplate.objects.all(),
         "advanced": can(request.user, "manage_settings"),
         **_with_cost("preview", preview_of(campaign.settings, segment)),
-        "tokens": [
-            {"name": name, "source": form[f"{name}_source"], "value": form[f"{name}_value"],
-             "column": form[f"{name}_column"], "max_spaces": TOKEN_MAX_SPACES[name]}
-            for name in TOKENS
-        ],
+        "tokens": tokens,
+        "hidden_tokens": sum(1 for t in tokens if not t["shown"]),
     })
 
 

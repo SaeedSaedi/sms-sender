@@ -9,8 +9,9 @@
   <div class="page-actions"><a class="button secondary" href="{% url 'status' %}">{% icon "refresh-cw" %}{% translate "Check again" %}</a></div>
 </header>
 
-<section class="card step" data-cli="preview --check-account">
-  <h2>{% icon "message-square-text" %}{% translate "Kavenegar account" %}</h2>
+<div class="health-grid">
+<section class="card" data-cli="preview --check-account">
+  <div class="card-header"><h2>{% icon "message-square-text" %}{% translate "Kavenegar account" %}</h2><span class="health-state {% if kavenegar.ok and not kavenegar.debug_mode %}is-ok{% else %}is-bad{% endif %}">{% if kavenegar.ok and not kavenegar.debug_mode %}{% translate "Working" %}{% else %}{% translate "Needs attention" %}{% endif %}</span></div>
   {% if kavenegar.ok %}
     <dl class="figures">
       <div><dt>{% translate "Account credit" %}</dt><dd class="num">{% if kavenegar.credit is not None %}{{ kavenegar.credit|fa_number }} {% translate "rials" %}{% else %}—{% endif %}</dd></div>
@@ -28,16 +29,37 @@
   {% endif %}
 </section>
 
-<section class="card step">
-  <h2>{% icon "link" %}{% translate "Short-link service" %}</h2>
+<section class="card">
+  <div class="card-header"><h2>{% icon "link" %}{% translate "Short-link service" %}</h2><span class="health-state {% if shlink.ok %}is-ok{% else %}is-bad{% endif %}">{% if shlink.ok %}{% translate "Working" %}{% else %}{% translate "Needs attention" %}{% endif %}</span></div>
   {% if shlink.ok %}<p class="ok">{% icon "circle-check" %} {% translate "Working" %}{% if shlink.version %} · {% translate "version" %} {{ shlink.version|ltr }}{% endif %}</p>
   {% elif shlink.problem == "no_key" %}<div class="callout callout-error">{% icon "circle-alert" %}<p>{% translate "The short-link service isn't set up on the server." %}</p></div>
   {% elif shlink.problem %}<div class="callout callout-warning">{% icon "wifi-off" %}<p>{% translate "The short-link service didn't answer. Try again in a moment." %}</p></div>
   {% else %}<div class="callout callout-error">{% icon "circle-alert" %}<p>{% translate "The short-link service reports a problem." %}</p></div>{% endif %}
 </section>
 
+<section class="card" data-cli="manage.py worker_status">
+  <div class="card-header"><h2>{% icon "settings" %}{% translate "Worker" %}</h2><span class="health-state {% if worker_alive %}is-ok{% else %}is-bad{% endif %}">{% if worker_alive %}{% translate "Running" %}{% else %}{% translate "Needs attention" %}{% endif %}</span></div>
+  {% if worker_alive %}<p class="ok">{% icon "circle-check" %} {% translate "Running" %} · {% translate "last seen" %} {{ worker_seen|jalali:"%H:%M:%S" }}</p>
+  {% else %}<div class="callout callout-error">{% icon "circle-alert" %}<p>{% translate "Not running: jobs wait until it starts." %}{% if worker_seen %} {% translate "Last seen" %}: {{ worker_seen|jalali }}{% endif %}</p></div>{% endif %}
+  <dl class="figures">
+    <div><dt>{% translate "Jobs waiting" %}</dt><dd class="num">{{ queue.queued|fa_number }}</dd></div>
+    <div><dt>{% translate "Running" %}</dt><dd class="num">{{ queue.running|fa_number }}</dd></div>
+    <div><dt>{% translate "Paused" %}</dt><dd class="num">{{ queue.paused|fa_number }}</dd></div>
+  </dl>
+  {% if queue.oldest %}<p class="hint">{% translate "The oldest waiting since" %} {{ queue.oldest|jalali }}</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>{% icon "info" %}{% translate "This installation" %}</h2>
+  <dl class="pairs">
+    <dt>{% translate "Version" %}</dt><dd><bdi dir="ltr">{{ version }}</bdi></dd>
+    <dt>{% translate "Last backup" %}</dt><dd>{% if last_backup %}{{ last_backup|jalali }}{% else %}{% translate "None yet" %}{% endif %}{% if user|can:"manage_settings" %} · <a href="{% url 'backups' %}">{% translate "Backups" %}</a>{% endif %}</dd>
+  </dl>
+</section>
+</div>
+
 {% if sandbox %}
-<section class="card step">
+<section class="card step outbox">
   <h2>{% icon "inbox" %}{% translate "Simulated SMS" %}</h2>
   <p>{% translate "What would have been sent, newest first. The sandbox sends nothing." %}
      <span class="muted">({{ outbox_count|fa_number }})</span></p>
@@ -59,24 +81,4 @@
   {% endif %}
 </section>
 {% endif %}
-
-<section class="card step" data-cli="manage.py worker_status">
-  <h2>{% icon "settings" %}{% translate "Worker" %}</h2>
-  {% if worker_alive %}<p class="ok">{% icon "circle-check" %} {% translate "Running" %} · {% translate "last seen" %} {{ worker_seen|jalali:"%H:%M:%S" }}</p>
-  {% else %}<div class="callout callout-error">{% icon "circle-alert" %}<p>{% translate "Not running: jobs wait until it starts." %}{% if worker_seen %} {% translate "Last seen" %}: {{ worker_seen|jalali }}{% endif %}</p></div>{% endif %}
-  <dl class="figures">
-    <div><dt>{% translate "Jobs waiting" %}</dt><dd class="num">{{ queue.queued|fa_number }}</dd></div>
-    <div><dt>{% translate "Running" %}</dt><dd class="num">{{ queue.running|fa_number }}</dd></div>
-    <div><dt>{% translate "Paused" %}</dt><dd class="num">{{ queue.paused|fa_number }}</dd></div>
-  </dl>
-  {% if queue.oldest %}<p class="hint">{% translate "The oldest waiting since" %} {{ queue.oldest|jalali }}</p>{% endif %}
-</section>
-
-<section class="card step">
-  <h2>{% icon "info" %}{% translate "This installation" %}</h2>
-  <dl class="pairs">
-    <dt>{% translate "Version" %}</dt><dd><bdi dir="ltr">{{ version }}</bdi></dd>
-    <dt>{% translate "Last backup" %}</dt><dd>{% if last_backup %}{{ last_backup|jalali }}{% else %}{% translate "None yet" %}{% endif %}{% if user|can:"manage_settings" %} · <a href="{% url 'backups' %}">{% translate "Backups" %}</a>{% endif %}</dd>
-  </dl>
-</section>
 {% endblock %}

@@ -1,10 +1,12 @@
-{% extends "base.html" %}{% load i18n %}
+{% extends "base.html" %}{% load i18n ui %}
 {% block title %}{% translate "Log in" %} · {% translate "SMS campaigns" %}{% endblock %}
 {% block content %}
-<section class="card narrow">
+<section class="card auth-card">
+  <div class="auth-mark">{% icon "message-square-text" %}</div>
   <h1>{% translate "Log in" %}</h1>
+  <p class="auth-lede">{% translate "The SMS campaign dashboard. Colleagues only: an admin gives each account." %}</p>
   {% if form.errors %}
-    <p class="error" role="alert">{% translate "The username or password is not correct. Letter case matters." %}</p>
+    <div class="callout callout-error" role="alert">{% icon "circle-alert" %}<p>{% translate "The username or password is not correct. Letter case matters." %}</p></div>
   {% endif %}
   <form method="post" action="{% url 'login' %}">
     {% csrf_token %}
@@ -15,7 +17,7 @@
     <input id="id_password" name="password" type="password" dir="ltr"
            autocomplete="current-password" required>
     <input type="hidden" name="next" value="{{ next }}">
-    <button type="submit">{% translate "Log in" %}</button>
+    <button type="submit" class="block">{% translate "Log in" %}</button>
   </form>
 </section>
 {% endblock %}

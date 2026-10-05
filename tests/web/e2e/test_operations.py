@@ -131,6 +131,7 @@ def test_recipients_go_back_in_the_queue_after_the_count_is_named(world, open_as
 
 def test_the_report_filters_makes_an_audience_and_downloads(world, open_as):
     page = open_as(world.users["operator"], "/reports/completed/")
+    page.get_by_role("tab", name=fa("Recipients"), exact=True).click()
     page.get_by_label(fa("Status"), exact=True).select_option("sent")
     with page.expect_navigation():
         page.get_by_role("button", name=fa("Apply"), exact=True).click()

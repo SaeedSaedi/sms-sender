@@ -499,7 +499,9 @@ internal, multi-user tool built with Django and HTMX. So far it has:
   values, its length in SMS parts, and any token the text uses but nothing
   fills. It also warns when Persian text would show left to right on
   phones, because its first word is Latin.
-- the campaign list: the CLI's campaigns and the dashboard's;
+- the campaign list: the CLI's campaigns and the dashboard's, with tabs (in
+  progress, needs attention, ended), stage tiles that filter, and a search by
+  name, short name or template;
 - a report per campaign:
   - submission and delivery statuses, cost, and clicks per segment (bots and
     link previews left out);

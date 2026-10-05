@@ -860,9 +860,6 @@ msgstr "مقدار ثابت"
 msgid "It's outside the sending window ({start} to {end}, Tehran time); it's {now} now. Try again inside it."
 msgstr "اکنون خارج از بازه مجاز ارسال ({start} تا {end} به وقت تهران) است و ساعت {now} است. در بازه مجاز دوباره تلاش کنید."
 
-msgid "Job"
-msgstr "کار"
-
 msgid "Jobs"
 msgstr "کارها"
 
@@ -939,12 +936,6 @@ msgstr "تطبیق با کاوه‌نگار"
 msgid "Rejected. Change the settings, then send a new test SMS."
 msgstr "رد شد. تنظیمات را اصلاح کنید و سپس یک پیامک آزمایشی تازه بفرستید."
 
-msgid "Requested"
-msgstr "زمان درخواست"
-
-msgid "Result"
-msgstr "نتیجه"
-
 msgid "Resume sending"
 msgstr "ادامه ارسال"
 
@@ -1010,9 +1001,6 @@ msgstr "لینک کوتاه"
 
 msgid "Start sending"
 msgstr "آغاز ارسال"
-
-msgid "State"
-msgstr "وضعیت"
 
 msgid "template"
 msgstr "قالب پیامک"
@@ -2833,3 +2821,54 @@ msgstr "وقتی ارسالی پایان یابد یا متوقف شود، ای�
 
 msgid "Doesn't expire"
 msgstr "بدون تاریخ انقضا"
+
+msgid "SMS sending"
+msgstr "ارسال پیامک"
+
+msgid "Reports and monitoring"
+msgstr "گزارش و پایش"
+
+msgid "In progress"
+msgstr "در جریان"
+
+msgid "Ended"
+msgstr "پایان‌یافته"
+
+msgid "Every campaign, where it stands, and what needs someone now."
+msgstr "همه کمپین‌ها، وضعیت هر کدام و آنچه اکنون به رسیدگی نیاز دارد."
+
+msgid "Stages"
+msgstr "مرحله‌ها"
+
+msgid "Campaign list"
+msgstr "فهرست کمپین‌ها"
+
+msgid "Search campaigns"
+msgstr "جست‌وجوی کمپین‌ها"
+
+msgid "Name, short name or template"
+msgstr "نام، نام کوتاه یا قالب"
+
+msgid "Search"
+msgstr "جست‌وجو"
+
+msgid "Filtered"
+msgstr "نتیجه فیلتر"
+
+msgid "No campaign matches these filters."
+msgstr "هیچ کمپینی با این فیلترها پیدا نشد."
+
+msgid "About this campaign"
+msgstr "درباره این کمپین"
+
+msgid "Report sections"
+msgstr "بخش‌های گزارش"
+
+msgid "Overview"
+msgstr "نمای کلی"
+
+msgid "Tokens the template's text doesn't use"
+msgstr "متغیرهایی که متن قالب به کار نمی‌برد"
+
+msgid "The SMS campaign dashboard. Colleagues only: an admin gives each account."
+msgstr "داشبورد کمپین‌های پیامکی. فقط برای همکاران: حساب هر نفر را مدیر سامانه می‌سازد."

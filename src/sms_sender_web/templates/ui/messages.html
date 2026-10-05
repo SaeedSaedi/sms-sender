@@ -1,11 +1,21 @@
-{% load i18n ui %}{% if messages %}
-<div class="messages">
-  {% for message in messages %}
+{% load i18n ui %}{% if messages %}{% with problems=messages|problems notices=messages|notices %}
+{# Problems stay where they are; success and information float above the page and leave (app.js). #}
+{% if problems %}<div class="messages">
+  {% for message in problems %}
     <div class="callout callout-{{ message.level_tag }}" role="{% if message.level_tag == 'error' %}alert{% else %}status{% endif %}">
-      {% if message.level_tag == "success" %}{% icon "circle-check" %}{% elif message.level_tag == "error" %}{% icon "circle-alert" %}{% elif message.level_tag == "warning" %}{% icon "triangle-alert" %}{% else %}{% icon "info" %}{% endif %}
+      {% if message.level_tag == "error" %}{% icon "circle-alert" %}{% else %}{% icon "triangle-alert" %}{% endif %}
       <p>{{ message }}</p>
       <button type="button" class="icon-button" data-dismiss aria-label="{% translate "Close" %}">{% icon "x" %}</button>
     </div>
   {% endfor %}
-</div>
-{% endif %}
+</div>{% endif %}
+{% if notices %}<div class="toasts">
+  {% for message in notices %}
+    <div class="callout callout-{{ message.level_tag }}" role="status" data-toast>
+      {% if message.level_tag == "success" %}{% icon "circle-check" %}{% else %}{% icon "info" %}{% endif %}
+      <p>{{ message }}</p>
+      <button type="button" class="icon-button" data-dismiss aria-label="{% translate "Close" %}">{% icon "x" %}</button>
+    </div>
+  {% endfor %}
+</div>{% endif %}
+{% endwith %}{% endif %}

@@ -138,7 +138,7 @@
     }
     const dismiss = target.closest("[data-dismiss]");
     if (dismiss) {
-      dismiss.closest(".callout").remove();
+      leave(dismiss.closest(".callout"));
       return;
     }
     if (target.closest("[data-reload]")) {
@@ -265,6 +265,83 @@
       event.preventDefault();
       event.returnValue = "";
     }
+  });
+
+  // ---------- tabs ----------
+
+  // Without a script every panel shows, one after another, and the tabs are
+  // links to them. With it, one panel at a time; an address ending in
+  // #recipients, or in an anchor inside a panel, opens that panel.
+  function setupTabs(nav) {
+    const tabs = Array.from(nav.querySelectorAll("[role=tab]"));
+    if (!tabs.length) return;
+    const panelOf = (tab) => document.getElementById(tab.getAttribute("aria-controls"));
+    const select = (tab, focus) => {
+      tabs.forEach((each) => {
+        const on = each === tab;
+        each.setAttribute("aria-selected", String(on));
+        each.tabIndex = on ? 0 : -1;
+        const panel = panelOf(each);
+        if (panel) panel.hidden = !on;
+      });
+      if (focus) tab.focus();
+    };
+    const fromHash = () => {
+      const id = decodeURIComponent(window.location.hash.slice(1));
+      const target = id ? document.getElementById(id) : null;
+      const panel = target ? target.closest("[data-tab-panel]") : null;
+      return tabs.find((tab) => panel && tab.getAttribute("aria-controls") === panel.id) || tabs[0];
+    };
+    const remember = (tab) => window.history.replaceState(null, "", "#" + tab.getAttribute("aria-controls"));
+    select(fromHash(), false);
+    nav.addEventListener("click", (event) => {
+      const tab = event.target.closest("[role=tab]");
+      if (!tab) return;
+      event.preventDefault();
+      select(tab, true);
+      remember(tab);
+    });
+    nav.addEventListener("keydown", (event) => {
+      const i = tabs.indexOf(document.activeElement);
+      if (i < 0) return;
+      // Right to left: the next tab is the one to the left.
+      let next = null;
+      if (event.key === "ArrowLeft") next = (i + 1) % tabs.length;
+      else if (event.key === "ArrowRight") next = (i - 1 + tabs.length) % tabs.length;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = tabs.length - 1;
+      if (next === null) return;
+      event.preventDefault();
+      select(tabs[next], true);
+      remember(tabs[next]);
+    });
+    window.addEventListener("hashchange", () => select(fromHash(), false));
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll("[data-tabs]").forEach(setupTabs);
+  });
+
+  // ---------- toasts ----------
+
+  // Success and information leave after a while, unless someone is reading
+  // them (pointer over, or focus inside).
+  function leave(box) {
+    if (!box) return;
+    box.classList.add("is-leaving");
+    setTimeout(() => box.remove(), 300);
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll("[data-toast]").forEach((toast) => {
+      let timer = setTimeout(() => leave(toast), 8000);
+      const hold = () => { clearTimeout(timer); };
+      const release = () => { timer = setTimeout(() => leave(toast), 4000); };
+      toast.addEventListener("mouseenter", hold);
+      toast.addEventListener("focusin", hold);
+      toast.addEventListener("mouseleave", release);
+      toast.addEventListener("focusout", release);
+    });
   });
 
   // ---------- after a page loads ----------
