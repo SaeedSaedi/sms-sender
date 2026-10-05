@@ -54,3 +54,9 @@ def test_status_names_come_from_the_glossary():
     assert str(delivery_label(10)) == "تحویل‌شده"
     assert str(delivery_label(4)) == "ارسال‌شده به مخابرات"
     assert str(delivery_label(None)) == "استعلام‌نشده"
+
+
+def test_a_date_beyond_the_solar_hijri_calendar_shows_instead_of_failing():
+    """Kavenegar's "never expires" is 9999-12-31: no Solar Hijri year reaches
+    it, and a page must still render."""
+    assert jalali(datetime(9999, 12, 31, 20, 30, tzinfo=timezone.utc)) == "9999-12-31"

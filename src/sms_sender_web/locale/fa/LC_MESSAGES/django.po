@@ -2830,3 +2830,6 @@ msgstr "بازگرداندن گیرندگان به صف"
 
 msgid "When a send ends or stops, these hear how it went: the CLI's run report, with the campaign's short name. Their addresses hold secrets, so they're shown masked."
 msgstr "وقتی ارسالی پایان یابد یا متوقف شود، این مقصدها از نتیجه آن باخبر می‌شوند: گزارش اجرای خط فرمان، همراه با نام کوتاه کمپین. نشانی آن‌ها اطلاعات محرمانه دارد، پس پوشیده نمایش داده می‌شوند."
+
+msgid "Doesn't expire"
+msgstr "بدون تاریخ انقضا"

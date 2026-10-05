@@ -35,7 +35,7 @@ from pathlib import Path
 from sms_sender.locking import RunLock, RunLockError
 
 STAMP = "%Y%m%dT%H%M%SZ"
-NAME_RE = re.compile(r"^\d{8}T\d{6}Z$")
+NAME_RE = re.compile(r"^\d{8}T\d{6}Z(?:-\d+)?$")  # "-2", "-3": more than one in that second
 MANIFEST = "manifest.json"
 PARTIAL = ".partial"
 STALE_PARTIAL_SEC = 24 * 3600
@@ -126,7 +126,13 @@ def make_backup(
     if keep is not None and keep < 1:
         raise BackupError("keep at least one backup")
     now = now or datetime.now(timezone.utc)
-    name = now.strftime(STAMP)
+    # A second backup in the same second (a purge right after "back up
+    # now") takes the next free name, never the first one's.
+    name = stamp = now.strftime(STAMP)
+    for n in range(2, 100):
+        if not (dest / name).exists():
+            break
+        name = f"{stamp}-{n}"
     final, partial = dest / name, dest / f"{name}{PARTIAL}"
     if final.exists():
         raise BackupError(f"{final} already exists")

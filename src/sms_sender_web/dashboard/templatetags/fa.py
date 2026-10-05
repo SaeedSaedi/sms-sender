@@ -49,9 +49,13 @@ def jalali(value, fmt: str = "%Y/%m/%d %H:%M") -> str:
         return ""
     if isinstance(value, (int, float)):
         value = datetime.fromtimestamp(value, tz=dt_timezone.utc)
-    if timezone.is_aware(value):
-        value = timezone.localtime(value)  # TIME_ZONE is Asia/Tehran
-    return jdatetime.datetime.fromgregorian(datetime=value).strftime(fmt).translate(_PERSIAN_DIGITS)
+    try:
+        local = timezone.localtime(value) if timezone.is_aware(value) else value  # TIME_ZONE is Asia/Tehran
+        return jdatetime.datetime.fromgregorian(datetime=local).strftime(fmt).translate(_PERSIAN_DIGITS)
+    except (OverflowError, ValueError):
+        # Beyond the Solar Hijri calendar (e.g. a year-9999 "never" date):
+        # the Gregorian date, rather than a page that fails.
+        return value.strftime("%Y-%m-%d")
 
 
 @register.filter
