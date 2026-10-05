@@ -9,7 +9,9 @@ pytest.importorskip("django")
 from django.test import Client  # noqa: E402
 
 from sms_sender_web.audit.models import AuditEvent  # noqa: E402
-from sms_sender_web.campaigns.message import check, fill, length, placeholders  # noqa: E402
+from sms_sender_web.campaigns.message import (  # noqa: E402
+    check, fill, length, placeholders, shows_left_to_right,
+)
 from sms_sender_web.campaigns.models import MessageTemplate  # noqa: E402
 
 from .world import build_world  # noqa: E402
@@ -33,6 +35,14 @@ def test_placeholders_fill_and_mismatches():
     assert placeholders("%token20 %token2 %token1") == ["token20", "token2"]  # no %token1
     assert fill(TEXT, {"token": "نفت", "token10": "علی"}) == "سلام علی، قیمت نفت امروز: %token2\nلغو۱۱"
     assert check(TEXT, {"token", "token10", "token3"}) == (("token2",), ("token3",))
+
+
+def test_a_persian_message_that_starts_with_a_latin_word_shows_left_to_right():
+    assert shows_left_to_right("Ali عزیز، قیمت نفت امروز اعلام شد")
+    assert shows_left_to_right("۱۲ Ali عزیز")  # digits don't decide; the first letter does
+    assert not shows_left_to_right("علی عزیز، قیمت Bitcoin امروز")
+    assert not shows_left_to_right("Hello Ali")  # no Persian: nothing out of place
+    assert not shows_left_to_right("")
 
 
 @pytest.fixture
@@ -79,7 +89,7 @@ def test_removing_a_template_keeps_the_campaigns_sending(world, verified):
     template = MessageTemplate.objects.get(name="coin-price")
     operator = client_for(world.users["operator"], verified)
     html = operator.get("/templates/").content.decode()
-    assert '<td data-label="کمپین‌ها" class="num">۷</td>' in html  # seven send with it
+    assert '<td data-label="کمپین‌ها" class="num">۸</td>' in html  # eight send with it
     operator.post(f"/templates/{template.pk}/delete/")
     assert not MessageTemplate.objects.filter(name="coin-price").exists()
     assert world.campaigns["fresh"].settings["template"] == "coin-price"
@@ -94,6 +104,12 @@ def test_the_settings_preview_fills_the_message_with_the_first_recipient(world, 
     assert "سلام Ali، قیمت نفت امروز: %token2" in preview
     assert "متن از %token2 استفاده می‌کند، اما چیزی مقدار آن را پر نمی‌کند" in preview
     assert "token20 مقدار دارد، اما متن قالب از آن استفاده نمی‌کند." in preview  # the link
+    assert "از چپ به راست" not in preview  # «سلام» comes first
+
+    # The world's own template starts with the first name, which is Latin.
+    MessageTemplate.objects.filter(name="coin-price").update(text="%token10 عزیز، قیمت %token")
+    preview = operator.get("/campaigns/fresh/settings/").content.decode().split('id="preview"')[1]
+    assert "گوشی‌ها آن را از چپ به راست" in preview
 
 
 def test_the_preview_follows_unsaved_changes_and_saves_nothing(world, verified):

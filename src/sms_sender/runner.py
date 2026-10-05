@@ -459,11 +459,12 @@ class Runner:
             # A reporter may show link progress too (the dashboard's does).
             progress=getattr(self._reporter, "links", None),
         )
+        # A test run makes only the test SMS's own link: the recipients' links
+        # are made when sending starts, still all before the first SMS
+        # (decided 2026-10-04), so the operator gets the test SMS in seconds.
+        recipients = {} if self.test_only else {p: segments.get(p) or self.segment for p in phones}
         try:
-            result = stage.run(
-                {p: segments.get(p) or self.segment for p in phones},
-                test_phone=self.approval_test_number,
-            )
+            result = stage.run(recipients, test_phone=self.approval_test_number)
         except ShlinkHaltError as e:
             logger.error("links_halt", extra={"status": e.status, "detail": str(e)})
             raise PreflightError(

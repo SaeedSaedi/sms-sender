@@ -1,5 +1,7 @@
 """What the activity page calls each recorded action, and how it
 describes the details — in Persian, never the raw key=value."""
+from datetime import datetime
+
 from django.utils.html import format_html
 from django.utils.translation import gettext as gettext_now
 from django.utils.translation import gettext_lazy as _
@@ -7,7 +9,7 @@ from django.utils.translation import gettext_lazy as _
 from ..accounts.terms import ROLE_LABELS
 from ..campaigns.terms import SETTING_NAMES
 from ..jobs.models import Job
-from ..dashboard.templatetags.fa import fa_digits, fa_number
+from ..dashboard.templatetags.fa import fa_digits, fa_number, jalali
 from ..privacy import mask_phone
 
 ACTION_LABELS = {
@@ -37,6 +39,8 @@ ACTION_LABELS = {
     "test_approved": _("Test SMS approved"),
     "test_rejected": _("Test SMS rejected"),
     "send_started": _("Sending started"),
+    "send_scheduled": _("Sending scheduled"),
+    "send_unscheduled": _("Schedule cancelled"),
     "job_requested": _("Update requested"),
     "job_paused": _("Paused"),
     "job_resumed": _("Resumed"),
@@ -77,6 +81,13 @@ def describe(event) -> str:
         return _who(d.get("segment", ""))
     if event.action in ("template_saved", "template_deleted"):
         return _who(d.get("name", ""))
+    if event.action in ("send_started", "send_scheduled"):
+        parts = [str(jalali(datetime.fromisoformat(d["at"])))] if d.get("at") else []
+        if d.get("was_scheduled"):
+            parts.append(gettext_now("before its scheduled time"))
+        if d.get("smoke_test"):
+            parts.append(gettext_now("to one recipient first"))
+        return "، ".join(parts)
     if event.action == "segment_mapped":
         return format_html(
             gettext_now("{segment}: {valid} valid numbers, {invalid} invalid rows"),

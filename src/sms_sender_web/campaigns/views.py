@@ -3,13 +3,18 @@ its approval, then sending with live progress and pause / resume / cancel.
 Every action is a job for the worker, and every one is in the activity log."""
 from __future__ import annotations
 
+import math
+
 from django.contrib import messages
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods, require_POST
 
+from sms_sender.links import DEFAULT_RATE as DEFAULT_LINK_RATE
+from sms_sender.rate import parse_rate
 from sms_sender.sender import TOKEN_MAX_SPACES
 
 from ..accounts.decorators import forbidden, requires
@@ -17,20 +22,21 @@ from ..accounts.models import test_phone_of
 from ..accounts.roles import can
 from ..audit.record import record
 from ..dashboard.campaigns import read_campaign
-from ..dashboard.templatetags.fa import fa_number
+from ..dashboard.templatetags.fa import fa_number, jalali
 from ..dashboard.terms import STATUS_ORDER
 from ..jobs import services
 from ..jobs.engine import campaign_db
 from ..jobs.models import Campaign, Job
 from ..segments.models import Segment
 from .checks import check_campaign
-from .forms import TOKENS, NewCampaignForm, SettingsForm, combined
-from .lifecycle import lifecycle
+from .forms import SCHEDULE_ERRORS, TOKENS, NewCampaignForm, SettingsForm, combined, parse_when
+from .lifecycle import READY, lifecycle
 from .models import MessageTemplate
 from .present import notes, result_line, say, send_summary
-from .preview import preview_of
+from .preview import ROW_CHOICES, preview_of, recipients
 from .terms import (
-    CHECK_PROBLEMS, CONFLICTS, FOLLOWUPS, INVALID_ROWS, NEXT_STEP, STAGES, STEPS, stop_reason,
+    CHECK_PROBLEMS, CONFLICTS, FOLLOWUPS, INVALID_ROWS, LINKS_AT_SEND, NEXT_STEP, STAGES, STEPS,
+    stop_reason,
 )
 
 # Who may do what (spec 4.12).
@@ -39,6 +45,8 @@ _ACTIONS = {
     "approve": "run_campaigns",
     "reject": "run_campaigns",
     "send": "run_campaigns",
+    "unschedule": "run_campaigns",
+    "start_now": "run_campaigns",
     "pause": "run_campaigns",
     "resume": "run_campaigns",
     "cancel": "run_campaigns",
@@ -46,12 +54,6 @@ _ACTIONS = {
     "delivery": "update_campaigns",
     "clicks": "update_campaigns",
 }
-
-
-def _send_started(campaign: Campaign) -> bool:
-    """Once a send has started, the message is fixed: what went out and what
-    follows must be the same campaign."""
-    return Job.objects.filter(campaign=campaign, kind=Job.Kind.SEND).exclude(started_at=None).exists()
 
 
 @requires("edit_campaigns")
@@ -79,8 +81,9 @@ def campaign_new(request):
 @require_http_methods(["GET", "POST"])
 def campaign_settings(request, slug: str):
     campaign = get_object_or_404(Campaign, slug=slug)
-    if _send_started(campaign):
-        messages.error(request, _locked_message())
+    locked = services.settings_locked(campaign)
+    if locked:
+        messages.error(request, _locked_message(locked))
         return redirect("campaign_detail", slug=slug)
     segment = Segment.objects.filter(slug=campaign.settings.get("segment")).first()
     columns = segment.token_columns if segment else []
@@ -141,7 +144,9 @@ def settings_preview(request, slug: str):
     return render(request, "campaigns/_preview.html", {"preview": preview_of(settings, segment)})
 
 
-def _locked_message() -> str:
+def _locked_message(why: str) -> str:
+    if why == "waiting":
+        return _("A send is scheduled for this campaign. To change its settings, cancel the schedule first.")
     return _("This campaign has started sending, so its settings can't change. For a different message, make a new campaign.")
 
 
@@ -167,6 +172,17 @@ def _links_progress(job: Job | None) -> dict | None:
     }
 
 
+def _links_note(campaign: Campaign, waiting: int) -> str:
+    """How long the recipients' links take when sending starts (Shlink is
+    capped, 10 a second by default): only for one link per recipient."""
+    links = (campaign.settings or {}).get("links") or {}
+    if not waiting or links.get("strategy", "recipient") != "recipient":
+        return ""
+    per_sec = parse_rate((campaign.settings or {}).get("link_rate") or DEFAULT_LINK_RATE) or 10.0
+    minutes = max(1, math.ceil(waiting / per_sec / 60))
+    return say(LINKS_AT_SEND, {"n": waiting, "minutes": minutes})
+
+
 def _followups(counts: dict) -> list[dict]:
     """What's left after a send, each with its action (if any)."""
     items = []
@@ -189,9 +205,10 @@ def _steps(current: int) -> list[dict]:
     ]
 
 
-def _live(request, campaign: Campaign) -> dict:
+def _live(request, campaign: Campaign, **preview) -> dict:
     """What the live part of the page shows: where the campaign stands and
-    what comes next, the current step, the counts and the history."""
+    what comes next, the current step, the counts and the history. `preview`
+    is the ready step's search (`query`, `rows`)."""
     jobs = list(
         Job.objects.filter(campaign=campaign).select_related("requested_by", "decided_by")
         .prefetch_related("events").order_by("-created_at", "-id")[:20]
@@ -203,15 +220,23 @@ def _live(request, campaign: Campaign) -> dict:
     summary = read_campaign(db) if db.exists() else None
     counts = summary.counts if summary else {}
     waiting = counts.get("pending", 0) + counts.get("failed_retriable", 0)
+    ready = {}
+    if life.stage == READY:  # the poll renders this step too, so it's built here
+        ready = {**_check_context(campaign), **_preview_context(request, campaign, **preview)}
     return {
+        **ready,
         "cancel_confirm": _(
             "Cancel the campaign? %(n)s recipients who haven't got the SMS yet are cancelled. "
             "SMS that Kavenegar already accepted can't be recalled."
         ) % {"n": fa_number(waiting)},
+        # The same for starting now and for a set time: who gets it, and that it's final.
         "send_confirm": (
-            _("Start sending to %(n)s recipients now?") % {"n": fa_number(waiting)}
-            if waiting else _("Start sending this campaign now?")
+            _("%(n)s recipients will get this SMS. An SMS Kavenegar has accepted can't be recalled.")
+            % {"n": fa_number(waiting)}
+            if waiting else _("Everyone still waiting will get this SMS. An SMS Kavenegar has accepted can't be recalled.")
         ),
+        "today_jalali": jalali(timezone.now(), "%Y/%m/%d"),
+        "links_note": _links_note(campaign, waiting),
         "campaign": campaign,
         "jobs": jobs,
         "active": bool(active),
@@ -231,7 +256,7 @@ def _live(request, campaign: Campaign) -> dict:
         "summary": summary,
         "status_order": STATUS_ORDER,
         "test_phone": test_phone_of(request.user),
-        "send_started": _send_started(campaign),
+        "settings_locked": bool(services.settings_locked(campaign)),
         "life": life,
         "stage_label": STAGES[life.stage],
         "stage_template": f"campaigns/stage/_{life.stage}.html",
@@ -248,10 +273,43 @@ def _live(request, campaign: Campaign) -> dict:
     }
 
 
-def _page(request, campaign: Campaign, **extra):
+def _check_context(campaign: Campaign) -> dict:
+    result = check_campaign(campaign)
+    return {
+        "check": result,
+        "check_problems": [CHECK_PROBLEMS[key] for key in result.problems],
+        "check_invalid": [(INVALID_ROWS.get(key, key), n) for key, n in sorted(result.invalid.items())],
+    }
+
+
+def _preview_context(request, campaign: Campaign, *, query: str = "", rows: int = ROW_CHOICES[0]) -> dict:
+    """The ready step's preview, before any test SMS: the message and, for
+    whoever sends, each recipient's message or one number's. Read only:
+    nothing is sent, and no link is made."""
+    s = campaign.settings
+    segment = Segment.objects.filter(slug=s.get("segment")).first()
+    context = {"message": preview_of(s, segment)}
+    if can(request.user, "run_campaigns"):
+        context.update(
+            row_choices=ROW_CHOICES, rows=rows, preview_query=query,
+            recipients=recipients(s, segment, campaign.slug, limit=rows, phone=query or None),
+        )
+    return context
+
+
+def _preview_params(data) -> dict:
+    """The search from the form: a number (never in a URL) and how many rows."""
+    rows = data.get("rows", "")
+    return {
+        "query": data.get("preview", "").strip()[:32],
+        "rows": int(rows) if rows.isdigit() and int(rows) in ROW_CHOICES else ROW_CHOICES[0],
+    }
+
+
+def _page(request, campaign: Campaign, *, preview: dict | None = None, **extra):
     s = campaign.settings
     return render(request, "campaigns/detail.html", {
-        **_live(request, campaign),
+        **_live(request, campaign, **(preview or {})),
         "segment": Segment.objects.filter(slug=s.get("segment")).first(),
         "tokens": [
             (name, (s.get("tokens") or {}).get(name), (s.get("token_columns") or {}).get(name))
@@ -282,13 +340,21 @@ def campaign_live(request, slug: str):
 @requires("edit_campaigns")
 @require_POST
 def campaign_check(request, slug: str):
+    """Check again: the page reads the segment afresh, as on every view."""
+    return _page(request, get_object_or_404(Campaign, slug=slug))
+
+
+@requires("run_campaigns")
+@require_POST
+def campaign_preview(request, slug: str):
+    """Each recipient's message, or one number's (the CLI's preview). A POST,
+    so the number searched for never appears in a URL or an access log."""
     campaign = get_object_or_404(Campaign, slug=slug)
-    result = check_campaign(campaign)
-    return _page(
-        request, campaign, check=result,
-        check_problems=[CHECK_PROBLEMS[key] for key in result.problems],
-        check_invalid=[(INVALID_ROWS.get(key, key), n) for key, n in sorted(result.invalid.items())],
-    )
+    params = _preview_params(request.POST)
+    if request.headers.get("HX-Request"):
+        return render(request, "campaigns/stage/_recipients_preview.html",
+                      {"campaign": campaign, **_preview_context(request, campaign, **params)})
+    return _page(request, campaign, preview=params)
 
 
 def _job(campaign: Campaign, request, kinds: tuple[str, ...]) -> Job:
@@ -319,9 +385,34 @@ def campaign_action(request, slug: str, action: str):
             else:
                 messages.success(request, _("The test SMS is rejected. Change the settings and send a new test."))
         elif action == "send":
-            services.start_send(campaign, request.user)
-            record("send_started", request=request, campaign=slug)
-            messages.success(request, _("Sending is queued. Progress appears here."))
+            smoke_test = request.POST.get("smoke_test") == "on"
+            at = None
+            if request.POST.get("when") == "later":
+                date, time = request.POST.get("date", "").strip(), request.POST.get("time", "").strip()
+                at, problem = parse_when(date, time)
+                if problem:
+                    # Back to the form, with what was typed and the reason under it.
+                    return _page(request, campaign, schedule_error=SCHEDULE_ERRORS[problem],
+                                 schedule_bad_date=problem != "bad_time",
+                                 schedule_bad_time=problem in ("bad_time", "past", "too_far"),
+                                 schedule_date=date[:10], schedule_time=time[:5], schedule_smoke=smoke_test)
+            services.start_send(campaign, request.user, at=at, smoke_test=smoke_test)
+            if at is None:
+                record("send_started", request=request, campaign=slug, smoke_test=smoke_test)
+                messages.success(request, _("Sending is queued. Progress appears here."))
+            else:
+                record("send_scheduled", request=request, campaign=slug, at=at.isoformat(),
+                       smoke_test=smoke_test)
+                messages.success(request, _("Sending is scheduled for %(when)s.") % {"when": jalali(at)})
+        elif action == "unschedule":
+            services.unschedule(_job(campaign, request, (Job.Kind.SEND,)))
+            record("send_unscheduled", request=request, campaign=slug)
+            messages.success(request, _("The schedule is cancelled. The campaign is ready to send, now or at another time."))
+        elif action == "start_now":
+            job = services.start_now(_job(campaign, request, (Job.Kind.SEND,)))
+            record("send_started", request=request, campaign=slug,
+                   smoke_test=bool(job.params.get("smoke_test")), was_scheduled=True)
+            messages.success(request, _("Sending starts now. Progress appears here."))
         elif action == "pause":
             job = services.pause(_job(campaign, request, (Job.Kind.SEND,)))
             record("job_paused", request=request, campaign=slug, kind=job.kind)

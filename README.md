@@ -425,20 +425,28 @@ internal, multi-user tool built with Django and HTMX. So far it has:
      fixed value, a column of the segment, or the short link. Then value
      translations, the link's destination, the sending window and a rate
      limit.
-  2. **Check:** reads the segment with those settings and sends nothing:
-     who would get the SMS, who is suppressed or already sent, and what's
-     in the way.
-  3. **Test SMS:** runs the checks, makes the short links, checks the
-     account, and sends one SMS to *your own* number (set on «حساب من» /
-     My account). It shows the cost per SMS, the estimate and the credit.
-     You approve it or reject it.
+  2. **Check and preview:** runs whenever you open the campaign, and sends
+     nothing: who would get the SMS, who is suppressed or already sent, and
+     what's in the way. Then each recipient's message (the first 5, 10 or
+     20, or one number you look up) and what the short-link service will be
+     asked for.
+  3. **Test SMS:** runs the checks, checks the account, makes the test
+     SMS's own short link, and sends one SMS to *your own* number (set on
+     «حساب من» / My account). It shows the cost per SMS, the estimate and
+     the credit. You approve it or reject it. The recipients' links are made
+     when sending starts, before any SMS, so the test doesn't wait for them.
   4. **Send:** only after an approved test SMS for the current settings.
+     Start now, or schedule it for a Solar Hijri date and a Tehran time (up
+     to 30 days ahead). A scheduled send can start at once, or be taken back
+     without cancelling anyone. Optionally it goes to one recipient first
+     and stops if that SMS doesn't go out (the CLI's `--smoke-test`).
      Progress updates live, with pause, resume and cancel.
   5. **Follow-up:** reconcile, update delivery statuses and clicks.
      None of these sends an SMS.
 
   Changing the message (template, tokens, link, segment) needs a new test
-  SMS. Once sending has started, a campaign's settings are fixed.
+  SMS. While a send is scheduled, the settings wait: cancel the schedule to
+  change them. Once sending has started, a campaign's settings are fixed.
 
   A campaign always shows its stage and the next step. When a send ends, its
   results and what's left (unknown, not sent, rejected) sit together, each
@@ -447,7 +455,8 @@ internal, multi-user tool built with Django and HTMX. So far it has:
 - a template library («قالب‌ها»): a copy of each Kavenegar template's text.
   The settings page then previews the message with the first recipient's
   values, its length in SMS parts, and any token the text uses but nothing
-  fills.
+  fills. It also warns when Persian text would show left to right on
+  phones, because its first word is Latin.
 - the campaign list: the CLI's campaigns and the dashboard's;
 - a report per campaign:
   - submission and delivery statuses, cost, and clicks per segment (bots and
@@ -508,8 +517,7 @@ reconciliation, and delivery and click updates, one at a time.
 - **Restarts:** if the worker stops or dies, its job is picked up again.
 - **Scheduled updates:** while idle, it queues delivery updates during
   Kavenegar's 48-hour window, and click updates.
-
-The pages that start and control sends come next.
+- **Scheduled sends** wait in the queue until their time.
 
 Run it locally with Docker:
 

@@ -51,7 +51,7 @@ class Engine:
 
     def runner(
         self, campaign: Campaign, reporter: Reporter, *,
-        test_number: str | None = None, cost_per_sms: int | None = None,
+        test_number: str | None = None, cost_per_sms: int | None = None, smoke_test: bool = False,
     ) -> Runner:
         """A run for the campaign's settings (the CLI's flags). With
         `test_number`, a test run: everything up to one SMS to that number,
@@ -94,6 +94,7 @@ class Engine:
             install_signal_handlers=False,  # the worker handles signals
             approval_test_number=test_number,
             test_only=test_number is not None,
+            smoke_test=smoke_test,
             cost_per_sms=cost_per_sms,
             make_sender=SandboxKavenegar if django_settings.SANDBOX else Sender,
         )

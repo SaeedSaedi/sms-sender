@@ -1,6 +1,7 @@
 """An operator's whole journey in the browser, in the sandbox (plan 05):
 first sign-in with two-step setup, their own number, a list, a campaign,
-its check, the test SMS and its approval, the send, and the report.
+its check and per-recipient preview, the test SMS and its approval, the
+send (to one recipient first), and the report.
 
 It finds everything by the Persian names people see (the approved copy),
 so a redesign that keeps the words keeps this test."""
@@ -16,7 +17,7 @@ from sms_sender_web.dashboard.templatetags.fa import fa_number
 from sms_sender_web.jobs.models import Job
 
 from ..world import PASSWORD, TEST_PHONE, _user, open_window
-from .conftest import fa
+from .conftest import expect, fa
 
 pytestmark = pytest.mark.e2e
 
@@ -91,15 +92,23 @@ def test_an_operator_runs_a_campaign_from_a_list_to_its_report(sandbox, sandbox_
     page.get_by_label(fa("Until"), exact=True).fill(end)
     page.get_by_role("button", name=fa("Save"), exact=True).click()
 
-    # The check, then a test SMS to my own number, which I approve.
-    page.get_by_role("button", name=fa("Check now"), exact=True).click()
+    # The check runs by itself, and shows each recipient's message; one
+    # number can be looked up. Then a test SMS to my own number, which I
+    # approve.
     page.get_by_text(fa("Ready for a test SMS.")).wait_for()
+    rows = page.locator("#recipients-preview tbody tr")
+    expect(rows).to_have_count(len(ROWS))
+    page.get_by_label(fa("Find a number"), exact=True).fill(ROWS[1])
+    page.get_by_role("button", name=fa("Show"), exact=True).click()
+    expect(rows).to_have_count(1)
+    assert ROWS[1] not in page.url  # it went in a POST
     page.get_by_role("button", name=fa("Send a test SMS"), exact=True).click()
     page.get_by_role("button", name=fa("Yes, approve"), exact=True).wait_for(timeout=60_000)  # the page follows the job
     page.get_by_role("button", name=fa("Yes, approve"), exact=True).click()
     page.get_by_text(fa("The test SMS is approved. Sending can start.")).wait_for()
 
-    # The send.
+    # The send, to one recipient first.
+    page.get_by_label(fa("Send to one recipient first, and stop if that SMS doesn't go out"), exact=True).check()
     page.get_by_role("button", name=fa("Start sending"), exact=True).click()
     # The confirmation names the action and how many it reaches.
     dialog = page.get_by_role("dialog")

@@ -4,5 +4,4 @@
   <div><dt>{% translate "Cost of one SMS" %}</dt><dd class="num">{% if test.result.cost_per_sms %}{{ test.result.cost_per_sms|fa_number }} {% translate "rials" %}{% else %}—{% endif %}</dd></div>
   <div><dt>{% translate "Estimated cost" %}</dt><dd class="num">{% if test.result.estimate %}{{ test.result.estimate|fa_number }} {% translate "rials" %}{% else %}—{% endif %}</dd></div>
   <div><dt>{% translate "Account credit" %}</dt><dd class="num">{% if test.result.credit is not None %}{{ test.result.credit|fa_number }} {% translate "rials" %}{% else %}—{% endif %}</dd></div>
-  {% if campaign.settings.links %}<div><dt>{% translate "Short links" %}</dt><dd class="num">{{ test.result.links_ready|default:0|fa_number }}</dd></div>{% endif %}
 </dl>

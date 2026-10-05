@@ -1,1 +1,21 @@
-{% include "campaigns/stage/_sending.html" %}
+{% load i18n fa roles ui %}
+<h2>{% icon "calendar-clock" %}{% translate "Send" %}</h2>
+{% if life.send %}
+  <div class="callout">{% icon "calendar-clock" %}
+    <p>{% translate "Scheduled for" %}: <strong class="num">{{ life.send.not_before|jalali }}</strong>{% if life.send.params.smoke_test %} · {% translate "to one recipient first" %}{% endif %}</p>
+  </div>
+  {% if user|can:"run_campaigns" %}
+    <div class="actions follow-up">
+      <form method="post" action="{% url 'campaign_action' campaign.slug 'start_now' %}" class="inline" id="start-now-form"
+            data-confirm="{{ send_confirm }}">
+        {% csrf_token %}<input type="hidden" name="job" value="{{ life.send.pk }}">
+        <button type="submit" class="small">{% icon "play" %}{% translate "Start now" %}</button>
+      </form>
+      <form method="post" action="{% url 'campaign_action' campaign.slug 'unschedule' %}" class="inline" id="unschedule-form">
+        {% csrf_token %}<input type="hidden" name="job" value="{{ life.send.pk }}">
+        <button type="submit" class="small secondary">{% icon "x" %}{% translate "Cancel the schedule" %}</button>
+      </form>
+    </div>
+    <p class="hint">{% translate "Cancelling the schedule cancels no one: the campaign stays ready to send." %}</p>
+  {% endif %}
+{% endif %}

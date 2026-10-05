@@ -7,11 +7,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from ..dashboard.templatetags.fa import fa_digits, fa_number
+from ..dashboard.templatetags.fa import fa_digits, fa_number, jalali
 from ..jobs.models import Job
 from ..privacy import mask_phone
 from .terms import (
-    JOB_RESULTS, NOTES, SETTING_NAMES, TOP_ERROR, TOP_ERROR_NO_CODE, code_meaning, stop_reason,
+    JOB_RESULTS, NOTES, SCHEDULED_FOR, SETTING_NAMES, TOP_ERROR, TOP_ERROR_NO_CODE, WITHDRAWN,
+    code_meaning, stop_reason,
 )
 
 _CODE = re.compile(r"^\[(\d+)\]")
@@ -73,6 +74,10 @@ def result_line(job: Job) -> str:
     reason = stop_reason(result.get("stop_reason"), result.get("stop_fields"))
     if reason:
         return reason
+    if job.state == Job.State.QUEUED and getattr(job, "not_before", None):
+        return say(SCHEDULED_FOR, {"when": jalali(job.not_before)})
+    if result.get("withdrawn"):
+        return str(WITHDRAWN)
     if job.kind in JOB_RESULTS and result:
         fields = {k: result.get(k, 0) for k in ("sent", "requeued", "needs_review", "deferred",
                                                  "checked", "updated", "links", "clicks")}

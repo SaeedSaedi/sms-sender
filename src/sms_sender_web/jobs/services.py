@@ -25,7 +25,7 @@ APPROVED_SETTINGS = ("segment", "template", "tokens", "token_columns", "value_ma
 class JobConflict(Exception):
     """The action can't be done right now. `code` picks the Persian message:
     busy, no_test_number, send_active, test_active, not_approved,
-    settings_changed, not_decidable."""
+    settings_changed, not_decidable, not_scheduled."""
 
     def __init__(self, code: str, detail: str = ""):
         super().__init__(detail or code)
@@ -38,6 +38,19 @@ def settings_hash(campaign: Campaign) -> str:
     if approved.get("links"):
         approved["links"] = {k: v for k, v in approved["links"].items() if k != "expiry_days"}
     return hashlib.sha256(json.dumps(approved, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def settings_locked(campaign: Campaign) -> str:
+    """Why the settings can't change now ("" when they can): "started" once
+    a send has begun (what went out and what follows must be one message),
+    "waiting" while a send is queued or scheduled (it would go out with
+    settings nobody approved)."""
+    sends = Job.objects.filter(campaign=campaign, kind=Job.Kind.SEND)
+    if sends.exclude(started_at=None).exists():
+        return "started"
+    if sends.filter(state__in=ACTIVE).exists():
+        return "waiting"
+    return ""
 
 
 def latest_test(campaign: Campaign) -> Job | None:
@@ -91,9 +104,11 @@ def decide_test(job: Job, user, approve: bool) -> Job:
     return job
 
 
-def start_send(campaign: Campaign, user) -> Job:
+def start_send(campaign: Campaign, user, *, at=None, smoke_test: bool = False) -> Job:
     """Queue the send, given an approved test SMS for these settings. Its
-    cost per SMS goes along, for the credit estimate."""
+    cost per SMS goes along, for the credit estimate. `at`: start then
+    instead (the worker leaves it queued until that time). `smoke_test`:
+    send to one recipient first, and stop if that SMS doesn't go out."""
     test = approval(campaign)
     if test is None:
         latest = latest_test(campaign)
@@ -107,9 +122,31 @@ def start_send(campaign: Campaign, user) -> Job:
             raise JobConflict("test_active")
         return Job.objects.create(
             campaign=campaign, kind=Job.Kind.SEND, requested_by=user,
-            params={"cost_per_sms": test.result.get("cost_per_sms")},
-            settings_hash=test.settings_hash,
+            params={"cost_per_sms": test.result.get("cost_per_sms"), "smoke_test": smoke_test},
+            settings_hash=test.settings_hash, not_before=at,
         )
+
+
+def unschedule(job: Job) -> Job:
+    """Take a scheduled send off the queue. Unlike cancelling, nobody is
+    cancelled: the campaign is ready to send again, now or at another time."""
+    if job.kind != Job.Kind.SEND or job.not_before is None:
+        raise JobConflict("not_scheduled")
+    changed = Job.objects.filter(pk=job.pk, state=Job.State.QUEUED, not_before__gt=timezone.now()).update(
+        state=Job.State.CANCELLED, finished_at=timezone.now(), result={"withdrawn": True},
+    )
+    if not changed:
+        raise JobConflict("not_scheduled")
+    job.refresh_from_db()
+    return job
+
+
+def start_now(job: Job) -> Job:
+    """A scheduled send starts now instead of at its time."""
+    if not Job.objects.filter(pk=job.pk, state=Job.State.QUEUED, kind=Job.Kind.SEND).update(not_before=None):
+        raise JobConflict("not_scheduled")
+    job.refresh_from_db()
+    return job
 
 
 def enqueue(campaign: Campaign, kind: str, user=None) -> Job:

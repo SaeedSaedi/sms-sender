@@ -39,7 +39,7 @@ from sms_sender.window import DEFAULT_WINDOW, now_tehran, parse_window
 from .engine import Engine, campaign_db
 from .models import Campaign, Job, JobEvent, WorkerBeat
 from .reporter import JobReporter
-from .services import ACTIVE
+from .services import ACTIVE, settings_hash
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +132,8 @@ class Worker:
         (lease expired) — atomically: two workers never get the same job."""
         while True:
             now = timezone.now()
-            claimable = Q(state=Job.State.QUEUED) | Q(state=Job.State.RUNNING, lease_until__lt=now)
+            due = Q(not_before__isnull=True) | Q(not_before__lte=now)  # a scheduled send waits
+            claimable = (Q(state=Job.State.QUEUED) & due) | Q(state=Job.State.RUNNING, lease_until__lt=now)
             with transaction.atomic():
                 job = Job.objects.filter(claimable).order_by("created_at", "id").first()
                 if job is None:
@@ -206,12 +207,23 @@ class Worker:
     def _run(self, job: Job, *, test: bool):
         """A send, or a test run (stages 1–3 and one SMS to the operator).
         Stopping a test never touches the campaign's recipients."""
+        if not test and job.attempts == 1 and job.settings_hash != settings_hash(job.campaign):
+            # The settings changed after its test SMS was approved, so what
+            # would go out isn't what was approved. The settings page is
+            # locked while a send waits; this is the backstop. Nothing is
+            # sent, and the send is withdrawn as if never asked for: the
+            # campaign wants a new test SMS. Only on its first claim, before
+            # anything can have gone out.
+            Job.objects.filter(pk=job.pk).update(started_at=None)
+            return (Job.State.CANCELLED, {"withdrawn": True, "stop_reason": "not_approved"},
+                    "the settings changed after the test SMS was approved; nothing was sent")
         reporter = JobReporter(job)
         if test:
             runner = self.engine.runner(job.campaign, reporter, test_number=job.params["test_number"])
         else:
             runner = self.engine.runner(
                 job.campaign, reporter, cost_per_sms=job.params.get("cost_per_sms"),
+                smoke_test=bool(job.params.get("smoke_test")),
             )
         reason = _StopReason()
 

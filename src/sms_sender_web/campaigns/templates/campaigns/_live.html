@@ -25,7 +25,7 @@
 <section class="card step" id="message">
   <div class="card-header">
     <h2>{% icon "message-square-text" %}{% translate "What this campaign sends" %}</h2>
-    {% if user|can:"edit_campaigns" and not send_started %}<a class="button secondary small" href="{% url 'campaign_settings' campaign.slug %}">{% icon "settings" %}{% translate "Settings" %}</a>{% endif %}
+    {% if user|can:"edit_campaigns" and not settings_locked %}<a class="button secondary small" href="{% url 'campaign_settings' campaign.slug %}">{% icon "settings" %}{% translate "Settings" %}</a>{% endif %}
   </div>
   <dl class="pairs">
     <dt>{% translate "Segment" %}</dt><dd>{% if segment %}<a href="{% url 'segment_detail' segment.slug %}"><bdi>{{ segment.name }}</bdi></a>{% else %}—{% endif %}</dd>
