@@ -157,6 +157,18 @@ def test_a_backup_before_a_risky_change_removes_none(data, tmp_path):
     assert result.pruned == () and len(backups.list_backups(dest)) == 3
 
 
+
+def test_two_backups_in_the_same_second_both_land(data, tmp_path):
+    """A purge right after "back up now" (the browser journey on a fast CI
+    machine) backs up within the same second: it takes the next free name,
+    and both count."""
+    dest = tmp_path / "backups"
+    first = make_backup(data, dest, now=T0)
+    second = make_backup(data, dest, now=T0)
+    assert first.path.name == "20261005T003000Z" and second.path.name == "20261005T003000Z-2"
+    assert backups.list_backups(dest) == [first.path, second.path]
+    assert verify(second.path) == []
+
 @pytest.mark.django_db
 def test_the_commands(data, tmp_path, settings, capsys):
     settings.DATA_DIR = data
