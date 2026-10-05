@@ -65,7 +65,7 @@ PARITY: dict[str, tuple[Part, ...]] = {
     "status": (Control("report", VIEWER),),
     "export-failed": (Control("report", note="rejected and invalid rows; any status through the filters"),),
     "reset": (Control("campaign.completed", note="queue again, by status, each with its role"),),
-    "purge": (Planned("P5", "delete a campaign's records, with a backup first"),),
+    "purge": (Control("campaign.completed.admin", ADMIN, note="a typed confirmation and a backup first"),),
     "reconcile": (Control("campaign.approved"),),
     "delivery": (Control("campaign.approved"),),
     "check-sends": (Control("report", VIEWER),),
@@ -148,8 +148,8 @@ PARITY: dict[str, tuple[Part, ...]] = {
     "* --yes": (Implied("A confirmation dialog takes its place."),),
 
     # ---------- this app's server commands ----------
-    "manage.py backup": (Planned("P5", "back up now"),),
-    "manage.py verify_backup": (Planned("P5", "verify backups"),),
+    "manage.py backup": (Control("backups", ADMIN),),
+    "manage.py verify_backup": (Control("backups", ADMIN),),
     "manage.py restore_backup": (
         Excluded("Needs both services stopped: an ops procedure (docs/deploy.md)."),
     ),

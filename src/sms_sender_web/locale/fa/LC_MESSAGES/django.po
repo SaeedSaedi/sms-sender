@@ -1310,9 +1310,6 @@ msgstr "گزارش"
 msgid "Report downloaded"
 msgstr "دریافت گزارش"
 
-msgid "running"
-msgstr "در حال اجرا"
-
 msgid "Service status"
 msgstr "وضعیت سرویس‌ها"
 
@@ -2470,3 +2467,106 @@ msgstr "سقف ارسال: از {before} به {after}"
 
 msgid "{n} recipients already got {sms} SMS in the last {days} days (the frequency cap) and won't be sent this time."
 msgstr "{n} گیرنده در {days} روز گذشته {sms} پیامک گرفته‌اند (سقف ارسال) و این بار برایشان ارسال نمی‌شود."
+
+#, python-format
+msgid "%(name)s has problems: %(problems)s"
+msgstr "%(name)s مشکل دارد: %(problems)s"
+
+#, python-format
+msgid "%(name)s is whole: every file matches its fingerprint."
+msgstr "%(name)s کامل است: همه فایل‌ها با اثر انگشتشان یکسان‌اند."
+
+msgid "A job of this campaign is on its way. Delete it after the job ends."
+msgstr "کاری از این کمپین در جریان است. پس از پایان آن، کمپین را حذف کنید."
+
+msgid "Back up and delete"
+msgstr "پشتیبان‌گیری و حذف"
+
+msgid "Back up now"
+msgstr "پشتیبان‌گیری هم‌اکنون"
+
+msgid "Back up now, or let DevOps schedule them (docs/deploy.md)."
+msgstr "هم‌اکنون پشتیبان بگیرید، یا زمان‌بندی آن را به DevOps بسپارید (docs/deploy.md)."
+
+#, python-format
+msgid "Backed up: %(name)s."
+msgstr "نسخه پشتیبان گرفته شد: %(name)s."
+
+msgid "Backup checked"
+msgstr "بررسی نسخه پشتیبان"
+
+msgid "Backup made"
+msgstr "پشتیبان‌گیری"
+
+msgid "Backups"
+msgstr "نسخه‌های پشتیبان"
+
+msgid "Bring to the dashboard"
+msgstr "آوردن به داشبورد"
+
+msgid "CLI campaign brought to the dashboard"
+msgstr "آوردن کمپین خط فرمان به داشبورد"
+
+msgid "Campaign and its records deleted"
+msgstr "حذف کمپین و سوابق آن"
+
+msgid "Check it"
+msgstr "بررسی"
+
+msgid "Delete the campaign and its records"
+msgstr "حذف کمپین و سوابق آن"
+
+msgid "Everything it recorded goes, after a backup: who was sent, delivery, clicks, links. Its numbers become new to every later campaign, so a new send can reach them again."
+msgstr "همه آنچه ثبت کرده، پس از پشتیبان‌گیری، حذف می‌شود: به چه کسانی ارسال شد، وضعیت تحویل، کلیک‌ها و لینک‌ها. شماره‌های آن برای کمپین‌های بعدی تازه به شمار می‌آیند، پس ارسال تازه می‌تواند دوباره به آن‌ها برسد."
+
+msgid "Files"
+msgstr "فایل‌ها"
+
+msgid "Its message is fixed by what it already sent; only its next segment is missing."
+msgstr "پیام آن با آنچه پیش‌تر ارسال کرده ثابت است؛ فقط گروه مخاطبان بعدی آن مانده است."
+
+msgid "Last backup"
+msgstr "آخرین نسخه پشتیبان"
+
+msgid "Made"
+msgstr "ساخته‌شده"
+
+msgid "No backups yet"
+msgstr "هنوز نسخه پشتیبانی نیست"
+
+msgid "None yet"
+msgstr "هنوز هیچ"
+
+msgid "Restoring needs both services stopped, so it's done on the server (docs/deploy.md), never from here."
+msgstr "بازگردانی به توقف هر دو سرویس نیاز دارد، پس روی سرور انجام می‌شود (docs/deploy.md)، هرگز از اینجا."
+
+msgid "Size"
+msgstr "اندازه"
+
+msgid "The backup failed, so nothing was kept. The details are in the system log."
+msgstr "پشتیبان‌گیری انجام نشد، پس چیزی نگه داشته نشد. جزئیات در گزارش سیستم است."
+
+#, python-format
+msgid "The campaign and its records were deleted. Backup: %(name)s."
+msgstr "کمپین و سوابق آن حذف شد. نسخه پشتیبان: %(name)s."
+
+msgid "The campaign is on the dashboard now. To send again, choose its segment, then a test SMS."
+msgstr "کمپین اکنون در داشبورد است. برای ارسال دوباره، گروه مخاطبانش را انتخاب کنید و سپس پیامک آزمایشی بفرستید."
+
+msgid "The dashboard's database, every campaign's records and the segment files, copied whole and checked. They hold phone numbers: keep them where only DevOps can reach."
+msgstr "پایگاه داده داشبورد، سوابق همه کمپین‌ها و فایل‌های گروه مخاطبان، کامل کپی و بررسی می‌شوند. شماره تلفن دارند: آن‌ها را جایی نگه دارید که فقط DevOps به آن دسترسی دارد."
+
+msgid "The oldest waiting since"
+msgstr "قدیمی‌ترین، در انتظار از"
+
+msgid "There's no such backup."
+msgstr "چنین نسخه پشتیبانی نیست."
+
+msgid "This installation"
+msgstr "این نصب"
+
+msgid "To delete it, type the campaign's short name:"
+msgstr "برای حذف، نام کوتاه کمپین را بنویسید:"
+
+msgid "Version"
+msgstr "نسخه"

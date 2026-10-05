@@ -33,12 +33,13 @@ from ..jobs import services
 from ..jobs.engine import campaign_db
 from ..jobs.models import Campaign, Job
 from ..segments.models import Segment
+from ..system import operations
 from .checks import check_campaign
 from .forms import (
     _ASCII_DIGITS, SCHEDULE_ERRORS, TOKENS, DuplicateForm, NewCampaignForm, SettingsForm, combined,
     free_slug, parse_when,
 )
-from .lifecycle import CANCELLED, COMPLETED, PAUSED, READY, STOPPED, lifecycle
+from .lifecycle import CANCELLED, COMPLETED, DRAFT, PAUSED, READY, STOPPED, lifecycle
 from .models import MessageTemplate
 from .present import checklist, notes, result_line, say, send_summary
 from .preview import ROW_CHOICES, preview_of, recipients
@@ -172,6 +173,42 @@ def campaign_segment(request, slug: str):
     messages.success(request, _("The campaign now sends to “%(segment)s”. Check the list, then send a new test SMS.")
                      % {"segment": segment.name})
     return redirect("campaign_detail", slug=slug)
+
+
+@requires("delete_campaign_data")
+@require_POST
+def campaign_purge(request, slug: str):
+    """The campaign and its records, after a backup (the CLI's purge). Its
+    numbers become new to every later campaign: the short name typed first."""
+    campaign = get_object_or_404(Campaign, slug=slug)
+    if request.POST.get("confirm", "").strip() != campaign.slug:
+        messages.error(request, _("To confirm, type the campaign's short name exactly as shown."))
+        return redirect("campaign_detail", slug=slug)
+    try:
+        backup = operations.purge(campaign)
+    except operations.PurgeRefused:
+        messages.error(request, _("A job of this campaign is on its way. Delete it after the job ends."))
+        return redirect("campaign_detail", slug=slug)
+    except (BackupError, OSError):
+        logger.exception("purge_backup_failed", extra={"campaign": slug})
+        messages.error(request, _("The backup failed, so nothing changed. The details are in the system log."))
+        return redirect("campaign_detail", slug=slug)
+    record("campaign_purged", request=request, campaign=slug, backup=backup)
+    messages.success(request, _("The campaign and its records were deleted. Backup: %(name)s.") % {"name": backup})
+    return redirect("home")
+
+
+@requires("edit_campaigns")
+@require_POST
+def campaign_adopt(request, slug: str):
+    """A campaign the CLI made, from now on on the dashboard: its follow-ups
+    and report at once, sending again after a segment and a test SMS."""
+    if not operations.adoptable(slug):
+        raise Http404
+    campaign = operations.adopt(slug, request.user)
+    record("campaign_adopted", request=request, campaign=slug)
+    messages.success(request, _("The campaign is on the dashboard now. To send again, choose its segment, then a test SMS."))
+    return redirect("campaign_detail", slug=campaign.slug)
 
 
 @requires("change_sent_message")
@@ -394,7 +431,9 @@ def _live(request, campaign: Campaign, **preview) -> dict:
             ready["check"], ready["message"], campaign.settings,
             Segment.objects.filter(slug=campaign.settings.get("segment")).first(),
         )
-    elif life.stage in (COMPLETED, CANCELLED) and can(request.user, "edit_campaigns"):
+    elif can(request.user, "edit_campaigns") and (
+        life.stage in (COMPLETED, CANCELLED) or (life.stage == DRAFT and services.may_have_sent(campaign))
+    ):
         ready["other_segments"], ready["lacking_segments"] = _other_segments(campaign)
     if life.stage in (COMPLETED, CANCELLED, STOPPED):
         ready["requeue_items"] = _requeue_items(campaign, request.user)
@@ -435,6 +474,7 @@ def _live(request, campaign: Campaign, **preview) -> dict:
         "can_unlock": life.stage in (PAUSED, STOPPED, COMPLETED, CANCELLED)
         and can(request.user, "change_sent_message") and services.can_unlock(campaign),
         "message_unlocked": services.message_unlocked(campaign),
+        "can_purge": can(request.user, "delete_campaign_data"),
         "life": life,
         "stage_label": STAGES[life.stage],
         "stage_template": f"campaigns/stage/_{life.stage}.html",

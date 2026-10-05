@@ -1,6 +1,9 @@
 {% load i18n fa roles ui %}
 <h2>{% icon "settings" %}{% translate "Message and list" %}</h2>
 <p>{% translate "Choose the segment, the template and what fills its tokens." %}</p>
-{% if user|can:"edit_campaigns" %}
+{% if other_segments or lacking_segments %}
+  <p>{% translate "Its message is fixed by what it already sent; only its next segment is missing." %}</p>
+  {% include "campaigns/stage/_another_segment.html" %}
+{% elif user|can:"edit_campaigns" %}
   <p class="form-actions"><a class="button" href="{% url 'campaign_settings' campaign.slug %}">{% icon "settings" %}{% translate "Complete the settings" %}</a></p>
 {% endif %}

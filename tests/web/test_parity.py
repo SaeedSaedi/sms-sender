@@ -20,6 +20,8 @@ from sms_sender.cli import cli  # noqa: E402
 from sms_sender_web import parity  # noqa: E402
 from sms_sender_web.parity import PARITY, Control, Excluded, Implied, Planned  # noqa: E402
 
+from sms_sender_web.backup import make_backup  # noqa: E402
+
 from .world import PAGES, build_world  # noqa: E402
 
 BELOW = {"operator": "viewer", "admin": "operator"}
@@ -83,7 +85,9 @@ def test_every_control_renders_for_its_role_and_not_below(settings, tmp_path, ve
     settings.SANDBOX = True  # the status page asks the simulated Kavenegar and Shlink
     settings.DATA_DIR = tmp_path
     settings.SMS_SENDER_DB_DIR = tmp_path / "db"
+    settings.BACKUP_DIR = tmp_path / "backups"
     world = build_world(tmp_path)
+    make_backup(tmp_path, settings.BACKUP_DIR)  # so the backups page has one to check
 
     clients: dict[str, Client] = {}
     for role in ("viewer", "operator", "admin"):

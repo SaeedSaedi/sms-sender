@@ -1,0 +1,43 @@
+{% extends "base.html" %}{% load i18n fa ui %}
+{% block title %}{% translate "Backups" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{% translate "Backups" %}</h1>
+    <p class="page-meta">{% translate "The dashboard's database, every campaign's records and the segment files, copied whole and checked. They hold phone numbers: keep them where only DevOps can reach." %}</p>
+  </div>
+  <div class="page-actions">
+    <form method="post" class="inline">
+      {% csrf_token %}<input type="hidden" name="action" value="create">
+      <button type="submit" data-cli="manage.py backup">{% icon "download" %}{% translate "Back up now" %}</button>
+    </form>
+  </div>
+</header>
+<section class="card">
+  {% if backups %}
+  <div class="table-wrap" tabindex="0" role="region" aria-label="{% translate "Backups" %}">
+    <table class="table-stack">
+      <thead><tr><th scope="col">{% translate "Made" %}</th><th scope="col">{% translate "Files" %}</th><th scope="col">{% translate "Size" %}</th><th scope="col"><span class="visually-hidden">{% translate "Actions" %}</span></th></tr></thead>
+      <tbody>
+      {% for b in backups %}
+        <tr>
+          <th scope="row">{% if b.made_at %}{{ b.made_at|jalali }}{% else %}{{ b.name|ltr }}{% endif %}</th>
+          <td data-label="{% translate "Files" %}" class="num">{{ b.files|fa_number }}</td>
+          <td data-label="{% translate "Size" %}" class="num">{{ b.bytes|filesizeformat|fa_digits|ltr }}</td>
+          <td data-label="">
+            <form method="post" class="inline">
+              {% csrf_token %}<input type="hidden" name="action" value="verify"><input type="hidden" name="name" value="{{ b.name }}">
+              <button type="submit" class="small secondary" data-cli="manage.py verify_backup">{% icon "shield-check" %}{% translate "Check it" %}</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">{% icon "download" %}<h2>{% translate "No backups yet" %}</h2><p>{% translate "Back up now, or let DevOps schedule them (docs/deploy.md)." %}</p></div>
+  {% endif %}
+  <p class="hint">{% translate "Restoring needs both services stopped, so it's done on the server (docs/deploy.md), never from here." %}</p>
+</section>
+{% endblock %}
