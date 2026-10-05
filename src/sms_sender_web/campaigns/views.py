@@ -45,9 +45,12 @@ from .message import placeholders
 from .models import MessageTemplate
 from .present import checklist, notes, result_line, say, send_summary
 from .preview import ROW_CHOICES, load_segment, preview_of, recipients
+from .profiles import MAX_BYTES as PROFILES_MAX_BYTES
+from .profiles import ProfileFileError, drafts as profile_drafts, read as read_profiles
 from .terms import (
-    CHECK_PROBLEMS, CHECK_STATES, CONFLICTS, COST_EACH, COST_TOTAL, FOLLOWUPS, INVALID_ROWS, LINKS_AT_SEND,
-    NEXT_STEP, REQUEUE_CONFIRM, REQUEUED, STAGES, STEPS, stop_reason,
+    CHECK_PROBLEMS, CHECK_STATES, CONFLICTS, COST_EACH, COST_TOTAL, FOLLOWUPS, IMPORT_FILE_ERRORS,
+    IMPORT_PROBLEMS, INVALID_ROWS, LINKS_AT_SEND, NEXT_STEP, REQUEUE_CONFIRM, REQUEUED, STAGES, STEPS,
+    stop_reason,
 )
 
 logger = logging.getLogger(__name__)
@@ -110,6 +113,75 @@ def campaign_duplicate(request, slug: str):
                          % {"name": source.name})
         return redirect("campaign_settings", slug=campaign.slug)
     return render(request, "campaigns/duplicate.html", {"form": form, "source": source})
+
+
+# The profiles file between reading it and importing from it.
+_PROFILES_SESSION = "profile_import"
+
+
+def _cli_option(key: str) -> str:
+    return "--" + key.replace("_", "-")
+
+
+def _import_page(request, text: str, *, error: str = "", file: str = ""):
+    rows = [
+        {"draft": d, "problems": [IMPORT_PROBLEMS[key] for key in d.problems],
+         "reset": ", ".join(map(_cli_option, d.reset)), "left_out": ", ".join(map(_cli_option, d.left_out))}
+        for d in profile_drafts(read_profiles(text.encode("utf-8")))
+    ]
+    return render(request, "campaigns/import.html", {
+        "rows": rows, "error": error, "file": file,
+        "importable": sum(1 for row in rows if row["draft"].importable),
+    })
+
+
+@requires("manage_settings")
+@require_http_methods(["GET", "POST"])
+def campaign_import(request):
+    """The CLI's profiles (sms-sender.toml) as draft campaigns, for an
+    admin: read the file, see each profile as the campaign it would be,
+    then import the ones chosen. The file waits in the session between the
+    two steps; nothing is sent, and no campaign DB is opened."""
+    if request.method == "GET":
+        request.session.pop(_PROFILES_SESSION, None)
+        return render(request, "campaigns/import.html", {})
+    if request.POST.get("step") == "import":
+        text = request.session.get(_PROFILES_SESSION)
+        if text is None:
+            messages.error(request, IMPORT_FILE_ERRORS["expired"])
+            return redirect("campaign_import")
+        chosen = set(request.POST.getlist("profile"))
+        try:
+            found = [d for d in profile_drafts(read_profiles(text.encode("utf-8")))
+                     if d.profile in chosen and d.importable]
+        except ProfileFileError:
+            found = []
+        if not found:
+            return _import_page(request, text, error=_("Choose at least one profile to import."))
+        with transaction.atomic():
+            created = [
+                Campaign.objects.create(slug=d.slug, name=d.name, created_by=request.user, settings=d.settings)
+                for d in found
+            ]
+        for d, campaign in zip(found, created):
+            record("campaign_imported", request=request, campaign=campaign.slug, profile=d.profile)
+        request.session.pop(_PROFILES_SESSION, None)
+        messages.success(request, _(
+            "%(n)s campaigns were made from the profiles, each as a draft: choose its segment if it has none, "
+            "check it, then send a test SMS."
+        ) % {"n": fa_number(len(created))})
+        return redirect("home")
+    upload = request.FILES.get("file")
+    if upload is None:
+        return render(request, "campaigns/import.html", {"error": IMPORT_FILE_ERRORS["missing"]})
+    raw = upload.read(PROFILES_MAX_BYTES + 1)
+    try:
+        read_profiles(raw)
+    except ProfileFileError as e:
+        return render(request, "campaigns/import.html", {"error": IMPORT_FILE_ERRORS[e.code]})
+    text = raw.decode("utf-8-sig")
+    request.session[_PROFILES_SESSION] = text
+    return _import_page(request, text, file=upload.name[:255])
 
 
 def _other_segments(campaign: Campaign) -> tuple[list[Segment], list[Segment]]:

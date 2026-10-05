@@ -69,6 +69,7 @@ ACTIONS = (
     (_("Reconcile with Kavenegar"), _("Asks Kavenegar about the SMS whose outcome is unknown. No SMS is sent.")),
     (_("Update delivery statuses"), _("Asks Kavenegar which SMS were delivered. No SMS is sent.")),
     (_("Queue again"), _("Puts the recipients of one status back in the queue for the next send, after a confirmation that names how many. Only a system admin can do it for anyone who may already have the SMS, because they could get it twice.")),
+    (_("Import the CLI's profiles"), _("A system admin reads sms-sender.toml, and each profile chosen becomes a draft campaign with its own message and sending settings. Nothing is sent.")),
 )
 
 # The campaign stages a send can stop in (campaigns.terms.STAGES) → what to do.

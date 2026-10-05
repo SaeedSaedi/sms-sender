@@ -1078,6 +1078,7 @@ progress::-moz-progress-bar { background: var(--primary); border-radius: var(--r
 .empty-state h2 { margin: var(--s-2) 0 0; color: var(--text); }
 .empty-state p { max-inline-size: 34rem; margin: 0; }
 .empty-state .btn, .empty-state .button { margin-block-start: var(--s-3); }
+.empty-state .actions { justify-content: center; }
 
 /* ---------- two-step setup, keys and copy buttons ---------- */
 

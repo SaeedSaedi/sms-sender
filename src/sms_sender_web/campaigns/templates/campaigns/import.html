@@ -1,0 +1,89 @@
+{% extends "base.html" %}{% load i18n fa ui %}
+{% block title %}{% translate "Import the CLI's profiles" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="{% translate "Breadcrumb" %}"><ol>
+  <li><a href="{% url 'home' %}">{% translate "Campaigns" %}</a></li>
+  <li aria-current="page">{% translate "Import the CLI's profiles" %}</li>
+</ol></nav>
+{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{% translate "Import the CLI's profiles" %}</h1>
+    <p class="page-meta">{% translate "Each profile of sms-sender.toml becomes a draft campaign. Nothing is sent." %}</p>
+  </div>
+</header>
+
+{% if error %}
+  <div class="callout callout-error error-summary" role="alert" tabindex="-1" data-autofocus>{% icon "circle-alert" %}<p>{{ error }}</p></div>
+{% endif %}
+
+{% if rows %}
+<form method="post" id="import-form">
+  {% csrf_token %}
+  <input type="hidden" name="step" value="import">
+  <section class="card card-flush">
+    <div class="card-header">
+      <h2 id="profiles-title">{% translate "Profiles in the file" %}{% if file %} <span class="muted">{{ file|ltr }}</span>{% endif %}</h2>
+    </div>
+    <p class="card-note">{% translate "Profiles that can be imported are ticked, except one whose name a campaign has already, or whose CLI campaign has records." %}</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-labelledby="profiles-title">
+      <table class="table-stack">
+        <thead><tr>
+          <th scope="col"><span class="visually-hidden">{% translate "Import" %}</span></th>
+          <th scope="col">{% translate "Profile" %}</th>
+          <th scope="col">{% translate "Short name" %}</th>
+          <th scope="col">{% translate "Template" %}</th>
+          <th scope="col">{% translate "Segment" %}</th>
+          <th scope="col">{% translate "Notes" %}</th>
+        </tr></thead>
+        <tbody>
+        {% for row in rows %}{% with d=row.draft %}
+          <tr>
+            <td data-label="{% translate "Import" %}">
+              <label class="cell-target"><input type="checkbox" name="profile" value="{{ d.profile }}" aria-label="{% translate "Import" %}: {{ d.profile }}"{% if d.importable and not d.exists and not d.adoptable %} checked{% endif %}{% if not d.importable %} disabled{% endif %}></label>
+            </td>
+            <th scope="row">{{ d.profile|ltr }}</th>
+            <td data-label="{% translate "Short name" %}">{{ d.slug|ltr }}</td>
+            <td data-label="{% translate "Template" %}">{% if d.settings.template %}{{ d.settings.template|ltr }}{% else %}—{% endif %}</td>
+            <td data-label="{% translate "Segment" %}">{% if d.segment %}<bdi>{{ d.segment.name }}</bdi>{% else %}<span class="muted">{% translate "Chosen later" %}</span>{% endif %}</td>
+            <td data-label="{% translate "Notes" %}">
+              {% for problem in row.problems %}<p class="error">{{ problem }}</p>{% endfor %}
+              {% if d.exists %}<p>{% translate "A campaign has this name already." %}</p>{% endif %}
+              {% if d.adoptable %}<p>{% translate "The CLI's campaign of this name has records. To keep them, bring it over from the campaign list instead:" %} {{ d.adoptable|ltr }}</p>{% endif %}
+              {% if row.reset %}<p>{% translate "Set back to the default:" %} {{ row.reset|ltr }}</p>{% endif %}
+              {% if row.left_out %}<p class="muted">{% translate "Left out:" %} {{ row.left_out|ltr }}</p>{% endif %}
+            </td>
+          </tr>
+        {% endwith %}{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <div class="form-actions">
+    {% if importable %}<button type="submit" data-cli="sms-sender --config, sms-sender --profile">{% icon "download" %}{% translate "Import the ticked profiles" %}</button>{% endif %}
+    <a class="button secondary" href="{% url 'campaign_import' %}">{% translate "Choose another file" %}</a>
+  </div>
+</form>
+{% else %}
+<section class="card medium">
+  <h2>{% translate "What comes over" %}</h2>
+  <ul class="plain">
+    <li>{% translate "What the profile sends: the template, fixed tokens, token columns, value translations and the short link." %}</li>
+    <li>{% translate "How it sends: the sending window, the rate, parallel sends and the advanced settings. One the dashboard can't take is set back to its default." %}</li>
+    <li>{% translate "Its segment, when a ready segment has its input file's name. Otherwise choose it on the campaign's settings." %}</li>
+  </ul>
+  <p class="hint">{% translate "Paths, logs and a send's own choices (such as one recipient first) stay with the CLI. A CLI campaign that has already sent comes over from the campaign list instead, with its records." %}</p>
+  <form method="post" enctype="multipart/form-data" id="profiles-file-form">
+    {% csrf_token %}
+    <label for="id_file">{% translate "Profiles file (sms-sender.toml)" %}</label>
+    <div class="file-field">
+      <input id="id_file" name="file" type="file" class="file-input" accept=".toml,text/plain" required data-cli="sms-sender --config, sms-sender --profile">
+      <label for="id_file" class="button secondary file-button" aria-hidden="true">{% icon "file-up" %}{% translate "Choose a file" %}</label>
+      <span class="file-name" aria-live="polite" data-empty="{% translate "No file chosen" %}">{% translate "No file chosen" %}</span>
+    </div>
+    <div class="form-actions"><button type="submit">{% icon "upload" %}{% translate "Read the profiles" %}</button></div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

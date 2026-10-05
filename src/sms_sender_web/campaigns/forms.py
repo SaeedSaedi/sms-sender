@@ -34,7 +34,7 @@ SOURCES = [
 ]
 _ASCII_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
 # The template's name at Kavenegar, as typed in its panel.
-_TEMPLATE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
+TEMPLATE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 
 
 def _ready_segments():
@@ -49,17 +49,21 @@ def more_segment_choices():
 
 def clean_template(value: str) -> str:
     value = value.strip()
-    if not _TEMPLATE_RE.match(value):
+    if not TEMPLATE_RE.match(value):
         raise forms.ValidationError(
             _("Write the template's name exactly as in the Kavenegar panel: English letters, digits, “-”, “_” or “.”, no spaces.")
         )
     return value
 
 
+# Pages under /campaigns/, never a campaign's short name.
+RESERVED = ("new", "import")
+
+
 def slug_taken(slug: str) -> bool:
     """A campaign has it, or a DB of that name exists (made by the CLI: it's
     another campaign's record)."""
-    return slug == "new" or Campaign.objects.filter(slug=slug).exists() or campaign_db(Campaign(slug=slug)).exists()
+    return slug in RESERVED or Campaign.objects.filter(slug=slug).exists() or campaign_db(Campaign(slug=slug)).exists()
 
 
 def free_slug(base: str) -> str:

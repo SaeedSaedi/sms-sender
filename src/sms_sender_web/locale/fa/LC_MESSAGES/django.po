@@ -2907,3 +2907,124 @@ msgstr "گروه مخاطبان (یا چند گروه برای یک ارسال)�
 
 msgid "Choose the segment, the template and what fills its tokens."
 msgstr "گروه مخاطبان، قالب پیامک و مقدار متغیرهای آن را انتخاب کنید."
+
+msgid "Import the CLI's profiles"
+msgstr "ورود پروفایل‌های خط فرمان"
+
+msgid "Each profile of sms-sender.toml becomes a draft campaign. Nothing is sent."
+msgstr "هر پروفایل فایل sms-sender.toml به یک کمپین پیش‌نویس تبدیل می‌شود. هیچ پیامکی ارسال نمی‌شود."
+
+msgid "Profiles in the file"
+msgstr "پروفایل‌های این فایل"
+
+msgid "Import"
+msgstr "ورود"
+
+msgid "Profile"
+msgstr "پروفایل"
+
+msgid "Notes"
+msgstr "توضیح"
+
+msgid "Chosen later"
+msgstr "بعداً انتخاب می‌شود"
+
+msgid "A campaign has this name already."
+msgstr "کمپینی با همین نام از قبل وجود دارد."
+
+msgid "Set back to the default:"
+msgstr "به مقدار پیش‌فرض برگشت:"
+
+msgid "Left out:"
+msgstr "وارد نشد:"
+
+msgid "Import the ticked profiles"
+msgstr "ورود پروفایل‌های علامت‌خورده"
+
+msgid "Choose another file"
+msgstr "انتخاب فایل دیگر"
+
+msgid "What comes over"
+msgstr "آنچه منتقل می‌شود"
+
+msgid "What the profile sends: the template, fixed tokens, token columns, value translations and the short link."
+msgstr "آنچه پروفایل ارسال می‌کند: قالب پیامک، مقدارهای ثابت متغیرها، ستون‌های متغیرها، ترجمه مقدارها و لینک کوتاه."
+
+msgid "How it sends: the sending window, the rate, parallel sends and the advanced settings. One the dashboard can't take is set back to its default."
+msgstr "چگونگی ارسال: بازه مجاز ارسال، سرعت ارسال، ارسال هم‌زمان و تنظیمات پیشرفته. مقداری که داشبورد نمی‌پذیرد به مقدار پیش‌فرض برمی‌گردد."
+
+msgid "Its segment, when a ready segment has its input file's name. Otherwise choose it on the campaign's settings."
+msgstr "گروه مخاطبان آن، اگر گروه مخاطبان آماده‌ای هم‌نام فایل ورودی آن باشد. وگرنه آن را در تنظیمات کمپین انتخاب کنید."
+
+msgid "Paths, logs and a send's own choices (such as one recipient first) stay with the CLI. A CLI campaign that has already sent comes over from the campaign list instead, with its records."
+msgstr "مسیر فایل‌ها، گزارش‌های اجرا و انتخاب‌های هر ارسال (مثل ارسال نخست به یک گیرنده) در خط فرمان می‌مانند. کمپینی از خط فرمان که پیش‌تر ارسال کرده، به‌جای این کار از فهرست کمپین‌ها و همراه با سوابقش منتقل می‌شود."
+
+msgid "Profiles file (sms-sender.toml)"
+msgstr "فایل پروفایل‌ها (sms-sender.toml)"
+
+msgid "Read the profiles"
+msgstr "خواندن پروفایل‌ها"
+
+msgid "Choose at least one profile to import."
+msgstr "دست‌کم یک پروفایل را برای ورود انتخاب کنید."
+
+#, python-format
+msgid "%(n)s campaigns were made from the profiles, each as a draft: choose its segment if it has none, check it, then send a test SMS."
+msgstr "%(n)s کمپین از پروفایل‌ها ساخته شد، هر کدام به‌صورت پیش‌نویس: اگر گروه مخاطبان ندارد آن را انتخاب کنید، بررسی کنید و سپس یک پیامک آزمایشی بفرستید."
+
+msgid "It isn't a table of settings."
+msgstr "جدولی از تنظیمات نیست."
+
+msgid "It has no template."
+msgstr "قالب پیامک ندارد."
+
+msgid "Its template's name isn't one Kavenegar takes."
+msgstr "کاوه‌نگار نام قالب آن را نمی‌پذیرد."
+
+msgid "A fixed token value breaks Kavenegar's rules."
+msgstr "مقدار ثابت یکی از متغیرها با قواعد کاوه‌نگار سازگار نیست."
+
+msgid "A token column isn't written as TOKEN=COLUMN."
+msgstr "ستون یکی از متغیرها به‌صورت TOKEN=COLUMN نوشته نشده است."
+
+msgid "A token is filled both with a fixed value and with a column."
+msgstr "یک متغیر هم با مقدار ثابت و هم با ستون پر شده است."
+
+msgid "A value translation isn't written as COLUMN:FROM=TO, or no token uses its column."
+msgstr "ترجمه یک مقدار به‌صورت COLUMN:FROM=TO نوشته نشده، یا هیچ متغیری از ستون آن استفاده نمی‌کند."
+
+msgid "Its short link's settings can't be used."
+msgstr "تنظیمات لینک کوتاه آن قابل استفاده نیست."
+
+msgid "The file is too big for a profiles file."
+msgstr "این فایل برای فایل پروفایل‌ها بیش از حد بزرگ است."
+
+msgid "The file isn't UTF-8 text."
+msgstr "فایل متن UTF-8 نیست."
+
+msgid "The file isn't valid TOML."
+msgstr "فایل TOML معتبری نیست."
+
+msgid "The file has no [profile.…] tables."
+msgstr "فایل هیچ جدول [profile.…] ندارد."
+
+msgid "Choose the profiles file first."
+msgstr "ابتدا فایل پروفایل‌ها را انتخاب کنید."
+
+msgid "The file read earlier is gone. Choose it again."
+msgstr "فایلی که پیش‌تر خوانده شد دیگر در دسترس نیست. دوباره انتخابش کنید."
+
+msgid "Campaign made from a CLI profile"
+msgstr "ساخت کمپین از پروفایل خط فرمان"
+
+msgid "from profile {profile}"
+msgstr "از پروفایل {profile}"
+
+msgid "Profiles that can be imported are ticked, except one whose name a campaign has already, or whose CLI campaign has records."
+msgstr "پروفایل‌هایی که وارد کردنشان ممکن است علامت خورده‌اند، مگر آنکه کمپینی با همین نام از قبل وجود داشته باشد یا کمپین هم‌نام آن در خط فرمان سوابقی داشته باشد."
+
+msgid "The CLI's campaign of this name has records. To keep them, bring it over from the campaign list instead:"
+msgstr "کمپین هم‌نام آن در خط فرمان سوابقی دارد. برای حفظ آن‌ها، به‌جای این کار آن را از فهرست کمپین‌ها به داشبورد بیاورید:"
+
+msgid "A system admin reads sms-sender.toml, and each profile chosen becomes a draft campaign with its own message and sending settings. Nothing is sent."
+msgstr "مدیر سامانه فایل sms-sender.toml را می‌خواند و هر پروفایلی که انتخاب شود به یک کمپین پیش‌نویس با پیام و تنظیمات ارسال خودش تبدیل می‌شود. هیچ پیامکی ارسال نمی‌شود."

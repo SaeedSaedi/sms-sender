@@ -134,8 +134,10 @@ PARITY: dict[str, tuple[Part, ...]] = {
         Control("campaign.fresh", note="the test SMS"),
         Excluded("Only to your own number (decision 7, 2026-10-04)."),
     ),
-    "sms-sender --config": (Control("campaign.completed", note="duplicate a campaign: its settings are the preset"),),
-    "sms-sender --profile": (Control("campaign.completed", note="duplicate a campaign: its settings are the preset"),),
+    "sms-sender --config": (Control("campaign.completed", note="duplicate a campaign: its settings are the preset"),
+                            Control("campaign.import", ADMIN, note="import the file's profiles as draft campaigns")),
+    "sms-sender --profile": (Control("campaign.completed", note="duplicate a campaign: its settings are the preset"),
+                             Control("campaign.import", ADMIN, note="import the file's profiles as draft campaigns")),
 
     # ---------- options every command shares ----------
     "* --campaign": (Implied("Every page and action belongs to one campaign."),),
