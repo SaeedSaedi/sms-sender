@@ -217,3 +217,23 @@ def test_invalid_rows_carry_a_key_for_the_dashboard(tmp_path):
         ("09120000005", "conflicting_user_ids"),
         ("09120000005", "conflicting_user_ids"),
     ]
+
+
+def test_a_header_csv_reads_each_row_as_before(tmp_path):
+    """Padded header names, a blank line, a short row and a repeated column
+    name read as a dict of the row did (the last column of a name wins)."""
+    from sms_sender.input_loader import TokenColumns
+
+    p = tmp_path / "in.csv"
+    p.write_text(" phone , name ,name\n09120000001,Ali,Reza\n\n09120000002\n", encoding="utf-8")
+    r = load(p, TokenColumns(columns={"token10": "name"}))
+    assert [(x.phone, x.tokens) for x in r.valid] == [("09120000001", {"token10": "Reza"})]
+    assert [(x.line_no, x.key) for x in r.invalid] == [(4, "empty_value")]
+
+
+def test_only_ascii_canonical_numbers_skip_normalizing():
+    from sms_sender.phone import normalize
+
+    assert normalize("09121234567") == "09121234567"
+    assert normalize("۰۹۱۲۱۲۳۴۵۶۷") == "09121234567"  # Persian digits still become ASCII
+    assert normalize("09١٢١٢٣٤٥٦٧") == "09121234567"  # Arabic-Indic too, even after an ASCII 09

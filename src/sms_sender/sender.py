@@ -44,7 +44,7 @@ def token_issue(name: str, value: str) -> tuple[str, dict] | None:
     line break or underscore, and no more spaces than the token allows."""
     if len(value) > TOKEN_MAX_LEN:
         return "too_long", {"length": len(value), "max": TOKEN_MAX_LEN}
-    if any(ch in value for ch in "\r\n\t"):
+    if "\n" in value or "\r" in value or "\t" in value:
         return "line_break", {}
     if "_" in value:
         return "underscore", {}
