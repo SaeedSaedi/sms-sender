@@ -9,6 +9,7 @@ import pytest
 pytest.importorskip("django")
 
 from django.core.management import call_command  # noqa: E402
+from django.db import connection  # noqa: E402
 from django.utils import timezone  # noqa: E402
 
 from sms_sender.runner import Runner  # noqa: E402
@@ -96,6 +97,7 @@ def stop_after(n, then):
             result = super().send(phone, tokens)
             if len(self.calls) == n:
                 then()
+                connection.close()  # this is the run's own thread: Django wouldn't close it
                 assert holder["engine"].runners[-1]._stop.wait(5), "the heartbeat never saw it"
             return result
 
@@ -284,6 +286,7 @@ def test_the_heartbeat_keeps_the_lease_alive(campaign):
     class Slow(FakeKavenegar):
         def send(self, phone, tokens=None):
             seen.append(Job.objects.get(pk=job.pk).lease_until)
+            connection.close()  # the run's own thread
             time.sleep(0.12)
             return super().send(phone, tokens)
 
@@ -376,7 +379,14 @@ def test_a_test_sms_finishes_while_a_long_send_runs(campaign, tmp_path):
     other = other_campaign(tmp_path)
     send = queue_send(campaign)
     worker = make_worker(engine)
-    thread = threading.Thread(target=worker.run_forever, kwargs={"poll_sec": 0.05}, daemon=True)
+
+    def run():
+        try:
+            worker.run_forever(poll_sec=0.05)
+        finally:
+            connection.close()  # this thread's own, as the e2e tests' worker does
+
+    thread = threading.Thread(target=run, daemon=True)
     thread.start()
     try:
         deadline = time.monotonic() + 10

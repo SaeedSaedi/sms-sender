@@ -228,7 +228,7 @@ class ShlinkClient:
         page = 1
         while True:
             params = {"tags[]": tag, "page": page, "itemsPerPage": page_size}
-            data = self._call("list short links", lambda: self._request(
+            data = self._call("list short links", lambda params=params: self._request(
                 "GET", f"{self._api}/short-urls", params=params,
             ))
             block = data.get("shortUrls") or {}
@@ -256,7 +256,7 @@ class ShlinkClient:
             params = {"page": page, "itemsPerPage": page_size, "excludeBots": "true"}
             if since is not None:
                 params["startDate"] = since.astimezone(timezone.utc).isoformat()
-            data = self._call("list tag visits", lambda: self._request(
+            data = self._call("list tag visits", lambda params=params: self._request(
                 "GET", f"{self._api}/tags/{quote(tag, safe='')}/visits", params=params,
             ))
             block = data.get("visits") or {}

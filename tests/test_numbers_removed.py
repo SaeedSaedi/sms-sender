@@ -74,12 +74,13 @@ def test_no_number_is_left_in_the_file_and_every_count_stays(tmp_path):
         assert number not in raw
 
 
-def test_each_number_has_one_placeholder_everywhere(tmp_path):
+def test_each_number_has_one_placeholder_everywhere(tmp_path, request):
     db = tmp_path / "coin-7.db"
     campaign(db).remove_numbers()
     store = StateStore(db)
     conn = sqlite3.connect(db)
     conn.row_factory = sqlite3.Row
+    request.addfinalizer(conn.close)
     rows = {r["message_id"] or r["status_code"] or r["phone"][:8]: r for r in conn.execute("SELECT * FROM recipients")}
     sent, rejected, invalid = rows[1001], rows[411], rows["INVALID:"]
     assert sent["phone"].startswith(REMOVED) and sent["raw"] == ""

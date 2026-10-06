@@ -16,7 +16,7 @@ from sms_sender_web.jobs.models import Campaign, Job  # noqa: E402
 from sms_sender_web.segments.models import Segment  # noqa: E402
 from sms_sender_web.suppression.models import Suppression  # noqa: E402
 
-from .test_jobs import FakeEngine, FakeKavenegar, make_worker  # noqa: E402
+from .test_jobs import FakeEngine, make_worker  # noqa: E402
 
 pytestmark = pytest.mark.django_db(transaction=True)
 

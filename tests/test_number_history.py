@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from contextlib import closing
 
 from sms_sender.state import SENT, UNKNOWN, StateStore, number_history
 
@@ -66,7 +67,8 @@ def test_a_db_from_before_calls_were_recorded_counts_its_sent_row(tmp_path):
     (found,) = number_history(tmp_path, A)
     assert (found.campaign, found.sms, found.segment, found.delivery_status) == ("old", 1, None, None)
     # Read only: the old DB wasn't upgraded.
-    columns = [r[1] for r in sqlite3.connect(tmp_path / "old.db").execute("PRAGMA table_info(recipients)")]
+    with closing(sqlite3.connect(tmp_path / "old.db")) as conn:
+        columns = [r[1] for r in conn.execute("PRAGMA table_info(recipients)")]
     assert "segment" not in columns
 
 

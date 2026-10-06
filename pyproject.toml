@@ -24,6 +24,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-mock>=3.12",
+    "ruff>=0.6",
 ]
 # The Persian dashboard (Phase 3). Its tests need it too:
 # pip install -e ".[dev,web]"
@@ -65,6 +66,20 @@ sms_sender_web = [
     "locale/**/*",
 ]
 
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+# Bugs, not style: undefined, unused or shadowed names, syntax errors, bare
+# excepts, comparisons that don't do what they read as, mutable or computed
+# defaults, loop variables in closures, and pylint's errors.
+select = ["F", "E9", "E711", "E712", "E721", "E722", "B006", "B008", "B012", "B018", "B023", "PLE"]
+
+[tool.ruff.lint.per-file-ignores]
+# pytest fixtures are imported, then named as the tests' arguments.
+"tests/**" = ["F811"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Browser tests are opt-in: pytest -m e2e
@@ -77,4 +92,8 @@ markers = [
 DJANGO_SETTINGS_MODULE = "sms_sender_web.settings_test"
 filterwarnings = [
     "ignore:Unknown config option. DJANGO_SETTINGS_MODULE:pytest.PytestConfigWarning",
+    # A database connection or file left for the garbage collector to close
+    # fails the test: thousands of them once hid every other warning.
+    "error::ResourceWarning",
+    "error::pytest.PytestUnraisableExceptionWarning",
 ]

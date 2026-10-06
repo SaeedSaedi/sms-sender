@@ -44,5 +44,6 @@ def test_lock_held_by_another_process_is_refused_and_freed_when_it_dies(tmp_path
     finally:
         proc.kill()
         proc.wait()
+        proc.stdout.close()
     with RunLock(db):
         pass

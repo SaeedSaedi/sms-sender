@@ -390,8 +390,9 @@ class Supervisor:
         proc = subprocess.Popen([sys.executable, "-m", "django", *args], cwd=self.place.root, env=self.place.env,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
         assert proc.stdout is not None
-        for line in proc.stdout:
-            self.log.info("setup | %s", line.rstrip())
+        with proc.stdout:
+            for line in proc.stdout:
+                self.log.info("setup | %s", line.rstrip())
         return proc.wait()
 
     def prepare(self) -> None:
@@ -420,8 +421,9 @@ class Supervisor:
 
     def _relay(self, name: str, proc: subprocess.Popen) -> None:
         assert proc.stdout is not None
-        for line in proc.stdout:
-            self.log.info("%s | %s", name, line.rstrip())
+        with proc.stdout:
+            for line in proc.stdout:
+                self.log.info("%s | %s", name, line.rstrip())
 
     def write_state(self) -> None:
         state = {

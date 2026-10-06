@@ -7,7 +7,7 @@ import pytest
 
 from sms_sender.conversions import ConversionFileError, import_conversions, read_rows
 
-from .test_clicks import A, B, C, D, campaign_db
+from .test_clicks import A, B, C, campaign_db
 
 
 def refs(state) -> dict[str, str]:

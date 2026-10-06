@@ -1,0 +1,20 @@
+# What the server image installs (Dockerfile), locked with hashes in
+# server.lock: pyproject.toml's dependencies and its `web` extra, without what
+# only the tests need (pytest-django). tests/test_packaging.py keeps the two
+# lists in step. To update: change pyproject.toml and this file, then
+#   uv pip compile requirements/server.in --python-version 3.13 \
+#     --python-platform linux --generate-hashes -o requirements/server.lock
+# and run the suites and a sandbox rehearsal on the new image.
+kavenegar>=1.1.2
+click>=8.1
+tenacity>=8.2
+tqdm>=4.66
+python-dotenv>=1.0
+tomli>=2.0; python_version < '3.11'
+questionary>=2.0
+django>=5.2,<5.3
+jdatetime>=5.0
+whitenoise>=6.7
+gunicorn>=23
+django-otp>=1.5
+segno>=1.6

@@ -4,7 +4,6 @@ together, cleans up after a supervisor that was killed, and refuses to start
 while another worker can use the same data folder."""
 from __future__ import annotations
 
-import fcntl
 import json
 import logging
 import os
@@ -170,6 +169,7 @@ def test_the_lock_says_whether_it_runs(tmp_path):
     finally:
         holder.kill()
         holder.wait()
+        holder.stdout.close()
     assert local.running(place) is None  # the file stays, but nobody holds the lock
     fd = local.take_lock(place)
     try:
