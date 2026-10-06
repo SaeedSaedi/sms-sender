@@ -7,7 +7,7 @@
       <p>{{ item.text }}</p>
       {% if item.action == "reconcile" and user|can:"update_campaigns" %}
         <form method="post" action="{% url 'campaign_action' campaign.slug 'reconcile' %}" id="followup-reconcile">
-          {% csrf_token %}
+          {% csrf_token %}{% include "campaigns/stage/_next.html" %}
           <div class="form-actions"><button type="submit" class="small secondary">{% icon "refresh-cw" %}{% translate "Reconcile with Kavenegar" %}</button></div>
           <details class="subsection reconcile-options">
             <summary>{% translate "Options" %}</summary>
@@ -20,7 +20,7 @@
       {% elif item.action == "send" and approved and user|can:"run_campaigns" and not sending_held %}
         <form method="post" action="{% url 'campaign_action' campaign.slug 'send' %}" class="form-actions" id="followup-send"
               data-confirm="{{ send_confirm }}">
-          {% csrf_token %}<button type="submit" class="small">{% icon "send" %}{% translate "Send to them again" %}</button>
+          {% csrf_token %}{% include "campaigns/stage/_next.html" %}<button type="submit" class="small">{% icon "send" %}{% translate "Send to them again" %}</button>
         </form>
       {% endif %}
     </div>

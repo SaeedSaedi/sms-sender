@@ -1,0 +1,65 @@
+{% extends "base.html" %}{% load i18n fa roles ui %}
+{% block title %}{% translate "Presets" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{% translate "Presets" %}</h1>
+    <p class="page-meta">{% translate "Messages you send again and again. Each keeps its template, what fills its tokens and its segments, so a new alert needs only today's values." %}</p>
+  </div>
+  {% if presets and user|can:"edit_campaigns" %}
+    <div class="page-actions"><a class="button secondary" href="{% url 'preset_new' %}">{% icon "plus" %}{% translate "New preset" %}</a></div>
+  {% endif %}
+</header>
+
+{% if presets %}
+<ul class="preset-grid" id="presets">
+  {% for p in presets %}
+    <li class="card preset-card">
+      <h2><bdi>{{ p.name }}</bdi></h2>
+      <p class="muted"><bdi dir="ltr">{{ p.settings.template }}</bdi></p>
+      <p class="muted">{{ p.series }}</p>
+      <div class="actions">
+        {% if user|can:"run_campaigns" %}<a class="button" href="{% url 'compose' p.slug %}">{% icon "zap" %}{% translate "New alert" %}</a>{% endif %}
+        {% if user|can:"edit_campaigns" %}<a class="button secondary" href="{% url 'preset_edit' p.slug %}">{% icon "settings" %}{% translate "Edit" %}</a>{% endif %}
+      </div>
+    </li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="card empty-state">
+  {% icon "layers" %}
+  <h2>{% translate "No presets yet" %}</h2>
+  <p>{% translate "Make one from nothing, or from a campaign whose settings are done. A preset needs a segment to start with." %}</p>
+  {% if user|can:"edit_campaigns" %}<a class="button" href="{% url 'preset_new' %}">{% icon "plus" %}{% translate "New preset" %}</a>{% endif %}
+</div>
+{% endif %}
+
+{% if candidates and user|can:"edit_campaigns" %}
+<section class="card" aria-labelledby="from-campaign-title">
+  <h2 id="from-campaign-title">{% icon "copy" %}{% translate "A preset from a campaign" %}</h2>
+  <p class="hint">{% translate "Its template, tokens, link, segments and sending settings become the preset's; its values are suggested for the next alert." %}</p>
+  <form method="post" action="{% url 'preset_from_campaign' %}" class="field-with-button">
+    {% csrf_token %}
+    <select name="campaign" aria-label="{% translate "Campaign" %}">
+      {% for c in candidates %}<option value="{{ c.slug }}">{{ c.name }} ({{ c.slug }})</option>{% endfor %}
+    </select>
+    <button type="submit" class="secondary">{% translate "Save as a preset" %}</button>
+  </form>
+</section>
+{% endif %}
+
+{% if archived %}
+<section class="card" aria-labelledby="archived-title">
+  <h2 id="archived-title">{% translate "Put away" %}</h2>
+  <ul class="plain">
+    {% for p in archived %}
+      <li><bdi>{{ p.name }}</bdi> <span class="muted">· {{ p.series }}</span>
+        {% if user|can:"edit_campaigns" %}
+          <form method="post" action="{% url 'preset_archive' p.slug %}" class="inline">{% csrf_token %}<button type="submit" class="small secondary">{% translate "Bring it back" %}</button></form>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

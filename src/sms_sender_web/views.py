@@ -43,6 +43,8 @@ _SECTIONS = {
     "template_list": "templates", "template_new": "templates", "template_edit": "templates",
     "analytics": "analytics", "campaign_duplicate": "campaigns", "api_tokens": "api", "system_settings": "system", "backups": "backups",
     "help": "help", "campaign_import": "campaigns", "number_lookup": "numbers",
+    "compose_start": "compose", "compose": "compose", "compose_campaign": "compose",
+    "preset_list": "presets", "preset_new": "presets", "preset_edit": "presets",
 }
 
 

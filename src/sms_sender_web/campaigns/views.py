@@ -11,6 +11,8 @@ from django.contrib import messages
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods, require_POST
@@ -40,7 +42,7 @@ from .forms import (
     _ASCII_DIGITS, SCHEDULE_ERRORS, TOKENS, DuplicateForm, NewCampaignForm, SettingsForm, combined,
     free_slug, more_segment_choices, parse_when,
 )
-from .lifecycle import CANCELLED, COMPLETED, DRAFT, PAUSED, READY, STOPPED, lifecycle
+from .lifecycle import CANCELLED, COMPLETED, DRAFT, PAUSED, READY, STOPPED, lifecycle, settings_complete
 from .message import placeholders
 from .models import MessageTemplate
 from .present import checklist, notes, result_line, say, send_summary
@@ -358,6 +360,22 @@ def campaign_settings(request, slug: str):
             request.POST.getlist("vm_target"))]
         if request.method == "POST" else initial["value_map_rows"]
     )
+    return render(request, "campaigns/settings.html", {
+        **settings_page_context(request, form, campaign.settings, segment, columns, ui, rows),
+        # An admin unlocked a campaign that has sent: say what saving means.
+        "changing_sent_message": services.may_have_sent(campaign),
+        "campaign": campaign,
+        "page_title": _("Campaign settings"), "subject_name": campaign.name,
+        "crumbs": [(reverse("home"), _("Campaigns")), (reverse("campaign_detail", args=[slug]), campaign.name)],
+        "back_url": reverse("campaign_detail", args=[slug]), "back_label": _("Back to the campaign"),
+        "preview_url": reverse("campaign_settings_preview", args=[slug]),
+        "save_note": _("Changing the message, its tokens, the link or the segment needs a new test SMS before sending."),
+    })
+
+
+def settings_page_context(request, form, base_settings: dict, segment, columns, ui, rows) -> dict:
+    """What the settings page shows besides its title and links: the same
+    for a campaign and for a preset."""
     # The tokens the template's text uses come first; when its text is in
     # the library, the rest wait under "the tokens the text doesn't use"
     # (any of them already filled in stays in view).
@@ -369,20 +387,18 @@ def campaign_settings(request, slug: str):
          "shown": used is None or name in used or bool(form[f"{name}_source"].value())}
         for name in TOKENS
     ]
-    return render(request, "campaigns/settings.html", {
-        # An admin unlocked a campaign that has sent: say what saving means.
-        "changing_sent_message": services.may_have_sent(campaign),
-        "campaign": campaign, "form": form, "columns": columns, "ui": ui,
+    return {
+        "form": form, "columns": columns, "ui": ui,
         "value_map_rows": rows + [{"column": "", "source": "", "target": ""}],
         "segments": Segment.objects.filter(status=Segment.Status.READY),
         "more_segment_choices": more_segment_choices(),
         "chosen_more": set(form["more_segments"].value() or []),
         "templates": MessageTemplate.objects.all(),
         "advanced": can(request.user, "manage_settings"),
-        **_with_cost("preview", preview_of(campaign.settings, segment)),
+        **_with_cost("preview", preview_of(base_settings, segment)),
         "tokens": tokens,
         "hidden_tokens": sum(1 for t in tokens if not t["shown"]),
-    })
+    }
 
 
 @requires("edit_campaigns")
@@ -390,11 +406,15 @@ def campaign_settings(request, slug: str):
 def settings_preview(request, slug: str):
     """The message as these (unsaved) settings would send it, for the
     settings page's preview panel. Saves nothing."""
-    campaign = get_object_or_404(Campaign, slug=slug)
+    return settings_preview_response(request, get_object_or_404(Campaign, slug=slug).settings)
+
+
+def settings_preview_response(request, base_settings: dict):
+    """The preview panel for unsaved settings (a campaign's or a preset's)."""
     data = combined(request.POST)
     segment = Segment.objects.filter(slug=data.get("segment")).first()
     form = SettingsForm(data, columns=segment.token_columns if segment else [],
-                        initial=SettingsForm.initial_from(campaign.settings))
+                        initial=SettingsForm.initial_from(base_settings))
     form.is_valid()  # the preview uses whatever is filled in, errors or not
     d = form.cleaned_data
     settings = {
@@ -509,10 +529,11 @@ def _steps(current: int) -> list[dict]:
     ]
 
 
-def _live(request, campaign: Campaign, **preview) -> dict:
+def _live(request, campaign: Campaign, *, ready_step: bool = True, **preview) -> dict:
     """What the live part of the page shows: where the campaign stands and
     what comes next, the current step, the counts and the history. `preview`
-    is the ready step's search (`query`, `rows`)."""
+    is the ready step's search (`query`, `rows`). `ready_step`: build the
+    ready step's check and preview (the composer shows its own)."""
     jobs = list(
         Job.objects.filter(campaign=campaign).select_related("requested_by", "decided_by")
         .prefetch_related("events").order_by("-created_at", "-id")[:20]
@@ -525,7 +546,7 @@ def _live(request, campaign: Campaign, **preview) -> dict:
     counts = summary.counts if summary else {}
     waiting = counts.get("pending", 0) + counts.get("failed_retriable", 0)
     ready = {}
-    if life.stage == READY:  # the poll renders this step too, so it's built here
+    if life.stage == READY and ready_step:  # the poll renders this step too, so it's built here
         segment = Segment.objects.filter(slug=campaign.settings.get("segment")).first()
         loaded = load_segment(campaign.settings, segment)  # one read for the check, the message and the rows
         ready = {**_check_context(campaign, loaded),
@@ -638,6 +659,7 @@ def _preview_params(data) -> dict:
 def _page(request, campaign: Campaign, *, preview: dict | None = None, **extra):
     return render(request, "campaigns/detail.html", {
         **_live(request, campaign, **(preview or {})),
+        "settings_complete": settings_complete(campaign.settings),
         **extra,
     })
 
@@ -703,6 +725,17 @@ def _job(campaign: Campaign, request, kinds: tuple[str, ...]) -> Job:
     return get_object_or_404(Job, pk=pk, campaign=campaign, kind__in=kinds)
 
 
+def _back(request, slug: str):
+    """Where an action returns: the campaign page, or the composer it came
+    from (only that campaign's own, on this site)."""
+    target = request.POST.get("next", "")
+    if target.startswith(f"/compose/c/{slug}/") and url_has_allowed_host_and_scheme(
+        target, allowed_hosts={request.get_host()}, require_https=request.is_secure(),
+    ):
+        return redirect(target)
+    return redirect("campaign_detail", slug=slug)
+
+
 @require_POST
 def campaign_action(request, slug: str, action: str):
     capability = _ACTIONS.get(action)
@@ -711,6 +744,7 @@ def campaign_action(request, slug: str, action: str):
     if not can(request.user, capability):
         return forbidden(request)
     campaign = get_object_or_404(Campaign, slug=slug)
+    composing = bool(request.POST.get("next"))
     try:
         if action == "test":
             segment = Segment.objects.filter(slug=campaign.settings.get("segment")).first()
@@ -730,6 +764,9 @@ def campaign_action(request, slug: str, action: str):
             if request.POST.get("when") == "later":
                 date, time = request.POST.get("date", "").strip(), request.POST.get("time", "").strip()
                 at, problem = parse_when(date, time)
+                if problem and composing:
+                    messages.error(request, SCHEDULE_ERRORS[problem])
+                    return _back(request, slug)
                 if problem:
                     # Back to the form, with what was typed and the reason under it.
                     return _page(request, campaign, schedule_error=SCHEDULE_ERRORS[problem],
@@ -773,4 +810,4 @@ def campaign_action(request, slug: str, action: str):
             messages.success(request, _("Queued. The result appears in the list of jobs."))
     except services.JobConflict as e:
         messages.error(request, CONFLICTS.get(e.code, CONFLICTS["busy"]))
-    return redirect("campaign_detail", slug=slug)
+    return _back(request, slug)

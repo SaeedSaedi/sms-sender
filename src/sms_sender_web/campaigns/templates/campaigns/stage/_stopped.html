@@ -7,7 +7,7 @@
 {% elif user|can:"run_campaigns" and approved %}
   <form method="post" action="{% url 'campaign_action' campaign.slug 'send' %}" class="form-actions" id="send-form"
         data-confirm="{{ send_confirm }}">
-    {% csrf_token %}
+    {% csrf_token %}{% include "campaigns/stage/_next.html" %}
     <button type="submit">{% icon "play" %}{% translate "Resume sending" %}</button>
   </form>
 {% endif %}

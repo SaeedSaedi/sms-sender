@@ -5,11 +5,11 @@
   <p><strong>{% translate "Did the SMS arrive, and are its text and link right?" %}</strong></p>
   <div class="actions">
     <form method="post" action="{% url 'campaign_action' campaign.slug 'approve' %}" class="inline" id="approve-form">
-      {% csrf_token %}<input type="hidden" name="job" value="{{ test.pk }}">
+      {% csrf_token %}{% include "campaigns/stage/_next.html" %}<input type="hidden" name="job" value="{{ test.pk }}">
       <button type="submit">{% icon "check" %}{% translate "Yes, approve" %}</button>
     </form>
     <form method="post" action="{% url 'campaign_action' campaign.slug 'reject' %}" class="inline" id="reject-form">
-      {% csrf_token %}<input type="hidden" name="job" value="{{ test.pk }}">
+      {% csrf_token %}{% include "campaigns/stage/_next.html" %}<input type="hidden" name="job" value="{{ test.pk }}">
       <button type="submit" class="danger">{% icon "x" %}{% translate "No, something's wrong" %}</button>
     </form>
   </div>

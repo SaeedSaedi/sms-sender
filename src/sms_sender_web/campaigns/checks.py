@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections import Counter
+from pathlib import Path
 from dataclasses import dataclass, field
 
 from django.conf import settings as django_settings
@@ -57,7 +58,14 @@ class CheckResult:
 def check_campaign(campaign: Campaign, loaded=None) -> CheckResult:
     """`loaded`: the segment already read with the campaign's settings
     (preview.load_segment), so a page reads it once."""
-    s = campaign.settings or {}
+    return check_settings(campaign.settings, campaign=campaign, loaded=loaded)
+
+
+def check_settings(settings: dict | None, *, campaign: Campaign | None = None, loaded=None) -> CheckResult:
+    """The check for these settings. Without a campaign (an alert not made
+    yet, in the composer): only the global suppression list applies, and
+    nobody has been sent from it."""
+    s = settings or {}
     result = CheckResult()
     slugs = campaign_slugs(s)
     segments = ready_segments(slugs)
@@ -91,8 +99,8 @@ def check_campaign(campaign: Campaign, loaded=None) -> CheckResult:
     suppressed = phones & phones_for(campaign)
     result.suppressed = len(suppressed)
     statuses: dict[str, str] = {}
-    db = campaign_db(campaign)
-    if db.exists():
+    db = campaign_db(campaign) if campaign is not None else None
+    if db is not None and db.exists():
         statuses = StateStore(db).status_for_phones(phones)
     result.already_sent = sum(1 for status in statuses.values() if status == SENT)
     result.settled = sum(1 for status in statuses.values() if status not in CLAIMABLE)
@@ -101,7 +109,7 @@ def check_campaign(campaign: Campaign, loaded=None) -> CheckResult:
     cap = SystemSettings.load().frequency_cap
     if cap is not None:
         # As the next send counts it: across every campaign DB, this one too.
-        sends = folder_sends_since(campaign_db(campaign).parent, time.time() - cap.seconds)
+        sends = folder_sends_since(Path(django_settings.SMS_SENDER_DB_DIR), time.time() - cap.seconds)
         over = {phone for phone in waiting if sends.get(phone, 0) >= cap.sms}
         result.capped, result.cap = len(over), str(cap)
         waiting -= over

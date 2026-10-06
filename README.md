@@ -424,6 +424,20 @@ sms-sender dry-run --input ./numbers.csv          # parse + normalize only, no A
 
 A Persian, right-to-left web dashboard for running campaigns. It's an
 internal, multi-user tool built with Django and HTMX. So far it has:
+- **a new alert in one page** («هشدار تازه»), for messages you send again
+  and again:
+  - A **preset** («پیش‌تنظیم») keeps a message's template, what fills each
+    token, its segments and its sending settings. Make one from a campaign
+    («ذخیره به‌عنوان پیش‌تنظیم») or from nothing, on the same settings page
+    campaigns use.
+  - A new alert from it asks only for today's values, with the last ones
+    filled in and Kavenegar's rules checked as you type. It also takes the
+    segments, each number counted once.
+  - A live preview shows the message with its parts and cost. Then come the
+    test SMS, its approval and the send, without leaving the page
+    (<kbd>Ctrl</kbd>+<kbd>Enter</kbd> sends the test).
+  - Each alert is a campaign of its own (`<preset>-<Solar Hijri date>`), so
+    every gate is the same.
 - sign-in, with two-step verification for operators and admins;
 - the three roles, and a users page for admins: a temporary password that
   the person replaces at their next sign-in, two-step reset, last activity;

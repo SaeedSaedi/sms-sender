@@ -1,0 +1,10 @@
+{% load i18n fa ui %}
+{% if not open %}
+  <div class="callout callout-warning">{% icon "clock" %}<p>{% translate "It's outside the sending window now, so a test SMS can't go out until it opens." %}</p></div>
+{% endif %}
+{% if test_phone %}
+  <button type="submit" form="compose-form" name="action" value="test" class="block" data-primary>{% icon "send" %}{% translate "Send a test SMS" %}</button>
+  <p class="hint">{{ test_hint }}</p>
+{% else %}
+  <div class="callout callout-warning">{% icon "triangle-alert" %}<p>{% translate "First set your own mobile number on “My account”: test SMS go only there." %} <a href="{% url 'my_account' %}">{% translate "My account" %}</a></p></div>
+{% endif %}

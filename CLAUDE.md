@@ -376,6 +376,19 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 - **`accounts.decorators.forbidden(request)`** renders the Persian 403. Use it for checks inside a view, such as an action only admins may take.
 - **Campaign pages (`campaigns/`, spec 3):**
   - Settings are stored in `Campaign.settings` in the CLI's terms: `segment`, `input`, `user_id_column`, `template`, `tokens`, `token_columns`, `value_maps`, `links` (LinkSettings fields), `send_window`, `rate`, `workers`. The engine (`jobs/engine.Engine.runner`) turns them into the CLI's runner.
+  - **Presets and the composer** (plan 06, L3; `campaigns/presets.py`, `campaigns/composer.py`):
+    - `campaigns.Preset`:
+      - `slug` (at most 40 characters; `new`, `from-campaign` and `c` are reserved), `name` and `name_pattern` (`{name}`, `{date}`);
+      - `settings` in `Campaign.settings`' terms, with the default segments;
+      - `labels` (token → what it is), `last_values` and `archived_at`.
+
+      `Campaign.preset` (FK, `SET_NULL`) is its series.
+    - Making and editing one uses the campaign settings page: `views.settings_page_context` and the template's `page_title`, `crumbs`, `back_url`, `preview_url`, `save_note` and `extra_fields`. "Save as a preset" (`preset_from_campaign`, POST `campaign`) copies a complete campaign's settings, and the campaign joins the series.
+    - The composer (`/compose/<preset>/`) asks for each token the settings fill with a value (`asked`), suggested from `last_values`. A value is checked with `token_issue`. The segments are every ready one that has the token columns, by name; the first chosen is `segment`, the rest `more_segments`.
+    - Nothing is saved until the test SMS: then `check_settings(settings)` runs (no campaign; global suppressions only), the campaign is made (`alert_slug`: `<preset>-<yyyy>-<mm>-<dd>`, then `-2` …), and `services.request_test` runs. A missing test number or a hold refuses first, with nothing made.
+    - `/compose/c/<slug>/` is an alert's page. Its right side is the campaign's own step: `_live(ready_step=False)` and the stage templates, whose action forms carry `next_url` (`stage/_next.html`). `campaign_action` returns only to that campaign's own `/compose/c/<slug>/`.
+      - Values and segments change until `settings_locked`; a change invalidates the approval through the settings hash, as anywhere.
+    - HTMX: `?part=message` reads only the first list, so it keeps up with typing, and swaps the field errors in out of band; `?part=counts` reads every list (`count_lines`). Ctrl+Enter presses `[data-primary]`: only the test button has it, and sending stays a click and a confirmation.
   - **More segments** (`more_segments`, review G1): ready segments sent after the campaign's own, in name order, in one send with one test SMS.
     - `segments.models.campaign_slugs` / `campaign_segments` give a campaign's segments in order; `Segment.part()` is one as the runner's `InputPart`, and `engine.more_inputs` builds the rest (one that isn't ready raises `InputError`, which the worker records as `input_unreadable` before anything is read).
     - The form keeps only segments with every column the tokens use, and never the campaign's own segment again (`app.js` hides it too).

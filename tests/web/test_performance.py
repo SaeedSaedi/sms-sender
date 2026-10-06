@@ -13,7 +13,7 @@ pytest.importorskip("django")
 from django.test import Client  # noqa: E402
 
 from sms_sender.state import StateStore  # noqa: E402
-from sms_sender_web.campaigns.models import MessageTemplate  # noqa: E402
+from sms_sender_web.campaigns.models import MessageTemplate, Preset  # noqa: E402
 from sms_sender_web.jobs.models import Campaign  # noqa: E402
 from sms_sender_web.segments.models import Segment  # noqa: E402
 
@@ -52,7 +52,8 @@ def big(settings, tmp_path):
                  "tokens": {"token": "x"}, "token_columns": {"token10": "first_name"}, "value_maps": {},
                  "send_window": "", "workers": 2}
     Campaign.objects.create(slug="big", name="big", settings=settings_)
-    Campaign.objects.create(slug="fresh", name="fresh", settings=settings_)
+    preset = Preset.objects.create(slug="bigp", name="big", settings=settings_)
+    Campaign.objects.create(slug="fresh", name="fresh", settings=settings_, preset=preset)
     return phones
 
 
@@ -75,6 +76,13 @@ def admin_client(make_user, verified):
     ("ready step: check and preview", lambda c, p: c.get("/campaigns/fresh/")),
     ("ready step: one number", lambda c, p: c.post("/campaigns/fresh/preview/", {"preview": p[777]},
                                                     HTTP_HX_REQUEST="true")),
+    # The composer (plan 06, L3): the page, what typing and the segments ask for, and an alert's page.
+    ("composer", lambda c, p: c.get("/compose/bigp/")),
+    ("composer: the message", lambda c, p: c.post("/compose/bigp/preview/?part=message",
+                                                  {"segments": ["big"], "value_token": "y"})),
+    ("composer: who gets it", lambda c, p: c.post("/compose/bigp/preview/?part=counts",
+                                                  {"segments": ["big"], "value_token": "y"})),
+    ("an alert's page", lambda c, p: c.get("/compose/c/fresh/")),
 ])
 def test_a_hundred_thousand_recipients_stay_quick(big, admin_client, label, call):
     """The best of three: a slow CI machine only ever adds time, and the

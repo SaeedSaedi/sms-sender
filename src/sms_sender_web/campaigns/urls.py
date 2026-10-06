@@ -1,8 +1,21 @@
 from django.urls import path
 
-from . import library, views
+from . import composer, library, presets, views
 
 urlpatterns = [
+    path("compose/", composer.compose_start, name="compose_start"),
+    path("compose/c/<slug:slug>/", composer.compose_campaign, name="compose_campaign"),
+    path("compose/c/<slug:slug>/preview/", composer.compose_campaign_preview, name="compose_campaign_preview"),
+    path("compose/c/<slug:slug>/panel/", composer.compose_panel, name="compose_panel"),
+    path("compose/<slug:slug>/", composer.compose, name="compose"),
+    path("compose/<slug:slug>/preview/", composer.compose_preview, name="compose_preview"),
+    path("presets/", presets.preset_list, name="preset_list"),
+    path("presets/new/", presets.preset_new, name="preset_new"),
+    path("presets/new/preview/", presets.preset_settings_preview, name="preset_new_preview"),
+    path("presets/from-campaign/", presets.preset_from_campaign, name="preset_from_campaign"),
+    path("presets/<slug:slug>/", presets.preset_edit, name="preset_edit"),
+    path("presets/<slug:slug>/preview/", presets.preset_settings_preview, name="preset_settings_preview"),
+    path("presets/<slug:slug>/archive/", presets.preset_archive, name="preset_archive"),
     path("campaigns/new/", views.campaign_new, name="campaign_new"),
     path("campaigns/import/", views.campaign_import, name="campaign_import"),
     path("campaigns/<slug:slug>/", views.campaign_detail, name="campaign_detail"),

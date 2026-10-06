@@ -3247,3 +3247,207 @@ msgstr "ارسال محدود درست تنظیم نشده است: در SMS_SEND
 
 msgid "Write each time like 08:00 or 21:30 (Tehran time). Midnight is 00:00 or 24:00, and a window may run past it, e.g. from 08:00 until 02:00."
 msgstr "هر زمان را مانند ۰۸:۰۰ یا ۲۱:۳۰ (به وقت تهران) بنویسید. نیمه‌شب ۰۰:۰۰ یا ۲۴:۰۰ است و بازه می‌تواند از آن بگذرد؛ مثلاً از ۰۸:۰۰ تا ۰۲:۰۰."
+
+msgid "A preset from a campaign"
+msgstr "پیش‌تنظیم از روی یک کمپین"
+
+msgid "A preset keeps a message you send again and again. Make one first; then a new alert takes a minute."
+msgstr "پیش‌تنظیم پیامی را که بارها می‌فرستید نگه می‌دارد. اول یکی بسازید؛ بعد هر هشدار تازه یک دقیقه کار دارد."
+
+msgid "A preset with this short name already exists. Choose another."
+msgstr "پیش‌تنظیمی با این نام کوتاه وجود دارد. نام دیگری انتخاب کنید."
+
+msgid "A token with a fixed value is asked for in every new alert, its last value filled in. A label tells what it is, e.g. coin name."
+msgstr "متغیری که مقدار ثابت دارد در هر هشدار تازه پرسیده می‌شود و آخرین مقدارش از پیش پر است. برچسب می‌گوید آن مقدار چیست؛ مثلاً نام کوین."
+
+msgid "About {total} rials in all"
+msgstr "در مجموع حدود {total} ریال"
+
+msgid "Back to the presets"
+msgstr "بازگشت به پیش‌تنظیم‌ها"
+
+msgid "Bring it back"
+msgstr "بازگرداندن"
+
+msgid "Default segment"
+msgstr "گروه مخاطبان پیش‌فرض"
+
+msgid "Each alert's name"
+msgstr "نام هر هشدار"
+
+msgid "Each recipient's own, from the column"
+msgstr "مقدار هر گیرنده، از ستون"
+
+msgid "Edit"
+msgstr "ویرایش"
+
+msgid "Fix these first:"
+msgstr "اول این‌ها را درست کنید:"
+
+msgid "From the preset to sending, on one page. Every safety check stays the same."
+msgstr "از پیش‌تنظیم تا ارسال، در یک صفحه. همه بررسی‌های ایمنی همان‌اند."
+
+msgid "It goes to your own number, {phone}. Ctrl+Enter does the same."
+msgstr "به شماره خودتان، {phone}، فرستاده می‌شود. Ctrl+Enter هم همین کار را می‌کند."
+
+msgid "It lacks the column {columns}"
+msgstr "ستون {columns} را ندارد"
+
+msgid "It's outside the sending window now, so a test SMS can't go out until it opens."
+msgstr "اکنون خارج از بازه مجاز ارسال است؛ پیامک آزمایشی تا باز شدن آن فرستاده نمی‌شود."
+
+msgid "Its history and every other option: the campaign page"
+msgstr "سابقه و همه گزینه‌های دیگر: صفحه کمپین"
+
+msgid "Its template, tokens, link, segments and sending settings become the preset's; its values are suggested for the next alert."
+msgstr "قالب، متغیرها، لینک، گروه‌های مخاطبان و تنظیمات ارسال آن به پیش‌تنظیم می‌رسد و مقدارهایش برای هشدار بعدی پیشنهاد می‌شود."
+
+msgid "Labels for the values each alert asks for (optional)"
+msgstr "برچسب مقدارهایی که هر هشدار می‌پرسد (اختیاری)"
+
+msgid "Last values:"
+msgstr "آخرین مقدارها:"
+
+msgid "Lowercase English letters, digits and dashes. Each alert's short name starts with it, then the date: coin-price-1405-07-14."
+msgstr "حروف کوچک انگلیسی، رقم و خط تیره. نام کوتاه هر هشدار با آن شروع می‌شود و تاریخ پس از آن می‌آید: coin-price-1405-07-14."
+
+msgid "Make one from nothing, or from a campaign whose settings are done. A preset needs a segment to start with."
+msgstr "یکی را از صفر بسازید، یا از روی کمپینی که تنظیماتش کامل است. هر پیش‌تنظیم برای شروع یک گروه مخاطبان لازم دارد."
+
+msgid "Messages you send again and again. Each keeps its template, what fills its tokens and its segments, so a new alert needs only today's values."
+msgstr "پیام‌هایی که بارها می‌فرستید. هر کدام قالب، مقدار متغیرها و گروه‌های مخاطبانش را نگه می‌دارد، پس هشدار تازه فقط مقدارهای امروز را می‌خواهد."
+
+msgid "New alert"
+msgstr "هشدار تازه"
+
+msgid "New alerts from this preset use these settings; alerts already made keep their own."
+msgstr "هشدارهای تازه این پیش‌تنظیم همین تنظیمات را می‌گیرند؛ هشدارهای ساخته‌شده تنظیمات خودشان را نگه می‌دارند."
+
+msgid "New preset"
+msgstr "پیش‌تنظیم تازه"
+
+msgid "No presets yet"
+msgstr "هنوز پیش‌تنظیمی نیست"
+
+msgid "No segment is ready yet."
+msgstr "هنوز هیچ گروه مخاطبانی آماده نیست."
+
+msgid "Pick a preset. Its message, tokens and segments are filled in; you type today's values."
+msgstr "یک پیش‌تنظیم انتخاب کنید. پیام، متغیرها و گروه‌های مخاطبان آن پر می‌شود و شما مقدارهای امروز را می‌نویسید."
+
+msgid "Preset"
+msgstr "پیش‌تنظیم"
+
+msgid "Preset brought back"
+msgstr "پیش‌تنظیم بازگردانده شد"
+
+msgid "Preset changed"
+msgstr "پیش‌تنظیم تغییر کرد"
+
+msgid "Preset made"
+msgstr "پیش‌تنظیم ساخته شد"
+
+msgid "Preset put away"
+msgstr "پیش‌تنظیم کنار گذاشته شد"
+
+msgid "Presets"
+msgstr "پیش‌تنظیم‌ها"
+
+msgid "Preview and sending"
+msgstr "پیش‌نمایش و ارسال"
+
+msgid "Put away"
+msgstr "کنارگذاشته‌ها"
+
+msgid "Save as a preset"
+msgstr "ذخیره به‌عنوان پیش‌تنظیم"
+
+msgid "Save changes"
+msgstr "ذخیره تغییرات"
+
+msgid "Saved as a preset. Name it, and label the values each alert asks for."
+msgstr "به‌عنوان پیش‌تنظیم ذخیره شد. نامی برایش بگذارید و مقدارهایی را که هر هشدار می‌پرسد برچسب بزنید."
+
+msgid "Saved. New alerts from this preset use it; alerts already made keep their own."
+msgstr "ذخیره شد. هشدارهای تازه این پیش‌تنظیم از آن استفاده می‌کنند؛ هشدارهای ساخته‌شده تنظیمات خودشان را نگه می‌دارند."
+
+msgid "Saved. Send a new test SMS: its approval covers these exact values."
+msgstr "ذخیره شد. یک پیامک آزمایشی تازه بفرستید؛ تأیید آن دقیقاً همین مقدارها را پوشش می‌دهد."
+
+msgid "Sending has started, so the values and segments stay as they are."
+msgstr "ارسال آغاز شده است، پس مقدارها و گروه‌های مخاطبان همین‌طور می‌مانند."
+
+msgid "Test and send"
+msgstr "آزمایش و ارسال"
+
+msgid "The last alert's values are filled in; change what's new today."
+msgstr "مقدارهای آخرین هشدار پر شده است؛ هرچه امروز تازه است را تغییر دهید."
+
+msgid "The preset is back."
+msgstr "پیش‌تنظیم بازگشت."
+
+msgid "The preset is put away. Its alerts stay."
+msgstr "پیش‌تنظیم کنار گذاشته شد. هشدارهای آن می‌مانند."
+
+msgid "The values or segments changed after the test SMS. Send a new one: its approval covers these exact settings."
+msgstr "مقدارها یا گروه‌های مخاطبان پس از پیامک آزمایشی تغییر کرد. یک پیامک آزمایشی تازه بفرستید؛ تأیید آن دقیقاً همین تنظیمات را پوشش می‌دهد."
+
+msgid "This campaign's settings aren't complete yet: a segment, a template and the first token."
+msgstr "تنظیمات این کمپین هنوز کامل نیست: یک گروه مخاطبان، یک قالب و متغیر اول لازم است."
+
+msgid "This preset asks for no values: every token comes from the list or the link."
+msgstr "این پیش‌تنظیم مقداری نمی‌پرسد: همه متغیرها از فهرست یا لینک می‌آیند."
+
+msgid "Today's values"
+msgstr "مقدارهای امروز"
+
+msgid "Use lowercase English letters, digits and dashes, e.g. coin-price."
+msgstr "از حروف کوچک انگلیسی، رقم و خط تیره استفاده کنید؛ مثلاً coin-price."
+
+msgid "Use only {name} and {date} in braces."
+msgstr "درون آکولاد فقط {name} و {date} را به کار ببرید."
+
+msgid "Used last"
+msgstr "آخرین استفاده"
+
+msgid "Write today's value."
+msgstr "مقدار امروز را بنویسید."
+
+msgid "You said the test SMS wasn't right. Change what's needed, then send a new one."
+msgstr "گفتید پیامک آزمایشی درست نبود. آنچه لازم است را تغییر دهید و یک پیامک آزمایشی تازه بفرستید."
+
+msgid "{lists} segments · {n} numbers, each counted once"
+msgstr "{lists} گروه مخاطبان · {n} شماره، هر کدام یک بار"
+
+msgid "{name} is the preset's name and {date} today's date. Empty: the name, then the date."
+msgstr "{name} نام پیش‌تنظیم است و {date} تاریخ امروز. اگر خالی بماند: نام و پس از آن تاریخ."
+
+msgid "{n} alerts"
+msgstr "{n} هشدار"
+
+msgid "{n} alerts · the last on {date}"
+msgstr "{n} هشدار · آخرین در {date}"
+
+msgid "{n} already got this alert"
+msgstr "{n} نفر این هشدار را پیش‌تر گرفته‌اند"
+
+msgid "{n} aren't allowed numbers (restricted sending)"
+msgstr "{n} شماره مجاز نیست (ارسال محدود)"
+
+msgid "{n} on the suppression list"
+msgstr "{n} نفر در فهرست عدم ارسال"
+
+msgid "{n} over the frequency cap ({cap})"
+msgstr "{n} نفر بیش از سقف ارسال ({cap})"
+
+msgid "{n} repeated numbers counted once"
+msgstr "{n} شماره تکراری، یک بار شمرده شد"
+
+msgid "{n} rows aren't valid numbers and are skipped"
+msgstr "{n} ردیف شماره معتبر نیست و کنار گذاشته می‌شود"
+
+msgid "{n} will get the SMS"
+msgstr "{n} نفر پیامک را می‌گیرند"
+
+msgid "Open in the composer"
+msgstr "باز کردن در صفحه هشدار"

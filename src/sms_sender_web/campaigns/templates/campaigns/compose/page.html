@@ -1,0 +1,103 @@
+{% extends "base.html" %}{% load i18n fa roles ui %}
+{% block title %}{% if campaign %}{{ campaign.name }}{% else %}{% translate "New alert" %}{% endif %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="{% translate "Breadcrumb" %}"><ol>
+  <li><a href="{% url 'compose_start' %}">{% translate "New alert" %}</a></li>
+  {% if campaign %}<li aria-current="page"><bdi>{{ campaign.name }}</bdi></li>{% else %}<li aria-current="page"><bdi>{{ preset.name }}</bdi></li>{% endif %}
+</ol></nav>
+{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{% if campaign %}<bdi>{{ campaign.name }}</bdi>{% else %}{% translate "New alert" %}: <bdi>{{ preset.name }}</bdi>{% endif %}</h1>
+    <p class="page-meta">{% translate "From the preset to sending, on one page. Every safety check stays the same." %}</p>
+  </div>
+  {% if campaign %}
+    <div class="page-actions"><a class="button secondary" href="{% url 'campaign_detail' campaign.slug %}">{% icon "external-link" %}{% translate "Campaign page" %}</a></div>
+  {% endif %}
+</header>
+
+<div class="compose">
+<form method="post" action="{{ form_action }}" id="compose-form" class="compose-main" novalidate>
+  {% csrf_token %}
+  {% if errors or draft.problems or draft.segment_problem %}
+    <div class="callout callout-error error-summary" role="alert" tabindex="-1" data-autofocus>
+      {% icon "circle-alert" %}
+      <div>
+        <p>{% translate "Fix these first:" %}</p>
+        <ul>
+          {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+          {% for f in fields %}{% if f.problem %}<li><a href="#id_value_{{ f.name }}">{% if f.label %}{{ f.label }}{% else %}%{{ f.name }}{% endif %}</a>: {{ f.problem }}</li>{% endif %}{% endfor %}
+          {% if draft.segment_problem %}<li><a href="#compose-segments">{{ draft.segment_problem }}</a></li>{% endif %}
+        </ul>
+      </div>
+    </div>
+  {% endif %}
+
+  <section class="card compose-step" aria-labelledby="step-values">
+    <h2 id="step-values"><span class="step-n" aria-hidden="true">۱</span>{% translate "Today's values" %}</h2>
+    {% if locked %}<p class="hint">{% translate "Sending has started, so the values and segments stay as they are." %}</p>
+    {% else %}<p class="hint">{% translate "The last alert's values are filled in; change what's new today." %}</p>{% endif %}
+    <div class="field-grid compose-values">
+      {% for f in fields %}
+        {% if f.kind == "value" %}
+          <div>
+            <label for="id_value_{{ f.name }}">{% if f.label %}{{ f.label }} {% endif %}<code dir="ltr">%{{ f.name }}</code></label>
+            <input id="id_value_{{ f.name }}" name="value_{{ f.name }}" type="text" dir="auto" maxlength="100" class="value-input" value="{{ f.value }}"{% if locked %} disabled{% endif %} aria-describedby="err-{{ f.name }}"{% if f.problem %} aria-invalid="true"{% endif %}>
+            <div id="err-{{ f.name }}" class="field-errors">{% if f.problem %}<p class="error">{{ f.problem }}</p>{% endif %}</div>
+          </div>
+        {% else %}
+          <div class="token-fixed">
+            <p class="label">{% if f.label %}{{ f.label }} {% endif %}<code dir="ltr">%{{ f.name }}</code></p>
+            <p class="token-source">{% if f.kind == "column" %}{% translate "Each recipient's own, from the column" %} <bdi dir="ltr">{{ f.column }}</bdi>{% else %}{% icon "link" %}{% translate "The short link" %}{% endif %}</p>
+          </div>
+        {% endif %}
+      {% empty %}
+        <p class="muted">{% translate "This preset asks for no values: every token comes from the list or the link." %}</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card compose-step" aria-labelledby="step-segments" id="compose-segments">
+    <h2 id="step-segments"><span class="step-n" aria-hidden="true">۲</span>{% translate "Segments" %}</h2>
+    {% if options %}
+      <div class="check-group segment-choices" role="group" aria-labelledby="step-segments">
+        {% for o in options %}
+          <label class="check"><input type="checkbox" name="segments" value="{{ o.segment.slug }}"{% if o.chosen %} checked{% endif %}{% if not o.usable or locked %} disabled{% endif %}>
+            <span><bdi>{{ o.segment.name }}</bdi> <span class="muted num">· {{ o.size|fa_number }} {% translate "numbers" %}</span>{% if not o.usable %}<span class="muted"> · {{ o.missing }}</span>{% endif %}</span>
+          </label>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">{% translate "No segment is ready yet." %} <a href="{% url 'segment_upload' %}">{% translate "Upload a segment" %}</a></p>
+    {% endif %}
+    <div id="compose-counts" aria-live="polite"
+         hx-post="{{ preview_url }}?part=counts" hx-include="#compose-form" hx-trigger="change from:.segment-choices" hx-swap="innerHTML">
+      {% include "campaigns/compose/_counts.html" %}
+    </div>
+  </section>
+
+  {% if campaign and not locked %}
+    <div class="form-actions">
+      <button type="submit" name="action" value="save" class="secondary">{% icon "check" %}{% translate "Save changes" %}</button>
+    </div>
+  {% endif %}
+</form>
+
+<aside class="compose-side" aria-label="{% translate "Preview and sending" %}">
+  <section class="card compose-preview" id="compose-preview" aria-labelledby="preview-title"
+           hx-post="{{ preview_url }}?part=message" hx-include="#compose-form"
+           hx-trigger="input delay:500ms from:.value-input" hx-swap="innerHTML">
+    {% include "campaigns/compose/_message.html" %}
+  </section>
+  {% if campaign %}
+    {% include "campaigns/compose/_panel.html" %}
+  {% else %}
+    <section class="card compose-panel" id="compose-panel" aria-labelledby="go-title">
+      <h2 id="go-title">{% icon "send" %}{% translate "Test and send" %}</h2>
+      {% include "campaigns/compose/_test_button.html" %}
+    </section>
+  {% endif %}
+</aside>
+</div>
+{% endblock %}

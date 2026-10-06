@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% load i18n fa roles ui %}
+{% block title %}{% translate "New alert" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{% translate "New alert" %}</h1>
+    <p class="page-meta">{% translate "Pick a preset. Its message, tokens and segments are filled in; you type today's values." %}</p>
+  </div>
+  {% if presets and user|can:"edit_campaigns" %}
+    <div class="page-actions"><a class="button secondary" href="{% url 'preset_list' %}">{% icon "layers" %}{% translate "Presets" %}</a></div>
+  {% endif %}
+</header>
+{% if presets %}
+<ul class="preset-grid" id="compose-presets">
+  {% for item in presets %}{% with p=item.preset %}
+    <li class="card preset-card{% if item.last %} is-last{% endif %}">
+      {% if item.last %}<p class="chip">{% icon "history" %}{% translate "Used last" %}</p>{% endif %}
+      <h2><a href="{% url 'compose' p.slug %}"><bdi>{{ p.name }}</bdi></a></h2>
+      <p class="muted"><bdi dir="ltr">{{ p.settings.template }}</bdi></p>
+      {% if item.values %}<p class="muted">{% translate "Last values:" %} <bdi>{{ item.values }}</bdi></p>{% endif %}
+    </li>
+  {% endwith %}{% endfor %}
+</ul>
+{% else %}
+<div class="card empty-state">
+  {% icon "zap" %}
+  <h2>{% translate "No presets yet" %}</h2>
+  <p>{% translate "A preset keeps a message you send again and again. Make one first; then a new alert takes a minute." %}</p>
+  {% if user|can:"edit_campaigns" %}<a class="button" href="{% url 'preset_list' %}">{% icon "layers" %}{% translate "Presets" %}</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

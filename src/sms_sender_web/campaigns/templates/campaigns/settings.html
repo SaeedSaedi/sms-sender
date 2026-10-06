@@ -1,15 +1,14 @@
 {% extends "base.html" %}{% load i18n fa ui %}
-{% block title %}{% translate "Campaign settings" %} · {{ campaign.name }}{% endblock %}
+{% block title %}{{ page_title }} · {{ subject_name }}{% endblock %}
 {% block breadcrumbs %}
 <nav class="breadcrumbs" aria-label="{% translate "Breadcrumb" %}"><ol>
-  <li><a href="{% url 'home' %}">{% translate "Campaigns" %}</a></li>
-  <li><a href="{% url 'campaign_detail' campaign.slug %}"><bdi>{{ campaign.name }}</bdi></a></li>
-  <li aria-current="page">{% translate "Campaign settings" %}</li>
+  {% for url, label in crumbs %}<li><a href="{{ url }}"><bdi>{{ label }}</bdi></a></li>{% endfor %}
+  <li aria-current="page">{{ page_title }}</li>
 </ol></nav>
 {% endblock %}
 {% block content %}
 <header class="page-header">
-  <h1>{% translate "Campaign settings" %}: <bdi>{{ campaign.name }}</bdi></h1>
+  <h1>{{ page_title }}{% if subject_name %}: <bdi>{{ subject_name }}</bdi>{% endif %}</h1>
 </header>
 
 <div class="split settings-layout">
@@ -20,7 +19,7 @@
       <p>{% translate "Some recipients already got the earlier message. What you save goes to those still waiting, after a new test SMS; what went out stays as it was." %}</p>
     </div>
   {% endif %}
-  {% if form.errors %}
+  {% if form.errors or extra_errors %}
     <div class="callout callout-error error-summary" role="alert" tabindex="-1" data-autofocus>
       {% icon "circle-alert" %}
       <div>
@@ -30,9 +29,10 @@
     </div>
   {% endif %}
 
+  {% if extra_fields %}{% include extra_fields %}{% endif %}
   <fieldset>
     <legend>{% translate "Message" %}</legend>
-    <label for="id_segment">{% translate "Segment" %}</label>
+    <label for="id_segment">{% if extra_fields %}{% translate "Default segment" %}{% else %}{% translate "Segment" %}{% endif %}</label>
     <select id="id_segment" name="segment" required data-cli="send --input"{% aria form.segment %}>
       {% for segment in segments %}
         <option value="{{ segment.slug }}"{% if form.segment.value == segment.slug %} selected{% endif %}>{{ segment.name }} ({{ segment.slug }}) · {{ segment.summary.valid|default:0|fa_number }} {% translate "numbers" %}</option>
@@ -188,16 +188,16 @@
 
   <div class="callout">
     {% icon "info" %}
-    <p>{% translate "Changing the message, its tokens, the link or the segment needs a new test SMS before sending." %}</p>
+    <p>{{ save_note }}</p>
   </div>
   <div class="form-actions sticky-actions">
     <button type="submit">{% icon "check" %}{% translate "Save" %}</button>
-    <a class="button secondary" href="{% url 'campaign_detail' campaign.slug %}">{% translate "Back to the campaign" %}</a>
+    <a class="button secondary" href="{{ back_url }}">{{ back_label }}</a>
   </div>
 </form>
 
 <aside class="card split-side preview-panel" id="preview" aria-live="polite"
-       hx-post="{% url 'campaign_settings_preview' campaign.slug %}" hx-include="#settings-form"
+       hx-post="{{ preview_url }}" hx-include="#settings-form"
        hx-trigger="input delay:600ms from:#settings-form, change from:#settings-form" hx-swap="innerHTML">
   {% include "campaigns/_preview.html" %}
 </aside>

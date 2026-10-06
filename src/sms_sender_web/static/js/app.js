@@ -387,4 +387,14 @@
   document.addEventListener("htmx:afterRequest", (event) => {
     if (event.detail.successful) banner(null);
   });
+
+  // ---------- The composer: Ctrl+Enter (Cmd+Enter on a Mac) presses its main button ----------
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || !(event.ctrlKey || event.metaKey) || event.defaultPrevented) return;
+    const primary = document.querySelector("[data-primary]:not([disabled])");
+    if (!primary) return;
+    event.preventDefault();
+    primary.click();
+  });
 })();

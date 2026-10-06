@@ -7,7 +7,7 @@
   {% include "campaigns/stage/_held_note.html" %}
 {% elif user|can:"run_campaigns" %}
   <form method="post" action="{% url 'campaign_action' campaign.slug 'send' %}" id="send-form" data-confirm="{{ send_confirm }}">
-    {% csrf_token %}
+    {% csrf_token %}{% include "campaigns/stage/_next.html" %}
     <label class="check"><input type="checkbox" name="smoke_test"{% if schedule_smoke %} checked{% endif %} data-cli="send --smoke-test">
       {% translate "Send to one recipient first, and stop if that SMS doesn't go out" %}</label>
     <div class="form-actions">
