@@ -25,7 +25,10 @@ jobs:
       - run: pip install -e ".[dev,web]"
       - run: pytest
       # A 100,000-recipient campaign's pages, each within its time budget.
+      # The budgets are the Mac's; these runners take about 2.5 times as long.
       - run: pytest -m perf
+        env:
+          PERF_SCALE: "2.5"
 
   # Browser tests (pytest -m e2e): the dashboard in Google Chrome, which
   # GitHub's Ubuntu runners have installed; Playwright drives it.
