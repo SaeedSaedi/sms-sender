@@ -1,0 +1,113 @@
+{% extends "base.html" %}{% load i18n fa roles ui %}
+{% block title %}{% translate "Audience" %} · {% translate "Analytics" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{% translate "Analytics" %}</h1>
+    <p class="page-meta">{% translate "Who you send to: how often each person gets an SMS, when they click, and how far your segments overlap." %}</p>
+  </div>
+</header>
+{% include "reports/_analytics_tabs.html" %}
+
+<section class="card step" id="fatigue">
+  <h2 id="fatigue-heading">{% icon "users" %}{% translate "How often people get an SMS" %}</h2>
+  {% if fatigue.people.30 %}
+    <p>{{ fatigue_line }}</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-labelledby="fatigue-heading">
+      <table class="table-stack">
+        <thead><tr><th scope="col">{% translate "SMS per person" %}</th><th scope="col" class="num">{% translate "In the last 7 days" %}</th><th scope="col" class="num">{% translate "In the last 30 days" %}</th></tr></thead>
+        <tbody>
+        {% for r in fatigue.rows %}
+          <tr>
+            <th scope="row">{{ r.label }}</th>
+            <td data-label="{% translate "In the last 7 days" %}" class="num">{{ r.d7|fa_number }} <span class="muted">({{ r.s7|fa_number }}٪)</span></td>
+            <td data-label="{% translate "In the last 30 days" %}" class="num">{{ r.d30|fa_number }} <span class="muted">({{ r.s30|fa_number }}٪)</span></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">{% translate "Nobody was sent an SMS in the last 30 days." %}</p>
+  {% endif %}
+  {% if fatigue.cap %}
+    <p class="hint">{{ cap_line }}</p>
+  {% else %}
+    <p class="hint">{% translate "No frequency cap is set, so nobody is held back however many SMS they got." %}{% if user|can:"manage_settings" %} <a href="{% url 'system_settings' %}">{% translate "Set one in the system settings" %}</a>{% endif %}</p>
+  {% endif %}
+</section>
+
+<section class="card step" id="hours">
+  <h2 id="hours-heading">{% icon "clock" %}{% translate "The best hour to send" %}</h2>
+  {% if hours %}
+    {% if best_line %}<p>{{ best_line }}</p>{% endif %}
+    {% if busiest_line %}<p>{{ busiest_line }}</p>{% endif %}
+    <div class="table-wrap" tabindex="0" role="region" aria-labelledby="hours-heading">
+      <table class="hours-table">
+        <thead>
+          <tr>
+            <th scope="col">{% translate "Hour (Tehran)" %}</th>
+            <th scope="col" class="num">{% translate "Sent a link of their own" %}</th>
+            <th scope="col" class="num">{% translate "Clicked it" %}</th>
+            <th scope="col" class="num">{% translate "Clicks in that hour" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for r in hours.rows %}
+          <tr{% if r.best %} class="is-best"{% endif %}>
+            <th scope="row"><span class="num">{{ r.label }}</span>{% if r.best %} <span class="pill pill-success">{% translate "Best" %}</span>{% endif %}</th>
+            <td class="num">{{ r.sent|fa_number }}</td>
+            <td class="num"><span class="bar-cell">{% if r.rate is not None %}<progress max="1000" value="{{ r.rate_bar }}" aria-hidden="true"></progress>{{ r.rate|fa_percent }}{% else %}<span class="muted">{% translate "too few to tell" %}</span>{% endif %}</span></td>
+            <td class="num"><span class="bar-cell"><progress max="1000" value="{{ r.clicks_bar }}" aria-hidden="true"></progress>{{ r.clicks|fa_number }}</span></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="hint">{{ hours_hint }}</p>
+  {% else %}
+    <p class="muted">{% translate "Once people are sent links of their own and click them, this shows which hour of the day works best." %}</p>
+  {% endif %}
+</section>
+
+<section class="card step" aria-labelledby="overlap-heading" id="overlap">
+  <h2 id="overlap-heading">{% icon "layers" %}{% translate "How far segments overlap" %}</h2>
+  {% if segments|length >= 2 %}
+    <form method="get" action="#overlap" class="overlap-form">
+      <fieldset>
+        <legend>{{ choose_line }}</legend>
+        <div class="choices">
+          {% for s in segments %}
+            <label class="choice"><input type="checkbox" name="s" value="{{ s.slug }}"{% if s.slug in chosen %} checked{% endif %}> <bdi>{{ s.name }}</bdi> <span class="muted num">{{ s.summary.valid|default:0|fa_number }}</span></label>
+          {% endfor %}
+        </div>
+      </fieldset>
+      <button type="submit" class="secondary">{% icon "layers" %}{% translate "Compare" %}</button>
+    </form>
+    {% if overlap %}
+      <p>{{ overlap_line }}</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="{% translate "Numbers each pair shares" %}">
+        <table class="overlap-table">
+          <caption class="visually-hidden">{% translate "Numbers each pair shares" %}</caption>
+          <thead>
+            <tr><td></td>{% for s in overlap.segments %}<th scope="col" class="num"><bdi>{{ s.name }}</bdi></th>{% endfor %}</tr>
+          </thead>
+          <tbody>
+          {% for row in overlap.rows %}
+            <tr>
+              <th scope="row"><bdi>{{ row.segment.name }}</bdi> <span class="muted num">{{ row.size|fa_number }}</span></th>
+              {% for cell in row.cells %}
+                {% if cell.same %}<td class="is-same">—</td>{% else %}<td class="num">{{ cell.n|fa_number }} <span class="muted">({{ cell.share|fa_number }}٪)</span></td>{% endif %}
+              {% endfor %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="hint">{% translate "Each cell: the numbers the row's segment shares with the column's, and that as a share of the row's segment. A send to several segments counts each number once." %}</p>
+    {% endif %}
+  {% else %}
+    <p class="muted">{% translate "With two ready segments or more, this shows how many numbers they share." %}</p>
+  {% endif %}
+</section>
+{% endblock %}

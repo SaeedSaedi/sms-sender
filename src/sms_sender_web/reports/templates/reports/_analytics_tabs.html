@@ -1,0 +1,5 @@
+{% load i18n %}<nav class="segmented-tabs analytics-tabs" aria-label="{% translate "Analytics" %}">
+  <a href="{% url 'analytics' %}"{% if tab == "campaigns" %} aria-current="page"{% endif %}>{% translate "Campaigns" %}</a>
+  <a href="{% url 'series_list' %}"{% if tab == "series" %} aria-current="page"{% endif %}>{% translate "Series" %}</a>
+  <a href="{% url 'analytics_audience' %}"{% if tab == "audience" %} aria-current="page"{% endif %}>{% translate "Audience" %}</a>
+</nav>

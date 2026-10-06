@@ -14,12 +14,13 @@ from django.utils import timezone
 from sms_sender.state import SENT, StateStore
 from sms_sender.window import TEHRAN
 
-from ..dashboard.templatetags.fa import jalali
+from ..dashboard.templatetags.fa import fa_percent, jalali
 from .terms import FUNNEL_LABELS
 
 DELIVERED = 10  # Kavenegar's "delivered"
 HOURLY_UP_TO = 72  # hours shown one by one; a longer span goes by day
 WIDTH, HEIGHT = 600, 160
+MAX_BAR = 48  # a rate chart's widest bar, in the same units
 
 
 @dataclass(frozen=True)
@@ -93,3 +94,27 @@ def clicks_chart(hours: list[tuple[int, int]]) -> Chart | None:
         bars.append(Bar(f"{x:.2f}", f"{HEIGHT - height:.2f}", f"{step * 0.8:.2f}", f"{height:.2f}", label, n))
     peak_label = next(label for label, n in points if n == peak)
     return Chart(bars, points, by_hour, sum(n for _, n in points), peak, peak_label)
+
+
+@dataclass(frozen=True)
+class RateChart:
+    bars: list[Bar]               # label: the point's and its rate, for the bar's title
+    rows: list[tuple[str, float | None]]  # the same, as a table: label, rate (oldest first)
+    peak: float
+
+
+def rate_chart(points: list[tuple[str, float | None]]) -> RateChart | None:
+    """One bar per point (a series' alerts), its height the rate; an alert
+    without one leaves a gap. The earliest on the right, as the page reads."""
+    if not any(rate for _label, rate in points):
+        return None
+    peak = max(rate or 0 for _label, rate in points)
+    step = WIDTH / len(points)
+    width = min(step * 0.7, MAX_BAR)  # a series of one or two alerts keeps slim bars
+    bars = []
+    for i, (label, rate) in enumerate(points):
+        height = HEIGHT * (rate or 0) / peak
+        x = WIDTH - (i + 1) * step + (step - width) / 2
+        bars.append(Bar(f"{x:.2f}", f"{HEIGHT - height:.2f}", f"{width:.2f}", f"{height:.2f}",
+                        f"{label}: {fa_percent(rate)}", round((rate or 0) * 1000)))
+    return RateChart(bars, points, peak)

@@ -1,0 +1,53 @@
+{% extends "base.html" %}{% load i18n fa ui %}
+{% block title %}{% translate "Series" %} · {% translate "Analytics" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{% translate "Analytics" %}</h1>
+    <p class="page-meta">{% translate "Each preset's alerts together: how they do, and which way they're going." %}</p>
+  </div>
+</header>
+{% include "reports/_analytics_tabs.html" %}
+{% if rows %}
+<section class="card">
+  <div class="table-wrap" tabindex="0" role="region" aria-label="{% translate "Series" %}">
+    <table class="table-stack">
+      <thead>
+        <tr>
+          <th scope="col">{% translate "Preset" %}</th>
+          <th scope="col" class="num">{% translate "Alerts" %}</th>
+          <th scope="col" class="num">{% translate "Latest" %}</th>
+          <th scope="col" class="num">{% translate "Accepted" %}</th>
+          <th scope="col" class="num">{% translate "Delivered" %}</th>
+          <th scope="col" class="num">{% translate "Click rate" %}</th>
+          <th scope="col" class="num">{% translate "Cost per click" %}</th>
+          <th scope="col">{% translate "Lately" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <th scope="row"><a href="{% url 'series_detail' r.preset.slug %}"><bdi>{{ r.preset.name }}</bdi></a></th>
+          <td data-label="{% translate "Alerts" %}" class="num">{{ r.alerts|fa_number }}</td>
+          <td data-label="{% translate "Latest" %}" class="num">{{ r.latest|jalali:"%Y/%m/%d" }}</td>
+          <td data-label="{% translate "Accepted" %}" class="num">{{ r.figures.accepted|fa_number }}</td>
+          <td data-label="{% translate "Delivered" %}" class="num">{{ r.figures.delivered }}</td>
+          <td data-label="{% translate "Click rate" %}" class="num">{{ r.figures.click_rate }}</td>
+          <td data-label="{% translate "Cost per click" %}" class="num">{{ r.figures.per_click }}</td>
+          <td data-label="{% translate "Lately" %}">{% if r.trend %}<span class="trend tone-{{ r.trend.tone }}">{{ r.trend.label }}: {{ r.trend.change }}</span>{% else %}<span class="muted">{% translate "Too few alerts to tell" %}</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">{% translate "Every SMS counts once: a series' rates are over all its alerts together. “Lately” compares the latest 3 alerts with the ones before them." %}</p>
+</section>
+{% else %}
+<div class="empty-state">
+  {% icon "layers" %}
+  <h2>{% translate "No series yet" %}</h2>
+  <p>{% translate "Alerts made from a preset form its series. Once one sends, the series shows here." %}</p>
+  <div class="actions"><a class="button secondary" href="{% url 'preset_list' %}">{% icon "layers" %}{% translate "Presets" %}</a></div>
+</div>
+{% endif %}
+{% endblock %}

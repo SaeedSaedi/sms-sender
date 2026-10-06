@@ -1750,3 +1750,23 @@ kbd {
   .month-grid { display: none; }
   .month-agenda { display: block; }
 }
+
+/* ---------- insights (plan 06, L5) ---------- */
+
+.analytics-tabs { margin-block-end: var(--s-5); }
+/* A figure against another: the words carry it, the colour helps. */
+.trend { font-weight: 650; }
+.trend.tone-success { color: var(--success); }
+.trend.tone-danger { color: var(--danger); }
+.trend.tone-neutral { color: var(--text-2); }
+.trend-list { display: grid; gap: var(--s-2); padding: 0; list-style: none; }
+.trend-list li { display: flex; align-items: baseline; gap: var(--s-2); }
+.trend-list .month-dot { transform: translateY(-.1em); }
+.card-flush > .hint { margin: 0; padding: var(--s-3) var(--s-5); }
+.bar-cell { display: inline-flex; align-items: center; gap: var(--s-2); }
+.bar-cell progress { inline-size: 6rem; block-size: .55rem; margin: 0; }
+.hours-table th, .hours-table td { white-space: nowrap; }  /* on a phone the table scrolls, rows stay one line */
+.hours-table tr.is-best th, .hours-table tr.is-best td { background: var(--success-soft); }
+.overlap-form .choices { grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); margin-block-end: var(--s-3); }
+.overlap-table th[scope="row"], .overlap-table thead th { white-space: nowrap; }
+.overlap-table td.is-same { color: var(--muted); text-align: center; }

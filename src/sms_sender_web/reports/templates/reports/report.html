@@ -68,6 +68,80 @@
 </section>
 {% endif %}
 
+{% if versus %}
+<section class="card step" id="versus">
+  <h2 id="versus-heading">{% icon "layers" %}{% translate "Against its series" %}</h2>
+  <p>{{ versus_line }}</p>
+  <div class="table-wrap" tabindex="0" role="region" aria-labelledby="versus-heading">
+    <table class="table-stack">
+      <thead><tr><th scope="col">{% translate "Figure" %}</th><th scope="col" class="num">{% translate "This alert" %}</th><th scope="col" class="num">{% translate "The others' average" %}</th><th scope="col">{% translate "Difference" %}</th></tr></thead>
+      <tbody>
+      {% for v in versus.rows %}
+        <tr>
+          <th scope="row">{{ v.label }}</th>
+          <td data-label="{% translate "This alert" %}" class="num">{{ v.value }}</td>
+          <td data-label="{% translate "The others' average" %}" class="num">{{ v.average }}</td>
+          <td data-label="{% translate "Difference" %}"><span class="trend tone-{{ v.change.tone }}">{{ v.change.text }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint"><a href="{{ versus.url }}">{% translate "The whole series" %}</a></p>
+</section>
+{% endif %}
+
+{% if delivery_speed %}
+<section class="card step" aria-labelledby="speed-heading" id="delivery-speed">
+  <h2 id="speed-heading">{% icon "clock" %}{% translate "How fast it was delivered" %}</h2>
+  <ol class="funnel">
+    {% for step in delivery_speed %}
+      <li>
+        <span class="funnel-label">{{ step.label }}</span>
+        <progress max="100" value="{{ step.share }}" aria-hidden="true"></progress>
+        <span class="num funnel-value">{{ step.n|fa_number }} ({{ step.share|fa_number }}٪)</span>
+      </li>
+    {% endfor %}
+  </ol>
+  <p class="hint">{% translate "Shares are of the accepted SMS, as the delivery checks first saw them delivered. They ask every 15 minutes, for 48 hours." %}</p>
+</section>
+{% endif %}
+
+{% if by_segment %}
+<section class="card step" id="by-segment">
+  <h2 id="by-segment-heading">{% icon "users" %}{% translate "Each segment" %}</h2>
+  <div class="table-wrap" tabindex="0" role="region" aria-labelledby="by-segment-heading">
+    <table class="table-stack">
+      <thead>
+        <tr>
+          <th scope="col">{% translate "Segment" %}</th>
+          <th scope="col" class="num">{% translate "Accepted" %}</th>
+          <th scope="col" class="num">{% translate "Delivered" %}</th>
+          <th scope="col" class="num">{% translate "Click rate" %}</th>
+          <th scope="col" class="num">{% translate "Clicks" %}</th>
+          <th scope="col" class="num">{% translate "Cost" %}</th>
+          <th scope="col" class="num">{% translate "Cost per click" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for s in by_segment %}
+        <tr>
+          <th scope="row"><bdi>{{ s.name }}</bdi></th>
+          <td data-label="{% translate "Accepted" %}" class="num">{{ s.sent|fa_number }}</td>
+          <td data-label="{% translate "Delivered" %}" class="num">{{ s.delivered_rate|fa_percent }}</td>
+          <td data-label="{% translate "Click rate" %}" class="num">{{ s.click_rate|fa_percent }}</td>
+          <td data-label="{% translate "Clicks" %}" class="num">{{ s.clicks|fa_number }}</td>
+          <td data-label="{% translate "Cost" %}" class="num">{{ s.cost|fa_number }}</td>
+          <td data-label="{% translate "Cost per click" %}" class="num">{% if s.cost_per_click %}{{ s.cost_per_click|fa_number }}{% else %}—{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">{% translate "Delivered: of those with a delivery report. Click rate: of those sent, where people had links of their own. Costs in rials." %}</p>
+</section>
+{% endif %}
+
 {% if chart %}
 <section class="card step" aria-labelledby="chart-heading" id="clicks-chart">
   <h2 id="chart-heading">{% icon "chart-column" %}{% translate "Clicks over time" %}</h2>

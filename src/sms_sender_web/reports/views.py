@@ -58,9 +58,11 @@ from ..segments.audience import make_audience, suggest_slug
 from ..segments.forms import UPLOAD_ERRORS, clean_slug
 from ..segments.models import Segment
 from ..text import persian_text
+from . import insights
 from .charts import clicks_chart, funnel
 from .terms import (
     AUDIENCE_DONE, AUDIENCE_HINT, AUDIENCE_NAME, AUDIENCES, CHART_BY_DAY, CHART_BY_HOUR, CONVERSIONS_IMPORTED,
+    VERSUS_LINE,
 )
 
 PAGE = 100
@@ -163,6 +165,7 @@ def report(request, slug: str):
     segments, campaign_clicks = click_report(store)
     stored = store.get_meta("settings")
     last_run = store.get_meta("last_run")
+    versus = insights.against_preset(campaign)
     return render(request, "reports/report.html", {
         "slug": slug,
         "campaign": campaign,
@@ -186,6 +189,10 @@ def report(request, slug: str):
         "audience_slug": suggest_slug(slug),
         "audience_hint": say(AUDIENCE_HINT, {"n": total}),
         "funnel": funnel(store, counts),
+        "versus": versus,
+        "versus_line": say(VERSUS_LINE, {"n": versus["n"], "preset": versus["preset"].name}) if versus else "",
+        "delivery_speed": insights.delivery_speed(store),
+        "by_segment": insights.by_segment(store, segments),
         "conversions": _conversions(store, counts),
         "chart": chart,
         "chart_summary": say(CHART_BY_HOUR if chart.by_hour else CHART_BY_DAY,
@@ -416,6 +423,7 @@ def analytics(request):
     clicks = sum(r["clicks"] for r in rows)
     cost = sum(r["cost"] for r in rows)
     return render(request, "reports/analytics.html", {
+        "tab": "campaigns",
         "rows": rows,
         "totals": {"sent": sent, "clicks": clicks, "cost": cost, "per_click": round(cost / clicks) if clicks else None,
                    "delivered": sum(r["delivered"] for r in rows)},

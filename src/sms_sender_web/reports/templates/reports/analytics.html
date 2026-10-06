@@ -7,6 +7,7 @@
     <p class="page-meta">{% translate "Every campaign side by side: what was accepted, delivered and clicked, and what it cost." %}</p>
   </div>
 </header>
+{% include "reports/_analytics_tabs.html" %}
 {% if rows %}
 <dl class="figures">
   <div><dt>{% translate "Accepted" %}</dt><dd class="num">{{ totals.sent|fa_number }}</dd></div>

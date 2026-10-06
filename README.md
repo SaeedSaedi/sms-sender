@@ -565,8 +565,14 @@ internal, multi-user tool built with Django and HTMX. So far it has:
     rejected and invalid rows (the CLI's `export-failed`), all with phone
     numbers except attribution. Each download is recorded;
 - in each report, the funnel from accepted to delivered to clicked (and
-  converted), and clicks over time; and an analytics page («تحلیل‌ها»)
-  with every campaign side by side;
+  converted), clicks over time, each segment's figures, how fast it was
+  delivered, and, for an alert, how it compares with the rest of its
+  preset's alerts;
+- an analytics page («تحلیل‌ها») with three tabs: every campaign side by
+  side; each preset's series of alerts, and whether it's getting more or
+  less effective; and the audience: how many SMS each person got in 7 and 30
+  days (against the frequency cap), the best hour to send from your own
+  clicks, and how far chosen segments overlap;
 - from a report, a new segment of its recipients: ready-made (clicked,
   didn't click, delivered but didn't click, not delivered, rejected) or any
   filter, with user IDs and, where the source list still exists, its token
