@@ -320,8 +320,8 @@
   {% endif %}
   {% if user|can:"export_people" %}
   <div class="actions downloads">
-    <a class="button secondary small" href="{% url 'report_recipients_csv' slug %}{% if filter_query %}?{{ filter_query }}{% endif %}">{% icon "download" %}{% if filters %}{% translate "These recipients, with phone numbers (CSV)" %}{% else %}{% translate "All recipients, with phone numbers (CSV)" %}{% endif %}</a>
-    {% if counts.failed_permanent or counts.invalid %}<a class="button secondary small" href="{% url 'report_failed_csv' slug %}" data-cli="export-failed">{% icon "download" %}{% translate "Rejected and invalid rows, to fix and feed again (CSV)" %}</a>{% endif %}
+    <a class="button secondary small" href="{% url 'report_recipients_csv' slug %}{% if filter_query %}?{{ filter_query }}{% endif %}" download>{% icon "download" %}{% if filters %}{% translate "These recipients, with phone numbers (CSV)" %}{% else %}{% translate "All recipients, with phone numbers (CSV)" %}{% endif %}</a>
+    {% if counts.failed_permanent or counts.invalid %}<a class="button secondary small" href="{% url 'report_failed_csv' slug %}" data-cli="export-failed" download>{% icon "download" %}{% translate "Rejected and invalid rows, to fix and feed again (CSV)" %}</a>{% endif %}
   </div>
   {% endif %}
 </section>
@@ -367,10 +367,10 @@
 <section class="card step">
   <h2>{% icon "download" %}{% translate "Downloads" %}</h2>
   <div class="actions">
-    {% if user|can:"download_aggregates" %}<a class="button secondary" href="{% url 'report_summary_csv' slug %}">{% icon "download" %}{% translate "Summary (CSV)" %}</a>{% endif %}
+    {% if user|can:"download_aggregates" %}<a class="button secondary" href="{% url 'report_summary_csv' slug %}" download>{% icon "download" %}{% translate "Summary (CSV)" %}</a>{% endif %}
     {% if user|can:"export_people" %}
-      <a class="button secondary" href="{% url 'report_attribution_csv' slug %}" data-cli="export-attribution">{% icon "download" %}{% translate "Attribution, no phone numbers (CSV)" %}</a>
-      <a class="button secondary" href="{% url 'report_clickers_csv' slug %}" data-cli="export-clickers">{% icon "download" %}{% translate "People who clicked, with phone numbers (CSV)" %}</a>
+      <a class="button secondary" href="{% url 'report_attribution_csv' slug %}" data-cli="export-attribution" download>{% icon "download" %}{% translate "Attribution, no phone numbers (CSV)" %}</a>
+      <a class="button secondary" href="{% url 'report_clickers_csv' slug %}" data-cli="export-clickers" download>{% icon "download" %}{% translate "People who clicked, with phone numbers (CSV)" %}</a>
     {% endif %}
   </div>
   <p class="hint">{% translate "Files use English column names and Latin digits, for other systems. Every download is recorded in the activity log." %}</p>

@@ -30,7 +30,7 @@ from . import notices
 from .activity import folder_activity, overall, starts
 from .campaigns import CampaignSummary, list_campaigns
 from .templatetags.fa import jalali_long
-from .terms import LIST_VIEWS, STATUS_ORDER, TODAY_LINE
+from .terms import ATTENTION_ACTIONS, LIST_VIEWS, STATUS_ORDER, TODAY_LINE
 
 # The overview's tiles: how many campaigns are at each of these stages.
 TILES = (SENDING, AWAITING, STOPPED, SCHEDULED)
@@ -56,7 +56,7 @@ def _attention(campaign: Campaign, life, counts: dict) -> list[str]:
     return []
 
 
-def campaign_rows() -> tuple[list[dict], list[dict], dict]:
+def campaign_rows(user=None) -> tuple[list[dict], list[dict], dict]:
     """Every campaign with where it stands (the newest first), what needs
     someone now, and how many are at each tile's stage. The campaigns in
     data/db (the CLI's and the dashboard's), and dashboard campaigns that
@@ -83,7 +83,14 @@ def campaign_rows() -> tuple[list[dict], list[dict], dict]:
                 tiles[life.stage] += 1
             lines = _attention(campaign, life, summary.counts)
             if lines:
-                attention.append({"campaign": campaign, "life": life, "stage": STAGES[life.stage], "lines": lines})
+                attention.append({
+                    "campaign": campaign, "life": life, "stage": STAGES[life.stage], "lines": lines,
+                    # Where it's dealt with (an alert in its composer), and the button's words.
+                    "url": control.campaign_url(campaign, user),
+                    # Only someone who can approve is asked to.
+                    "action": ATTENTION_ACTIONS["awaiting"] if life.stage == AWAITING and user is not None
+                    and can(user, "run_campaigns") else ATTENTION_ACTIONS["open"],
+                })
         progress = None
         if life is not None and life.stage in (SENDING, PAUSED) and life.send is not None:
             p = life.send.progress or {}
@@ -102,23 +109,23 @@ def home(request):
     """The control room (plan 06, L4): how sending is going today and this
     week, the sends on their way, the credit, what needs someone, this
     week's sends, and the latest campaigns."""
-    rows, attention, _tiles = campaign_rows()
+    rows, attention, _tiles = campaign_rows(request.user)
     activity = folder_activity()
     total = overall(activity)
-    sends = control.active_sends()
+    sends = control.active_sends(user=request.user)
     started_today = Job.objects.filter(kind=Job.Kind.SEND, started_at__gte=datetime.fromtimestamp(
         starts()["today"], tz=dt_timezone.utc)).count()
     return render(request, "dashboard/home.html", {
         "today_line": say(TODAY_LINE, {"date": jalali_long(timezone.now()), "sends": started_today,
                                        "active": len(sends)}),
-        "figures": control.figures(total["today"], total["week"]),
+        "figures": control.figures(total["today"], total["week"], total["month"]),
         "active_sends": sends,
         "credit": control.credit(total["month"]),
         "credit_warning": credit.warning(),
         "attention": attention[:ATTENTION_SHOWN],
         "attention_more": max(0, len(attention) - ATTENTION_SHOWN),
-        "this_week": control.week(),
-        "recent": control.recent(rows, activity),
+        "this_week": control.week(user=request.user),
+        "recent": control.recent(rows, activity, user=request.user),
         "campaigns_total": len(rows),
         "worker_alive": worker_alive(),
     })
@@ -131,7 +138,7 @@ STOP_POLLING = 286
 @requires("view_campaigns")
 def home_sends(request):
     """The sends on their way alone, for the control room to poll."""
-    sends = control.active_sends()
+    sends = control.active_sends(user=request.user)
     return render(request, "dashboard/_active_sends.html", {"active_sends": sends},
                   status=200 if sends else STOP_POLLING)
 
@@ -140,7 +147,7 @@ def home_sends(request):
 def campaign_list(request):
     """Every campaign with where it stands: tabs (in progress, needs
     attention, ended), a stage from a tile, and a search."""
-    rows, attention, tiles = campaign_rows()
+    rows, attention, tiles = campaign_rows(request.user)
     # The list: a tab (in progress, needs attention, finished), a stage from
     # a tile, and a search by name, short name or template. Nothing personal
     # goes in the address.
@@ -226,7 +233,7 @@ def palette(request):
     managed = list(Campaign.objects.order_by("-created_at", "-id").only("slug", "name", "preset_id"))
     known = {c.slug for c in managed}
     on_disk = sorted(Path(settings.SMS_SENDER_DB_DIR).glob("*.db"), key=_changed, reverse=True)
-    campaigns = [{"name": c.name, "hint": c.slug, "url": control._url(c)} for c in managed]
+    campaigns = [{"name": c.name, "hint": c.slug, "url": control.campaign_url(c, request.user)} for c in managed]
     campaigns += [{"name": p.stem, "hint": p.stem, "url": reverse("report", args=[p.stem])}
                   for p in on_disk if p.stem not in known and _SLUG.match(p.stem)]
     segments = [{"name": s.name or s.slug, "hint": s.slug, "url": reverse("segment_detail", args=[s.slug])}
@@ -248,7 +255,7 @@ def palette(request):
 def calendar_page(request):
     """A month of sends, Solar Hijri: ?month=1405-07, else this month."""
     year, month = months.month_of(request.GET.get("month"))
-    return render(request, "dashboard/calendar.html", {"month": months.month(year, month)})
+    return render(request, "dashboard/calendar.html", {"month": months.month(year, month, user=request.user)})
 
 
 @requires("view_campaigns")

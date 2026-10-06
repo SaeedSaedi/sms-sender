@@ -12,6 +12,7 @@
   <script src="{% static 'js/app.js' %}" defer></script>
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}' hx-ext="morph"{% if user|fully_signed_in %} class="has-nav"{% endif %}>
+  <div class="page-progress" aria-hidden="true"></div>
   <a class="skip-link" href="#main">{% translate "Skip to the main content" %}</a>
   {% if user|fully_signed_in %}
     <nav class="sidebar" aria-label="{% translate "Main menu" %}">{% include "ui/nav.html" %}</nav>

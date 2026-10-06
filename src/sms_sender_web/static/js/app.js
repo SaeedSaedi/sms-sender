@@ -9,6 +9,7 @@
 //   and the chosen file's name in Persian file fields.
 // - HTMX: a lost connection or a stale page says so, instead of freezing.
 // - Ctrl+K (Cmd+K on a Mac) goes to any page, campaign, segment or preset.
+// - A slow page shows a bar at the top; a part refreshing as you type shimmers.
 (() => {
   "use strict";
 
@@ -397,6 +398,71 @@
     if (!primary) return;
     event.preventDefault();
     primary.click();
+  });
+
+  // ---------- a page that takes a moment: the bar at the top (v3) ----------
+  //
+  // A link or form that leaves the page sets is-navigating after 150 ms, so
+  // a quick page never shows the bar. Whether it really leaves is decided
+  // after every other handler has run (a confirmation, a tab, HTMX may stop
+  // it). Downloads (a[download]) stay on the page and never start it; a page
+  // restored by Back, or a navigation the browser dropped, clears it.
+
+  let navigating = null;
+  let giveUp = null;
+
+  function stopNavigating() {
+    clearTimeout(navigating);
+    clearTimeout(giveUp);
+    document.documentElement.classList.remove("is-navigating");
+  }
+
+  function startNavigating() {
+    stopNavigating();
+    navigating = setTimeout(() => document.documentElement.classList.add("is-navigating"), 150);
+    giveUp = setTimeout(stopNavigating, 15000);
+  }
+
+  function leavesPage(link) {
+    if (link.hasAttribute("download") || (link.target && link.target !== "_self")) return false;
+    if (link.hasAttribute("hx-get") || link.hasAttribute("hx-post")) return false;
+    const url = new URL(link.href, window.location.href);
+    if (url.origin !== window.location.origin) return false;
+    // Another part of the same page (a tab, a section) isn't a new page.
+    return !(url.hash && url.pathname === window.location.pathname && url.search === window.location.search);
+  }
+
+  document.addEventListener("click", (event) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target.closest("a[href]");
+    if (!link || !leavesPage(link)) return;
+    setTimeout(() => { if (!event.defaultPrevented) startNavigating(); }, 0);
+  });
+
+  document.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || form.method === "dialog") return;
+    if (form.hasAttribute("hx-post") || form.hasAttribute("hx-get")) return;
+    setTimeout(() => { if (!event.defaultPrevented) startNavigating(); }, 0);
+  });
+
+  window.addEventListener("pageshow", stopNavigating);
+
+  // ---------- refreshing as you type: the shimmer (v3) ----------
+  //
+  // A part of the page marked data-skeleton is busy while its HTMX request
+  // runs: aria-busy for screen readers, a shimmer for the eye (app.css).
+
+  function busy(event, on) {
+    const target = event.detail && event.detail.target;
+    if (!target || !target.hasAttribute || !target.hasAttribute("data-skeleton")) return;
+    if (on) target.setAttribute("aria-busy", "true");
+    else target.removeAttribute("aria-busy");
+  }
+
+  document.addEventListener("htmx:beforeRequest", (event) => busy(event, true));
+  ["htmx:afterRequest", "htmx:sendError", "htmx:timeout"].forEach((name) => {
+    document.addEventListener(name, (event) => busy(event, false));
   });
 
   // ---------- Go to anything: Ctrl+K (Cmd+K on a Mac) ----------

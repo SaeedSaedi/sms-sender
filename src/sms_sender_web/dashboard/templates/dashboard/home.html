@@ -20,7 +20,7 @@
 
 <ul class="figures control-figures" aria-label="{% translate "Today and the last 7 days" %}">
   {% for f in figures %}
-    <li><span class="figure-label">{{ f.label }}</span><span class="figure-value num">{{ f.value }}</span><span class="figure-sub">{{ f.sub }}</span></li>
+    <li><span class="figure-label">{{ f.label }}</span><span class="figure-value num">{{ f.value }}</span><span class="figure-sub{% if f.tone %} trend tone-{{ f.tone }}{% endif %}">{{ f.sub }}</span></li>
   {% endfor %}
 </ul>
 
@@ -52,7 +52,7 @@
           <tr>
             <th scope="row"><a href="{{ r.url }}"><bdi>{{ r.name }}</bdi></a>
               {% if r.campaign.preset %}<span class="cell-sub"><bdi>{{ r.campaign.preset.name }}</bdi>{% if r.segments > 1 %} · {{ r.segments|fa_number }} {% translate "segments" %}{% endif %}</span>{% endif %}</th>
-            <td data-label="{% translate "When" %}">{% if r.when %}<span class="num">{{ r.when|jalali }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td data-label="{% translate "When" %}" class="nowrap">{% if r.when %}<span class="num">{{ r.when|jalali_when }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
             <td data-label="{% translate "Accepted" %}" class="num">{{ r.totals.accepted|fa_number }}</td>
             <td data-label="{% translate "Delivered" %}" class="num">{{ r.totals.delivered_rate|fa_percent }}</td>
             <td data-label="{% translate "Click rate" %}" class="num">{{ r.totals.click_rate|fa_percent }}</td>
@@ -80,10 +80,10 @@
   <section class="card credit-card{% if credit.low %} is-low{% endif %}" aria-labelledby="credit-title" id="credit">
     <div class="card-header">
       <h2 id="credit-title">{% icon "activity" %}{% translate "Kavenegar credit" %}</h2>
-      {% if credit.check.checked_at %}<span class="muted num">{{ credit.check.checked_at|jalali:"%H:%M" }}</span>{% endif %}
+      {% if credit.check.checked_at %}<span class="muted">{{ credit.check.checked_at|ago }}</span>{% endif %}
     </div>
     {% if credit.check.credit is not None %}
-      <p class="credit-value num">{{ credit.check.credit|fa_number }} <span>{% translate "rials" %}</span></p>
+      <p class="credit-value num">{{ credit.amount }} <span>{{ credit.unit }}</span></p>
       {% if credit.low %}<p class="warn">{% translate "Under the warning level. Top up the account before the next send." %}</p>{% endif %}
       {% if credit.runway %}<p class="hint">{{ credit.runway }}</p>{% endif %}
     {% else %}
@@ -99,10 +99,12 @@
     {% if attention %}
       <ul class="attention-list">
         {% for item in attention %}
-          <li>
-            <span class="attention-name"><a href="{% url 'campaign_detail' item.campaign.slug %}"><bdi>{{ item.campaign.name }}</bdi></a>
+          {# The first is the most pressing: it stands out, with what to do about it. #}
+          <li{% if forloop.first %} class="is-first tone-{{ item.life.tone }}"{% endif %}>
+            <span class="attention-name"><a href="{{ item.url }}"><bdi>{{ item.campaign.name }}</bdi></a>
               <span class="pill pill-{{ item.life.tone }}">{{ item.stage }}</span></span>
             {% for line in item.lines %}<p>{{ line }}</p>{% endfor %}
+            {% if forloop.first %}<a class="button small" href="{{ item.url }}">{{ item.action }}</a>{% endif %}
           </li>
         {% endfor %}
       </ul>

@@ -41,7 +41,7 @@
   <ul class="attention-list">
     {% for item in attention %}
       <li>
-        <span class="attention-name"><a href="{% url 'campaign_detail' item.campaign.slug %}"><bdi>{{ item.campaign.name }}</bdi></a>
+        <span class="attention-name"><a href="{{ item.url }}"><bdi>{{ item.campaign.name }}</bdi></a>
           <span class="pill pill-{{ item.life.tone }}">{{ item.stage }}</span></span>
         {% for line in item.lines %}<p>{{ line }}</p>{% endfor %}
       </li>

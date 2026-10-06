@@ -90,7 +90,7 @@ def test_the_campaign_list_warns(told, make_user, verified):
     html = viewer.get("/campaigns/").content.decode()
     assert 'id="credit-warning"' in html and "۴٬۰۰۰٬۰۰۰" in html
     room = viewer.get("/").content.decode()  # the control room's credit card says it too
-    assert 'credit-card is-low' in room and "۴٬۰۰۰٬۰۰۰" in room
+    assert 'credit-card is-low' in room and "۴٫۰ <span>میلیون ریال</span>" in room  # as people say it
     credit.record(None, "refused")
     assert "کاوه‌نگار بررسی حساب را نپذیرفت" in viewer.get("/campaigns/").content.decode()
     assert "کاوه‌نگار بررسی حساب را نپذیرفت" in viewer.get("/").content.decode()

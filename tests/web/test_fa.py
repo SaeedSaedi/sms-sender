@@ -7,10 +7,12 @@ import pytest
 pytest.importorskip("django")
 
 from sms_sender_web.dashboard.templatetags.fa import (  # noqa: E402
+    ago,
     delivery_label,
     fa_digits,
     fa_number,
     jalali,
+    jalali_when,
     ltr,
     status_label,
 )
@@ -60,3 +62,28 @@ def test_a_date_beyond_the_solar_hijri_calendar_shows_instead_of_failing():
     """Kavenegar's "never expires" is 9999-12-31: no Solar Hijri year reaches
     it, and a page must still render."""
     assert jalali(datetime(9999, 12, 31, 20, 30, tzinfo=timezone.utc)) == "9999-12-31"
+
+
+# Tuesday 14 Mehr 1405, 15:00 in Tehran.
+NOW = datetime(2026, 10, 6, 11, 30, tzinfo=timezone.utc)
+
+
+@pytest.mark.parametrize("utc, expected", [
+    (datetime(2026, 10, 6, 9, 32, tzinfo=timezone.utc), "امروز ۱۳:۰۲"),
+    (datetime(2026, 10, 5, 7, 15, tzinfo=timezone.utc), "دیروز ۱۰:۴۵"),
+    (datetime(2026, 10, 3, 5, 45, tzinfo=timezone.utc), "شنبه ۰۹:۱۵"),  # within the week: its day
+    (datetime(2026, 9, 28, 9, 30, tzinfo=timezone.utc), "۱۴۰۵/۰۷/۰۶ ۱۳:۰۰"),  # older: the date
+    # 23:00 UTC on the 5th is already the 6th in Tehran: today.
+    (datetime(2026, 10, 5, 21, 0, tzinfo=timezone.utc), "امروز ۰۰:۳۰"),
+])
+def test_a_moment_in_a_few_words(utc, expected):
+    assert jalali_when(utc, NOW) == expected
+    assert jalali_when(utc.timestamp(), NOW) == expected  # unix seconds too
+
+
+def test_how_long_ago():
+    assert ago(NOW, NOW) == "همین حالا"
+    assert ago(datetime(2026, 10, 6, 11, 25, tzinfo=timezone.utc), NOW) == "۵ دقیقه پیش"
+    assert ago(datetime(2026, 10, 6, 8, 0, tzinfo=timezone.utc), NOW) == "۳ ساعت پیش"
+    assert ago(datetime(2026, 10, 5, 7, 15, tzinfo=timezone.utc), NOW) == "دیروز ۱۰:۴۵"
+    assert ago(None) == "" and jalali_when(None) == ""

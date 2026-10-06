@@ -19,40 +19,64 @@ from django.utils import timezone
 
 from sms_sender.window import TEHRAN
 
+from ..accounts.roles import can
 from ..campaigns.present import say
+from ..reports.insights import change
 from ..jobs.models import Campaign, Job
 from ..system.models import ProviderCheck, SystemSettings
 from .activity import Totals
-from .templatetags.fa import fa_digits, fa_percent, jalali, jalali_long
-from .terms import FIGURES, PACE, RUNWAY, TIME_LEFT, WEEK_DAY
+from .templatetags.fa import fa_digits, fa_number, fa_percent, jalali, jalali_long
+from .terms import FIGURES, PACE, RIAL_UNITS, RUNWAY, TIME_LEFT, WEEK_DAY
 
 ACTIVE = (Job.State.RUNNING, Job.State.PAUSED)
 PACE_DAYS = 30
 
 
-def figures(today: Totals, week: Totals) -> list[dict]:
-    """The strip at the top: what went out today and in the last 7 days."""
+def _against_month(week_rate: float | None, month_rate: float | None, week_n: int, month_n: int) -> dict:
+    """The last 7 days' rate against the last 30's, once the 30 hold more
+    than the 7 (else they're the same SMS): the line under a figure, and its
+    tone."""
+    if week_rate is None or month_rate is None or month_n <= week_n:
+        return {}
+    moved = change(week_rate, month_rate, "rate", True)
+    if moved.tone == "neutral":
+        return {"sub": str(FIGURES["same_as_month"]), "tone": "neutral"}
+    return {"sub": say(FIGURES["vs_month"], {"change": moved.text}), "tone": moved.tone}
+
+
+def figures(today: Totals, week: Totals, month: Totals) -> list[dict]:
+    """The strip at the top: what went out today and in the last 7 days,
+    the rates against the last 30 days', and what an SMS costs."""
     def rials(n: int) -> str:
         return say(FIGURES["rials"], {"n": n})
 
+    delivered = {"sub": say(FIGURES["reports"], {"n": week.delivery_known}) if week.delivery_known
+                 else str(FIGURES["no_reports"])}
+    delivered.update(_against_month(week.delivered_rate, month.delivered_rate, week.delivery_known,
+                                    month.delivery_known))
+    clicked = {"sub": say(FIGURES["clicked"], {"n": week.clicked, "of": week.own_links}) if week.own_links
+               else str(FIGURES["no_links"])}
+    clicked.update(_against_month(week.click_rate, month.click_rate, week.own_links, month.own_links))
+    per_sms = week.cost_per_sms
     return [
         {"label": FIGURES["accepted"], "value": say("{n}", {"n": today.accepted}),
          "sub": say(FIGURES["week"], {"n": week.accepted})},
-        {"label": FIGURES["delivered"], "value": fa_percent(week.delivered_rate),
-         "sub": say(FIGURES["reports"], {"n": week.delivery_known}) if week.delivery_known
-         else str(FIGURES["no_reports"])},
+        {"label": FIGURES["delivered"], "value": fa_percent(week.delivered_rate), **delivered},
         {"label": FIGURES["clicks"], "value": say("{n}", {"n": today.clicks}),
          "sub": say(FIGURES["week"], {"n": week.clicks})},
-        {"label": FIGURES["click_rate"], "value": fa_percent(week.click_rate),
-         "sub": say(FIGURES["clicked"], {"n": week.clicked, "of": week.own_links}) if week.own_links
-         else str(FIGURES["no_links"])},
-        {"label": FIGURES["spend"], "value": rials(today.cost), "sub": say(FIGURES["week_rials"], {"n": week.cost})},
+        {"label": FIGURES["click_rate"], "value": fa_percent(week.click_rate), **clicked},
+        {"label": FIGURES["spend"], "value": rials(today.cost),
+         "sub": say(FIGURES["per_sms"], {"n": round(per_sms)}) if per_sms
+         else say(FIGURES["week_rials"], {"n": week.cost})},
     ]
 
 
-def _url(campaign: Campaign) -> str:
-    """An alert opens in the composer; any other campaign on its page."""
-    return reverse("compose_campaign" if campaign.preset_id else "campaign_detail", args=[campaign.slug])
+def campaign_url(campaign: Campaign, user=None) -> str:
+    """An alert opens in the composer for someone who can send it (the
+    composer needs run_campaigns); any other campaign, and an alert for
+    anyone else or when nobody is named, on its page."""
+    composer = campaign.preset_id is not None and user is not None and can(user, "run_campaigns")
+    return reverse("compose_campaign" if composer else "campaign_detail", args=[campaign.slug])
 
 
 @dataclass(frozen=True)
@@ -87,7 +111,7 @@ def time_left(seconds: float | None) -> str:
     return say(TIME_LEFT["hours"], {"h": hours, "m": minutes})
 
 
-def active_send(job: Job, now: datetime | None = None) -> ActiveSend:
+def active_send(job: Job, now: datetime | None = None, user=None) -> ActiveSend:
     """How far a send has got, its pace and the time left. The pace is the
     average since it started, so it's shown only while it runs."""
     now = now or timezone.now()
@@ -101,16 +125,16 @@ def active_send(job: Job, now: datetime | None = None) -> ActiveSend:
     else:
         left = time_left((total - done) / pace) if pace and total > done else ""
     return ActiveSend(
-        job=job, campaign=job.campaign, url=_url(job.campaign), stage="links" if links else "sms",
+        job=job, campaign=job.campaign, url=campaign_url(job.campaign, user), stage="links" if links else "sms",
         done=done, total=total, per_second=pace, left=left,
         counts={k: p.get(k, 0) for k in ("sent", "failed_retriable", "failed_permanent", "unknown")},
     )
 
 
-def active_sends(now: datetime | None = None) -> list[ActiveSend]:
+def active_sends(now: datetime | None = None, user=None) -> list[ActiveSend]:
     """Sends running or paused, the newest first, with how far they've got."""
     now = now or timezone.now()
-    out = [active_send(job, now) for job in
+    out = [active_send(job, now, user) for job in
            Job.objects.filter(kind=Job.Kind.SEND, state__in=ACTIVE).select_related("campaign")]
     out.sort(key=lambda a: a.job.started_at or now, reverse=True)
     return out
@@ -127,6 +151,12 @@ def credit(month: Totals, now: datetime | None = None) -> dict:
            "floor": floor, "runway": ""}
     if check.credit is None:
         return out
+    # As people say it: 264,731,842 → «۲۶۴٫۷ میلیون ریال»; under a million, in full.
+    if check.credit >= 1_000_000:
+        out["amount"] = fa_digits(f"{check.credit / 1_000_000:.1f}".replace(".", "٫"))
+        out["unit"] = str(RIAL_UNITS["million"])
+    else:
+        out["amount"], out["unit"] = fa_number(check.credit), str(RIAL_UNITS["rials"])
     costs = [
         (job.result or {}).get("cost") or 0
         for job in Job.objects.filter(kind=Job.Kind.SEND, finished_at__gte=now - timedelta(days=PACE_DAYS))
@@ -147,7 +177,7 @@ def credit(month: Totals, now: datetime | None = None) -> dict:
 WEEKDAYS = ("ش", "ی", "د", "س", "چ", "پ", "ج")
 
 
-def week(now: datetime | None = None) -> dict:
+def week(now: datetime | None = None, user=None) -> dict:
     """This week, Saturday to Friday (Tehran): the sends that went out each
     day, and the ones set for later."""
     local = (now or timezone.now()).astimezone(TEHRAN)
@@ -173,7 +203,7 @@ def week(now: datetime | None = None) -> dict:
                                       "later": later}),
         })
     return {"days": days, "scheduled": [
-        {"job": job, "campaign": job.campaign, "url": _url(job.campaign),
+        {"job": job, "campaign": job.campaign, "url": campaign_url(job.campaign, user),
          "when": f"{jalali_long(job.not_before)} · {jalali(job.not_before, '%H:%M')}"}
         for job in scheduled[:5]
     ]}
@@ -193,7 +223,7 @@ class RecentRow:
     segments: int
 
 
-def recent(rows: list[dict], activity: dict[str, dict[str, Totals]], limit: int = 8) -> list[RecentRow]:
+def recent(rows: list[dict], activity: dict[str, dict[str, Totals]], limit: int = 8, user=None) -> list[RecentRow]:
     """The latest campaigns (the campaign list's rows, newest first), each
     with its key numbers over all time."""
     out = []
@@ -202,7 +232,7 @@ def recent(rows: list[dict], activity: dict[str, dict[str, Totals]], limit: int 
         settings = (campaign.settings or {}) if campaign else {}
         out.append(RecentRow(
             campaign=campaign, slug=summary.slug, name=campaign.name if campaign else summary.name,
-            url=_url(campaign) if campaign else reverse("report", args=[summary.slug]),
+            url=campaign_url(campaign, user) if campaign else reverse("report", args=[summary.slug]),
             when=summary.last_run_at or (campaign.created_at if campaign else None),
             recipients=summary.recipients,
             totals=activity.get(summary.slug, {}).get("all") or Totals(),

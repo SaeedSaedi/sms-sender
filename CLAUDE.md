@@ -540,6 +540,20 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - **Engine:** `jobs/engine.Engine` builds the CLI's runner from `Campaign.settings` (`make_runner(reporter=JobReporter, install_signal_handlers=False)`); tests swap in fakes. The approval test isn't part of a send job; it becomes its own dashboard step.
   - **Scheduler:** `Worker.schedule` queues delivery updates while sent rows are under 48 h old, and click updates for 14 days.
   - **One worker process only** (with its two lanes). Test DBs are files, not shared-memory SQLite (`settings_test`), because the heartbeat and lane threads write concurrently.
+- **Design system v3 ([app.css](src/sms_sender_web/static/css/app.css), plan 06 L6), on v2 and v1:**
+  - **Tokens** follow the L0 prototype: primary `#1d4ed8`, its success, warning and danger colours, navy `#0c1626`, and its dark theme. Corners are 10 px for controls (`--radius`) and 14 px for cards (`--radius-lg`). Figures use `--fs-figure`.
+  - **Motion:** `--ease`, `--dur-1..3`. Dialogs rise in, the drawer slides in from the start side, toasts drop in, and buttons move a pixel when pressed. Under `prefers-reduced-motion` every animation and transition is cut to nothing and runs once, so spinners stand still.
+  - **Loading:**
+    - `.page-progress` in `base.html`: app.js sets `html.is-navigating` 150 ms after a link or form leaves the page. Whether it leaves is checked after every other handler, so a confirmation, a tab or HTMX stops it. `a[download]` never starts it, so every file download link carries `download`. It clears on `pageshow`, or after 15 s.
+    - `data-skeleton` on a region that refreshes as you type (the composer's preview and counts, the settings preview, the recipients preview): app.js sets `aria-busy` while its HTMX request runs, and app.css shimmers it after a beat. Never on a poll.
+  - **Focus:** the sidebar and drawer ring in `--nav-accent`, which shows on navy.
+  - **Links by role:** `control.campaign_url(campaign, user)` sends an alert to the composer only for someone who can `run_campaigns` (the composer needs it); anyone else, and a call without a user, gets the campaign page. Every caller passes `request.user`.
+  - **Control room:**
+    - delivered and click rate (7 days) against the 30-day average, with a tone (`control._against_month`), once the 30 days hold more than the 7;
+    - spend with the cost of one SMS;
+    - the credit in millions (`credit()["amount"]`, `["unit"]`), checked `|ago`;
+    - dates `|jalali_when` («امروز ۱۳:۰۲», «دیروز», a weekday within the week);
+    - the most pressing item stands out with its action (`ATTENTION_ACTIONS`).
 - **Design system v2 ([app.css](src/sms_sender_web/static/css/app.css), the review's R3):** an operations console, calm and status-first. It's built on v1 (P1, below), and v1's class names still work.
   - **Shell:** a deep-navy full-height sidebar (`--nav-*` tokens). Its groups are: SMS sending; reports and monitoring; administration. Help sits by the user. The active item is `[aria-current]`, any value.
   - **`.figures`** is a stat strip: one panel whose items share the width (`flex: 1 1 8rem`), so a short row never leaves a lonely box. Clickable figures are `ul.figures > li > a.figure-link` with `.figure-label` / `.figure-value`, never links inside a `<dl>`.
