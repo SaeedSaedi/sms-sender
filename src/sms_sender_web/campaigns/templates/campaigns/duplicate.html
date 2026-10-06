@@ -2,7 +2,7 @@
 {% block title %}{% translate "Duplicate the campaign" %} · {% translate "SMS campaigns" %}{% endblock %}
 {% block breadcrumbs %}
 <nav class="breadcrumbs" aria-label="{% translate "Breadcrumb" %}"><ol>
-  <li><a href="{% url 'home' %}">{% translate "Campaigns" %}</a></li>
+  <li><a href="{% url 'campaign_list' %}">{% translate "Campaigns" %}</a></li>
   <li><a href="{% url 'campaign_detail' source.slug %}"><bdi>{{ source.name }}</bdi></a></li>
   <li aria-current="page">{% translate "Duplicate" %}</li>
 </ol></nav>

@@ -87,9 +87,12 @@ def test_the_worker_asks_every_15_minutes(campaign, told):
 def test_the_campaign_list_warns(told, make_user, verified):
     credit.record(4_000_000)
     viewer = signed_in(make_user("viewer1", "viewer"), verified)
-    html = viewer.get("/").content.decode()
+    html = viewer.get("/campaigns/").content.decode()
     assert 'id="credit-warning"' in html and "۴٬۰۰۰٬۰۰۰" in html
+    room = viewer.get("/").content.decode()  # the control room's credit card says it too
+    assert 'credit-card is-low' in room and "۴٬۰۰۰٬۰۰۰" in room
     credit.record(None, "refused")
+    assert "کاوه‌نگار بررسی حساب را نپذیرفت" in viewer.get("/campaigns/").content.decode()
     assert "کاوه‌نگار بررسی حساب را نپذیرفت" in viewer.get("/").content.decode()
 
 

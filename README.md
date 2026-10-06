@@ -424,6 +424,14 @@ sms-sender dry-run --input ./numbers.csv          # parse + normalize only, no A
 
 A Persian, right-to-left web dashboard for running campaigns. It's an
 internal, multi-user tool built with Django and HTMX. So far it has:
+- **the control room** («اتاق کنترل», the home page):
+  - today's and the week's accepted SMS, delivery, clicks, click rate and spend;
+  - the sends on their way, with their pace and time left;
+  - Kavenegar's credit and how many sends it covers at the recent pace;
+  - what needs you, this week's sends and what's scheduled;
+  - the latest campaigns with their numbers.
+
+  Every campaign is one click away on «کمپین‌ها»;
 - **a new alert in one page** («هشدار تازه»), for messages you send again
   and again:
   - A **preset** («پیش‌تنظیم») keeps a message's template, what fills each

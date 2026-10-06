@@ -48,7 +48,7 @@ def test_campaigns_are_listed_with_persian_numbers(signed_in, settings, tmp_path
     store.upsert_pending([(f"0912{i:07d}", "x") for i in range(1234)])
     store.record_invalid_many([("nope", "not a phone number")])
 
-    html = signed_in.get("/").content.decode()
+    html = signed_in.get("/campaigns/").content.decode()
     assert '<bdi dir="ltr">coin-7</bdi>' in html
     assert '<bdi dir="ltr">coin-price</bdi>' in html
     assert "۱٬۲۳۵" in html  # every recipient, the invalid input row included
@@ -61,4 +61,5 @@ def test_campaigns_are_listed_with_persian_numbers(signed_in, settings, tmp_path
 
 def test_no_campaigns_yet(signed_in, settings, tmp_path):
     settings.SMS_SENDER_DB_DIR = tmp_path / "nothing-here"
-    assert "هنوز کمپینی ساخته نشده است" in signed_in.get("/").content.decode()
+    assert "هنوز کمپینی ساخته نشده است" in signed_in.get("/campaigns/").content.decode()
+    assert "هنوز کمپینی ساخته نشده است" in signed_in.get("/").content.decode()  # the control room too

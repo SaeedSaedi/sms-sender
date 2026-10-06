@@ -65,7 +65,8 @@ def admin_client(make_user, verified):
 
 
 @pytest.mark.parametrize("label, call", [
-    ("home", lambda c, p: c.get("/")),
+    ("control room", lambda c, p: c.get("/")),
+    ("campaign list", lambda c, p: c.get("/campaigns/")),
     ("report", lambda c, p: c.get("/reports/big/")),
     ("report, filtered", lambda c, p: c.get("/reports/big/", {"status": "sent", "delivery": "not_delivered"})),
     ("report, a far page", lambda c, p: c.get("/reports/big/", {"page": "500"})),

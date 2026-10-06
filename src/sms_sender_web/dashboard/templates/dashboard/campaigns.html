@@ -1,0 +1,134 @@
+{% extends "base.html" %}{% load i18n fa roles ui %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{% translate "Campaigns" %}</h1>
+    <p class="page-meta">{% translate "Every campaign, where it stands, and what needs someone now." %}</p>
+  </div>
+  {% if campaigns and user|can:"edit_campaigns" %}
+    <div class="page-actions">
+      {% if user|can:"manage_settings" %}<a class="button secondary" href="{% url 'campaign_import' %}">{% icon "upload" %}{% translate "Import the CLI's profiles" %}</a>{% endif %}
+      <a class="button" href="{% url 'campaign_new' %}">{% icon "plus" %}{% translate "New campaign" %}</a>
+    </div>
+  {% endif %}
+</header>
+
+{% if not worker_alive %}
+  <div class="callout callout-error" role="alert">{% icon "circle-alert" %}<p>{% translate "Worker" %}: {% translate "Not running: jobs wait until it starts." %} <a href="{% url 'status' %}">{% translate "Service status" %}</a></p></div>
+{% endif %}
+{% if credit_warning.refused %}
+  <div class="callout callout-error" role="alert" id="credit-warning">{% icon "circle-alert" %}<p>{% translate "Kavenegar refused the account check, so no send can start. Check the key and the account." %} <a href="{% url 'status' %}">{% translate "Service status" %}</a></p></div>
+{% elif credit_warning %}
+  <div class="callout callout-warning" id="credit-warning">{% icon "triangle-alert" %}<p>{% translate "Kavenegar credit is low" %}: <span class="num">{{ credit_warning.credit|fa_number }}</span> {% translate "rials" %}, {% translate "under the warning level of" %} <span class="num">{{ credit_warning.floor|fa_number }}</span>. {% translate "Top up the account before the next send." %} <span class="muted">({% translate "checked" %} <span class="num">{{ credit_warning.checked_at|jalali }}</span>)</span></p></div>
+{% endif %}
+
+{% if campaigns %}
+<ul class="figures overview" aria-label="{% translate "Stages" %}">
+  {% for label, n, s in tiles %}
+    <li class="tile-{{ s }}"><a class="figure-link" href="?stage={{ s }}"{% if stage == s %} aria-current="true"{% endif %}>
+      <span class="figure-label">{{ label }}</span><span class="figure-value num">{{ n|fa_number }}</span>
+    </a></li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% if attention %}
+<section class="card step attention" aria-labelledby="attention-title">
+  <div class="card-header">
+    <h2 id="attention-title">{% icon "triangle-alert" %}{% translate "Needs attention" %}</h2>
+    {% if attention_more %}<a href="?view=attention">{% translate "Show all" %} (<span class="num">{{ attention|length|add:attention_more|fa_number }}</span>)</a>{% endif %}
+  </div>
+  <ul class="attention-list">
+    {% for item in attention %}
+      <li>
+        <span class="attention-name"><a href="{% url 'campaign_detail' item.campaign.slug %}"><bdi>{{ item.campaign.name }}</bdi></a>
+          <span class="pill pill-{{ item.life.tone }}">{{ item.stage }}</span></span>
+        {% for line in item.lines %}<p>{{ line }}</p>{% endfor %}
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if campaigns %}
+<section class="card card-flush" aria-labelledby="list-title">
+  <div class="card-header">
+    <h2 id="list-title" class="visually-hidden">{% translate "Campaign list" %}</h2>
+    <nav class="segmented-tabs" aria-label="{% translate "Show" %}">
+      {% for key, label, n in views %}<a href="?view={{ key }}"{% if key == view and not stage %} aria-current="page"{% endif %}>{{ label }} <span class="count num">{{ n|fa_number }}</span></a>{% endfor %}
+    </nav>
+    <form class="search" method="get" role="search">
+      <input type="hidden" name="view" value="{{ view }}">
+      <label class="visually-hidden" for="id_q">{% translate "Search campaigns" %}</label>
+      <input id="id_q" type="search" name="q" value="{{ query }}" placeholder="{% translate "Name, short name or template" %}">
+      <button type="submit" class="secondary">{% icon "search" %}{% translate "Search" %}</button>
+    </form>
+  </div>
+  {% if stage or query %}
+    <p class="card-note">{% translate "Filtered" %}: <span class="num">{{ matching|fa_number }}</span> · <a href="?view={{ view }}">{% translate "Clear the filters" %}</a></p>
+  {% endif %}
+  {% if shown %}
+  <div class="table-wrap">
+    <table class="table-stack">
+      <thead>
+        <tr>
+          <th scope="col">{% translate "Campaign" %}</th>
+          <th scope="col">{% translate "Stage" %}</th>
+          <th scope="col" class="num">{% translate "Recipients" %}</th>
+          <th scope="col">{% translate "Statuses" %}</th>
+          <th scope="col">{% translate "Last run" %}</th>
+          <th scope="col"><span class="visually-hidden">{% translate "Report" %}</span></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in shown %}{% with c=row.summary %}
+        <tr>
+          <th scope="row">
+            {% if row.campaign %}<a href="{% url 'campaign_detail' c.slug %}"><bdi>{{ row.campaign.name }}</bdi></a>{% else %}{{ c.name|ltr }}{% endif %}
+            <span class="cell-sub">{% if c.template %}{{ c.template|ltr }}{% elif row.campaign.settings.template %}{{ row.campaign.settings.template|ltr }}{% endif %}</span>
+          </th>
+          <td data-label="{% translate "Stage" %}">
+            <span class="pill pill-{{ row.tone }}">{{ row.stage }}</span>
+            {% if row.progress %}
+              <progress class="mini" max="{{ row.progress.total }}" value="{{ row.progress.done }}" aria-label="{{ row.stage }}"></progress>
+              <span class="cell-sub num">{{ row.progress.done|fa_number }} / {{ row.progress.total|fa_number }}</span>
+            {% endif %}
+          </td>
+          <td data-label="{% translate "Recipients" %}" class="num">{{ c.recipients|fa_number }}</td>
+          <td data-label="{% translate "Statuses" %}">
+            {% if c.counts %}
+              <div class="statusbar mini" aria-hidden="true">{% for status in status_order %}{% with n=c.counts|get:status %}{% if n %}<span class="sb-{{ status|status_tone }}" style="flex-grow: {{ n }}"></span>{% endif %}{% endwith %}{% endfor %}</div>
+              <ul class="legend">{% for status in status_order %}{% with n=c.counts|get:status %}{% if n %}<li class="sb-{{ status|status_tone }}">{{ status|status_label }} <span class="num">{{ n|fa_number }}</span></li>{% endif %}{% endwith %}{% endfor %}</ul>
+            {% else %}<span class="muted">{% translate "Nothing sent yet" %}</span>{% endif %}
+          </td>
+          <td data-label="{% translate "Last run" %}">{% if c.last_run_at %}<span class="num">{{ c.last_run_at|jalali }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td>{% if c.counts %}<a class="button small ghost" href="{% url 'report' c.slug %}">{% icon "chart-column" %}{% translate "Report" %}</a>{% endif %}
+            {% if not row.campaign and user|can:"edit_campaigns" %}
+              <form method="post" action="{% url 'campaign_adopt' c.slug %}" class="inline">{% csrf_token %}<button type="submit" class="small secondary">{% translate "Bring to the dashboard" %}</button></form>
+            {% endif %}</td>
+        </tr>
+      {% endwith %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="card-note">{% translate "No campaign matches these filters." %}</p>
+  {% endif %}
+  {% if pages > 1 %}
+  <nav class="pager" aria-label="{% translate "Pages" %}">
+    {% if page > 1 %}<a href="?view={{ view }}{% if stage %}&amp;stage={{ stage }}{% endif %}{% if query %}&amp;q={{ query|urlencode }}{% endif %}&amp;page={{ page|add:"-1" }}">{% translate "Previous" %}</a>{% endif %}
+    <span class="num">{{ page|fa_number }} / {{ pages|fa_number }}</span>
+    {% if page < pages %}<a href="?view={{ view }}{% if stage %}&amp;stage={{ stage }}{% endif %}{% if query %}&amp;q={{ query|urlencode }}{% endif %}&amp;page={{ page|add:"1" }}">{% translate "Next" %}</a>{% endif %}
+  </nav>
+  {% endif %}
+</section>
+{% else %}
+<div class="empty-state">
+  {% icon "megaphone" %}
+  <h2>{% translate "No campaigns yet" %}</h2>
+  <p>{% translate "A campaign sends one message to a segment: set its text, send a test SMS to yourself, then send." %}</p>
+  {% if user|can:"edit_campaigns" %}<div class="actions"><a class="button" href="{% url 'campaign_new' %}">{% icon "plus" %}{% translate "New campaign" %}</a>
+    {% if user|can:"manage_settings" %}<a class="button secondary" href="{% url 'campaign_import' %}">{% icon "upload" %}{% translate "Import the CLI's profiles" %}</a>{% endif %}</div>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

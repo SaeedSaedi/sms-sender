@@ -200,7 +200,7 @@ def test_a_campaign_the_command_line_made_comes_to_the_dashboard(world, open_as,
     store = StateStore(sandbox / "db" / "cli-7.db")
     store.bind_campaign("cli-7", {"template": "coin-price"})
     store.upsert_pending([(phone, phone) for phone in PHONES[:2]])
-    page = open_as(world.users["operator"], "/")
+    page = open_as(world.users["operator"], "/campaigns/")
     row = page.get_by_role("row").filter(has_text="cli-7")
     expect(row).to_contain_text(fa("Made with the command line"))
     with page.expect_navigation():

@@ -3,10 +3,11 @@
 {% if user|can:"view_campaigns" %}
 <p class="nav-group">{% translate "SMS sending" %}</p>
 <ul class="nav-list">
+  <li><a href="{% url 'home' %}"{% if nav_section == "control" %} aria-current="true"{% endif %}>{% icon "gauge" %}<span>{% translate "Control room" %}</span></a></li>
   {% if user|can:"run_campaigns" %}
     <li><a href="{% url 'compose_start' %}"{% if nav_section == "compose" %} aria-current="true"{% endif %}>{% icon "zap" %}<span>{% translate "New alert" %}</span></a></li>
   {% endif %}
-  <li><a href="{% url 'home' %}"{% if nav_section == "campaigns" %} aria-current="true"{% endif %}>{% icon "megaphone" %}<span>{% translate "Campaigns" %}</span></a></li>
+  <li><a href="{% url 'campaign_list' %}"{% if nav_section == "campaigns" %} aria-current="true"{% endif %}>{% icon "megaphone" %}<span>{% translate "Campaigns" %}</span></a></li>
   <li><a href="{% url 'preset_list' %}"{% if nav_section == "presets" %} aria-current="true"{% endif %}>{% icon "layers" %}<span>{% translate "Presets" %}</span></a></li>
   <li><a href="{% url 'segment_list' %}"{% if nav_section == "segments" %} aria-current="true"{% endif %}>{% icon "users" %}<span>{% translate "Segments" %}</span></a></li>
   <li><a href="{% url 'template_list' %}"{% if nav_section == "templates" %} aria-current="true"{% endif %}>{% icon "file-text" %}<span>{% translate "Templates" %}</span></a></li>

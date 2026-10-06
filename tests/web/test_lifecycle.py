@@ -143,7 +143,7 @@ def test_notes_and_results_read_in_persian(world):
 
 
 def test_the_overview_counts_stages_and_lists_what_needs_attention(world, operator_client):
-    html = operator_client.get("/").content.decode()
+    html = operator_client.get("/campaigns/").content.decode()
     tiles = html.split('class="figures overview"')[1].split("</ul>")[0]
     assert '<span class="figure-label">متوقف با خطا</span><span class="figure-value num">۱</span>' in tiles
     assert '<span class="figure-label">در انتظار تأیید</span><span class="figure-value num">۱</span>' in tiles

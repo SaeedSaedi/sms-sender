@@ -24,7 +24,7 @@ def world(sandbox):
 def test_an_admin_imports_the_profiles_as_drafts(world, open_as, tmp_path, width):
     toml = tmp_path / "sms-sender.toml"
     toml.write_text(PROFILES, encoding="utf-8")
-    page = open_as(world.users["admin"], "/", width)
+    page = open_as(world.users["admin"], "/campaigns/", width)
     page.get_by_role("link", name=fa("Import the CLI's profiles"), exact=True).click()
     page.get_by_label(fa("Profiles file (sms-sender.toml)"), exact=True).set_input_files(str(toml))
     page.get_by_role("button", name=fa("Read the profiles"), exact=True).click()
