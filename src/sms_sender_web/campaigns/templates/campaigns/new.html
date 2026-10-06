@@ -9,7 +9,7 @@
 {% block content %}
 <section class="card medium">
   <h1>{% translate "New campaign" %}</h1>
-  <form method="post">
+  <form method="post" data-validate>
     {% csrf_token %}
     <label for="id_name">{% translate "Name" %}</label>
     <input id="id_name" name="name" type="text" maxlength="200" required value="{{ form.name.value|default:'' }}"{% aria form.name %}>

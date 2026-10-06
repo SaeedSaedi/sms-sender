@@ -1853,3 +1853,6 @@ kbd {
 .attention-list li.is-first.tone-danger { border-color: var(--danger-border); background: var(--danger-soft); }
 .attention-list li.is-first > .button { grid-column: 1 / -1; justify-self: start; margin-block-start: var(--s-2); }
 .figure-sub.trend { font-weight: 650; }
+/* A toast that can take its action back (undo.py): the button beside the words. */
+.callout > form.toast-undo { flex: none; margin: 0; }
+.callout > form.toast-undo button { margin: 0; }

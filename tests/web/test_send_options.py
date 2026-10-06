@@ -146,7 +146,8 @@ def test_cancelling_the_schedule_cancels_no_one(world, verified):
     job = send_job("scheduled")
     client.post("/campaigns/scheduled/unschedule/", {"job": job.pk})
     job.refresh_from_db()
-    assert job.state == Job.State.CANCELLED and job.result == {"withdrawn": True}
+    # Withdrawn (nobody cancelled), and marked as unscheduled, so it can be undone (plan 06, L6).
+    assert job.state == Job.State.CANCELLED and job.result == {"withdrawn": True, "unscheduled": True}
     assert counts(campaign) == before
     # Approved still: it can be sent now, or set for another time.
     assert lifecycle(campaign).stage == "approved" and services.settings_locked(campaign) == ""

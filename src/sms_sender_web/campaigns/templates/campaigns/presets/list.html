@@ -20,7 +20,9 @@
       <p class="muted">{% if p.alerts %}<a href="{% url 'series_detail' p.slug %}">{{ p.series }}</a>{% else %}{{ p.series }}{% endif %}</p>
       <div class="actions">
         {% if user|can:"run_campaigns" %}<a class="button" href="{% url 'compose' p.slug %}">{% icon "zap" %}{% translate "New alert" %}</a>{% endif %}
-        {% if user|can:"edit_campaigns" %}<a class="button secondary" href="{% url 'preset_edit' p.slug %}">{% icon "settings" %}{% translate "Edit" %}</a>{% endif %}
+        {% if user|can:"edit_campaigns" %}<a class="button secondary" href="{% url 'preset_edit' p.slug %}">{% icon "settings" %}{% translate "Edit" %}</a>
+          {# No new alerts from it; its series stays. No confirmation: «واگرد» takes it back. #}
+          <form method="post" action="{% url 'preset_archive' p.slug %}" class="inline">{% csrf_token %}<button type="submit" class="small ghost">{% translate "Put it away" %}</button></form>{% endif %}
       </div>
     </li>
   {% endfor %}

@@ -24,6 +24,7 @@ from django_otp import login as otp_login
 from django_otp import user_has_device
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
+from .. import live
 from ..audit.models import AuditEvent
 from ..audit.record import record
 from ..dashboard.templatetags.fa import fa_digits
@@ -248,6 +249,8 @@ def my_account(request):
     if request.method == "POST" and not sends_tests:
         return forbidden(request)
     form = TestPhoneForm(request.POST or None, initial={"test_phone": profile.test_phone})
+    if live.validating(request):  # as someone types: the errors, nothing saved
+        return live.errors(form)
     if request.method == "POST" and form.is_valid():
         phone = form.cleaned_data["test_phone"]
         if phone != profile.test_phone:

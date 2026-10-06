@@ -14,7 +14,7 @@
   {% if sends_tests %}
   <h2>{% translate "Your number for test SMS" %}</h2>
   <p>{% translate "Before a campaign sends, its test SMS goes to this number, and only to it, so you can see the final text." %}</p>
-  <form method="post">
+  <form method="post" data-validate>
     {% csrf_token %}
     <label for="id_test_phone">{% translate "Mobile number" %}</label>
     <input id="id_test_phone" name="test_phone" type="text" dir="ltr" inputmode="tel" data-cli="send --test-number"

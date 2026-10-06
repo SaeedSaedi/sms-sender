@@ -9,6 +9,7 @@ from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
 from django.views.decorators.http import require_http_methods, require_POST
 
+from .. import live
 from ..accounts.decorators import requires
 from ..audit.record import record
 from ..jobs.models import Campaign
@@ -72,6 +73,8 @@ def template_list(request):
 def template_edit(request, pk: int | None = None):
     template = get_object_or_404(MessageTemplate, pk=pk) if pk else None
     form = TemplateForm(request.POST or None, instance=template)
+    if live.validating(request):  # as someone types: the errors, nothing saved
+        return live.errors(form)
     if request.method == "POST" and form.is_valid():
         saved = form.save(commit=False)
         saved.updated_by = request.user

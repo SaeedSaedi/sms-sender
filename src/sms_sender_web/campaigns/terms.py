@@ -67,6 +67,7 @@ CONFLICTS = {
     "settings_changed": _("The settings changed after the test SMS. Send a new test SMS and approve it."),
     "not_decidable": _("This test SMS can't be approved or rejected now."),
     "not_scheduled": _("This send isn't waiting for a set time any more."),
+    "too_late": _("It's too late to undo that: set the send's time again."),
     "send_on_its_way": _("A send is on its way. Change the list after it ends."),
     "not_needed": _("Nothing has gone out yet, so the settings can change as they are."),
     "requeue_while_sending": _("A send is on its way. Queue recipients again after it ends."),

@@ -10,6 +10,7 @@
 // - HTMX: a lost connection or a stale page says so, instead of freezing.
 // - Ctrl+K (Cmd+K on a Mac) goes to any page, campaign, segment or preset.
 // - A slow page shows a bar at the top; a part refreshing as you type shimmers.
+// - Forms marked data-validate check themselves as you type.
 (() => {
   "use strict";
 
@@ -343,7 +344,8 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("[data-toast]").forEach((toast) => {
-      let timer = setTimeout(() => leave(toast), 8000);
+      // One that offers «واگرد» stays a little longer, so there's time to use it.
+      let timer = setTimeout(() => leave(toast), toast.hasAttribute("data-undo") ? 15000 : 8000);
       const hold = () => { clearTimeout(timer); };
       const release = () => { timer = setTimeout(() => leave(toast), 4000); };
       toast.addEventListener("mouseenter", hold);
@@ -399,6 +401,115 @@
     event.preventDefault();
     primary.click();
   });
+
+  // ---------- validation as you type (plan 06, L6) ----------
+  //
+  // A form marked data-validate posts itself (its files left out) with
+  // X-Validate while someone types; its view answers with the form's own
+  // errors as JSON (live.py). They fill the same boxes a submit would
+  // (ui/field_errors.html renders one per field, hidden while empty), with
+  // aria-invalid and aria-describedby on the field. A field speaks up only
+  // once it has been typed in and left, or changed: nobody is told off
+  // before they've begun. Errors a submit showed count as begun.
+
+  function setupValidation(form) {
+    const dirty = new Set();     // fields typed in
+    const touched = new Set();   // fields typed in and left, or changed
+    const touchedParts = new Set();
+    let timer = null;
+    let asked = 0;
+
+    const part = (el) => el.closest(".form-section, fieldset") || form;
+    const nameOf = (box) => box.id.slice(3, -6); // id_<name>_error
+
+    function touch(el) {
+      if (!el.name || el.type === "file" || el.type === "hidden") return false;
+      touched.add(el.name);
+      touchedParts.add(part(el));
+      return true;
+    }
+
+    function inputsOf(name) {
+      const field = form.elements.namedItem(name);
+      if (!field) return [];
+      return typeof field.length === "number" && !field.tagName ? Array.from(field) : [field];
+    }
+
+    function show(box, messages) {
+      const name = nameOf(box);
+      const inputs = inputsOf(name);
+      if (inputs.some((input) => input.type === "file")) return; // files are checked on submit
+      // A field speaks for itself; a combined one with no input of its own
+      // (the settings' sending window, its rate) for the section it's in.
+      const begun = touched.has(name) || (!inputs.length && touchedParts.has(part(box)));
+      if (messages.length && !begun) return;
+      box.replaceChildren(...messages.map((text) => {
+        const line = document.createElement("p");
+        line.className = "error";
+        line.textContent = text;
+        return line;
+      }));
+      box.hidden = messages.length === 0;
+      inputs.forEach((input) => {
+        const ids = new Set((input.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean));
+        if (messages.length) {
+          input.setAttribute("aria-invalid", "true");
+          ids.add(box.id);
+        } else {
+          input.removeAttribute("aria-invalid");
+          ids.delete(box.id);
+        }
+        if (ids.size) input.setAttribute("aria-describedby", Array.from(ids).join(" "));
+        else input.removeAttribute("aria-describedby");
+      });
+    }
+
+    function validate() {
+      const data = new FormData(form);
+      Array.from(form.elements).forEach((el) => { if (el.type === "file" && el.name) data.delete(el.name); });
+      const mine = ++asked;
+      fetch(form.getAttribute("action") || window.location.href, {
+        method: "POST", body: data, credentials: "same-origin",
+        headers: { "X-Validate": "1", Accept: "application/json" },
+      })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((answer) => {
+          if (!answer || mine !== asked) return; // a newer question is on its way
+          const errors = answer.errors || {};
+          form.querySelectorAll(".field-errors[id^='id_'][id$='_error']").forEach((box) => {
+            show(box, errors[nameOf(box)] || []);
+          });
+        })
+        .catch(() => {}); // the submit still checks everything
+    }
+
+    function soon() {
+      clearTimeout(timer);
+      timer = setTimeout(validate, 450);
+    }
+
+    // What a submit already flagged counts as begun, so fixing it clears it.
+    form.querySelectorAll(".field-errors:not([hidden])").forEach((box) => {
+      touched.add(nameOf(box));
+      touchedParts.add(part(box));
+    });
+    form.addEventListener("input", (event) => {
+      const el = event.target;
+      if (!el.name) return;
+      dirty.add(el.name);
+      if (touched.has(el.name)) soon();
+    });
+    form.addEventListener("focusout", (event) => {
+      const el = event.target;
+      if (el.name && dirty.has(el.name) && touch(el)) soon();
+    });
+    form.addEventListener("change", (event) => {
+      const el = event.target;
+      if ((el.type === "checkbox" || el.type === "radio" || el.tagName === "SELECT") && touch(el)) soon();
+    });
+  }
+
+  document.querySelectorAll("form[data-validate]").forEach(setupValidation);
 
   // ---------- a page that takes a moment: the bar at the top (v3) ----------
   //

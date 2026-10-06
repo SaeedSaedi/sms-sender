@@ -1,8 +1,13 @@
-"""Plan 05, P6: a 100,000-recipient campaign stays quick. The report, its
-filters and search, the downloads, analytics (with its series and
-audience) and the campaign's ready step
-each answer within BUDGET seconds (they took 0.1-0.8 s on the development
-machine). Opt-in: pytest -m perf."""
+"""Plan 05, P6, and plan 06, L6: the dashboard stays quick.
+
+- A 100,000-recipient campaign: the report, its filters and search, the
+  downloads, analytics (with its series and audience), the composer and
+  the campaign's ready step each answer within BUDGET (1 s; they took
+  0.1-0.6 s on the development machine).
+- Every page of the test world (tests/web/world.py), as the person it's
+  for, answers within COMMON_BUDGET (300 ms).
+
+Opt-in: pytest -m perf."""
 from __future__ import annotations
 
 import time
@@ -21,7 +26,8 @@ from sms_sender_web.segments.models import Segment  # noqa: E402
 pytestmark = [pytest.mark.perf, pytest.mark.django_db]
 
 N = 100_000
-BUDGET = 2.0  # seconds a page may take
+BUDGET = 1.0  # seconds a 100,000-recipient page may take
+COMMON_BUDGET = 0.3  # seconds any other page may take (plan 06, L6)
 
 
 @pytest.fixture
@@ -119,3 +125,44 @@ def test_a_hundred_thousand_recipients_stay_quick(big, admin_client, label, call
         times.append(time.perf_counter() - started)
         assert response.status_code == 200, label
     assert min(times) < BUDGET, f"{label}: {', '.join(f'{t:.2f}s' for t in times)}"
+
+
+@pytest.fixture
+def world(settings, tmp_path):
+    from .world import build_world
+
+    settings.SANDBOX = True
+    settings.DATA_DIR = tmp_path
+    settings.SMS_SENDER_DB_DIR = tmp_path / "db"
+    return build_world(tmp_path)
+
+
+def test_every_common_page_is_quick(world, verified):
+    """Each page of the test world, opened as the person it's for ("role",
+    or "role:password" before the second step), the best of three under
+    COMMON_BUDGET."""
+    clients = {None: Client()}
+
+    def client_for(spec):
+        if spec not in clients:
+            name, _, mode = spec.partition(":")
+            client, user = Client(), world.users[name]
+            if mode != "password" and name in ("operator", "admin"):
+                verified(client, user)
+            else:
+                client.force_login(user)
+            clients[spec] = client
+        return clients[spec]
+
+    slow = []
+    for name, (path, spec) in world.pages.items():
+        client = client_for(spec)
+        times = []
+        for _ in range(3):
+            started = time.perf_counter()
+            response = client.get(path)
+            times.append(time.perf_counter() - started)
+        assert response.status_code < 500, f"{name}: {response.status_code}"  # the world's 403 and 404 pages too
+        if min(times) >= COMMON_BUDGET:
+            slow.append(f"{name} {path}: {min(times):.3f}s")
+    assert slow == []

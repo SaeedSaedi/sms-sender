@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings as django_settings
@@ -315,12 +316,31 @@ def unschedule(job: Job) -> Job:
     if job.kind != Job.Kind.SEND or job.not_before is None:
         raise JobConflict("not_scheduled")
     changed = Job.objects.filter(pk=job.pk, state=Job.State.QUEUED, not_before__gt=timezone.now()).update(
-        state=Job.State.CANCELLED, finished_at=timezone.now(), result={"withdrawn": True},
+        state=Job.State.CANCELLED, finished_at=timezone.now(), result={"withdrawn": True, "unscheduled": True},
     )
     if not changed:
         raise JobConflict("not_scheduled")
     job.refresh_from_db()
     return job
+
+
+UNDO_WITHIN = timedelta(minutes=10)
+
+
+def reschedule(campaign: Campaign, user, now=None) -> Job:
+    """Undo an unschedule (plan 06, L6): the send set again for the time it
+    had, through start_send, so every gate is checked again (the approval
+    for these exact settings, the hold). Only soon after, and only while
+    that time is still ahead."""
+    now = now or timezone.now()
+    withdrawn = (
+        Job.objects.filter(campaign=campaign, kind=Job.Kind.SEND, state=Job.State.CANCELLED,
+                           result__unscheduled=True, finished_at__gte=now - UNDO_WITHIN)
+        .order_by("-finished_at", "-id").first()
+    )
+    if withdrawn is None or withdrawn.not_before is None or withdrawn.not_before <= now:
+        raise JobConflict("too_late")
+    return start_send(campaign, user, at=withdrawn.not_before, smoke_test=bool(withdrawn.params.get("smoke_test")))
 
 
 def start_now(job: Job) -> Job:

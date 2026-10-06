@@ -64,10 +64,21 @@ class UploadForm(forms.Form):
     slug = forms.CharField(max_length=64, required=False)
     file = forms.FileField()
 
+    def clean_slug(self) -> str:
+        """A short name typed here is checked on its own, so it's checked as
+        you type too (live.py); an empty one comes from the file's name."""
+        typed = (self.cleaned_data.get("slug") or "").strip()
+        if not typed:
+            return ""
+        slug = clean_slug(typed)
+        if Segment.objects.filter(slug=slug).exists():
+            raise forms.ValidationError(_("A segment with this short name already exists. Choose another."))
+        return slug
+
     def clean(self):
         data = super().clean()
         upload = data.get("file")
-        if upload is None:
+        if upload is None or self.has_error("slug"):
             return data
         if Path(upload.name).suffix.lower() not in (".csv", ".txt"):
             self.add_error("file", _("Upload a CSV or TXT file. In Excel, use “Save as” → “CSV UTF-8”."))

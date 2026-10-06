@@ -25,6 +25,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from sms_sender.input_loader import SLUG_RE
 from sms_sender.sender import TOKEN_MAX_SPACES
 
+from .. import live, undo
 from ..accounts.decorators import requires
 from ..accounts.roles import can
 from ..audit.record import record
@@ -150,6 +151,8 @@ def _edit(request, preset: Preset | None):
         "name": preset.name if preset else "", "slug": "", "name_pattern": preset.name_pattern if preset else "",
         **{f"{name}_label": (preset.labels if preset else {}).get(name, "") for name in TOKENS},
     })
+    if live.validating(request):  # as someone types: the errors, nothing saved
+        return live.errors(form, fields)
     if posting and form.is_valid() & fields.is_valid():  # both, so each shows its errors
         target = preset or Preset(slug=fields.cleaned_data["slug"], created_by=request.user)
         target.name = fields.cleaned_data["name"]
@@ -218,5 +221,8 @@ def preset_archive(request, slug: str):
     preset.archived_at = None if restoring else timezone.now()
     preset.save(update_fields=["archived_at", "updated_at"])
     record("preset_restored" if restoring else "preset_archived", request=request, preset=slug)
-    messages.success(request, _("The preset is back.") if restoring else _("The preset is put away. Its alerts stay."))
+    if restoring:
+        messages.success(request, _("The preset is back."))
+    else:  # safe to take back: offer it
+        undo.offer(request, _("The preset is put away. Its alerts stay."), reverse("preset_archive", args=[slug]))
     return redirect("preset_list")

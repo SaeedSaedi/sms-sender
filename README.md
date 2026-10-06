@@ -441,6 +441,9 @@ internal, multi-user tool built with Django and HTMX. So far it has:
   the Solar Hijri month;
 - **a send as it goes**: its pace, time left and a bar per segment; after it,
   how many were delivered;
+- forms that check themselves as you type, with the same messages a submit
+  gives, and «واگرد» (undo) after putting a preset away or taking a send off
+  its schedule;
 - **a new alert in one page** («هشدار تازه»), for messages you send again
   and again:
   - A **preset** («پیش‌تنظیم») keeps a message's template, what fills each

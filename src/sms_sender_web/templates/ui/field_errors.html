@@ -1,1 +1,1 @@
-{% load fa %}{% if field.errors %}<div class="field-errors" id="{{ field.id_for_label }}_error"{% if alert %} role="alert"{% endif %}>{% for error in field.errors %}<p class="error">{{ error|fa_digits }}</p>{% endfor %}</div>{% endif %}
+{% load fa %}{# Always there, hidden while empty: live validation (app.js) fills it as someone types. #}<div class="field-errors" id="{{ field.id_for_label }}_error"{% if field.errors %}{% if alert %} role="alert"{% endif %}{% else %} hidden{% endif %}>{% for error in field.errors %}<p class="error">{{ error|fa_digits }}</p>{% endfor %}</div>
