@@ -1,0 +1,7 @@
+{% load i18n fa roles ui %}
+<h2>{% icon "history" %}{% translate "Phone numbers removed" %}</h2>
+<div class="callout">{% icon "info" %}<p>{{ numbers_removed_line }}</p></div>
+<p class="form-actions">
+  <a class="button secondary" href="{% url 'report' campaign.slug %}">{% icon "chart-column" %}{% translate "Report" %}</a>
+  {% if user|can:"edit_campaigns" %}<a class="button secondary" href="{% url 'campaign_duplicate' campaign.slug %}">{% icon "copy" %}{% translate "Duplicate" %}</a>{% endif %}
+</p>

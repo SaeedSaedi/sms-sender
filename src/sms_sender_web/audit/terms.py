@@ -57,6 +57,7 @@ ACTION_LABELS = {
     "api_called": _("Attribution API called"),
     "system_settings_changed": _("System settings changed"),
     "backup_made": _("Backup made"),
+    "numbers_removed": _("Old phone numbers removed"),
     "backup_verified": _("Backup checked"),
     "campaign_purged": _("Campaign and its records deleted"),
     "campaign_adopted": _("CLI campaign brought to the dashboard"),
@@ -137,6 +138,16 @@ def describe(event) -> str:
     if event.action == "system_settings_changed" and "second_approver" in d:
         return gettext_now("a second person approves test SMS") if d["second_approver"] \
             else gettext_now("whoever asks for a test SMS may approve it")
+    if event.action == "system_settings_changed" and d.get("retention_months"):
+        change = d["retention_months"]
+        return format_html(gettext_now("phone numbers kept: from {before} to {after} months"),
+                           before=fa_number(change.get("before", 0)), after=fa_number(change.get("after", 0)))
+    if event.action == "numbers_removed":
+        return format_html(
+            gettext_now("older than {months} months: {campaigns} campaigns, {segments} segment files, {backups} backups"),
+            months=fa_number(d.get("months", 0)), campaigns=fa_number(d.get("campaigns", 0)),
+            segments=fa_number(d.get("segments", 0)), backups=fa_number(d.get("backups", 0)),
+        )
     if event.action == "api_called":
         return format_html("{} · {}", _who(d.get("path", "")), fa_number(d.get("rows", 0)))
     if event.action == "conversions_imported":

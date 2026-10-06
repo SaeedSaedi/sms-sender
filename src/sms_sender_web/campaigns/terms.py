@@ -23,6 +23,7 @@ STOP_REASONS = {
     "provider_unreachable": _("Kavenegar didn't answer. Try again in a moment."),
     "busy": _("Another process is sending this campaign right now."),
     "settings_mismatch": _("This campaign's settings don't match what it sent before."),
+    "numbers_removed": _("This campaign's phone numbers were removed, so it can't send again. To send its message once more, duplicate it."),
     "not_approved": _("The settings changed after the test SMS was approved, so nothing was sent. Send a new test SMS."),
     "input_unreadable": _("The segment's file couldn't be read."),
     "crashed": _("The run stopped on an unexpected error. The details are in the system log."),
@@ -69,6 +70,7 @@ CONFLICTS = {
     "own_test": _("Someone else approves this test SMS, since you asked for it. You can still reject it."),
     "not_scheduled": _("This send isn't waiting for a set time any more."),
     "too_late": _("It's too late to undo that: set the send's time again."),
+    "numbers_removed": _("This campaign's phone numbers were removed, so it can't send again. To send its message once more, duplicate it."),
     "send_on_its_way": _("A send is on its way. Change the list after it ends."),
     "not_needed": _("Nothing has gone out yet, so the settings can change as they are."),
     "requeue_while_sending": _("A send is on its way. Queue recipients again after it ends."),
@@ -321,6 +323,8 @@ COUNTS = {
     "invalid": _("{n} rows aren't valid numbers and are skipped"),
 }
 TEST_HINT = _("It goes to your own number, {phone}. Ctrl+Enter does the same.")
+# Plan 06, D2: a campaign whose numbers were removed.
+NUMBERS_REMOVED = _("Its phone numbers were removed on {when}: numbers are kept for {months} months after a campaign's last send. Its counts, costs, deliveries and clicks stay, and it can't send again. To send its message once more, duplicate it.")
 TEST_HINT_TEAM = _("It goes to your own number, {phone}, then to the team's numbers ({n}). Ctrl+Enter does the same.")
 SAMPLE_LINE = _("Recipient {n} of {count}")
 SAMPLE_MISSING = _("{phone} isn't among these segments' recipients.")

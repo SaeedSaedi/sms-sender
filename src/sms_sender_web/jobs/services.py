@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 
 from django.conf import settings as django_settings
@@ -34,7 +34,7 @@ class JobConflict(Exception):
     """The action can't be done right now. `code` picks the Persian message:
     busy, no_test_number, send_active, test_active, not_approved,
     settings_changed, not_decidable, own_test, not_scheduled, send_on_its_way,
-    not_needed, requeue_while_sending, held, too_late."""
+    not_needed, requeue_while_sending, held, too_late, numbers_removed."""
 
     def __init__(self, code: str, detail: str = ""):
         super().__init__(detail or code)
@@ -120,6 +120,19 @@ def settings_hash(campaign: Campaign) -> str:
     return hashlib.sha256(json.dumps(approved, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+def numbers_removed(campaign: Campaign) -> datetime | None:
+    """When the campaign's phone numbers were removed (plan 06, D2), or
+    None. It never sends again: it no longer knows who it sent to."""
+    db = campaign_db(campaign)
+    at = StateStore(db).numbers_removed_at() if db.exists() else None  # never creates the DB
+    return datetime.fromtimestamp(at, tz=dt_timezone.utc) if at else None
+
+
+def _refuse_when_numbers_removed(campaign: Campaign) -> None:
+    if numbers_removed(campaign):
+        raise JobConflict("numbers_removed")
+
+
 def may_have_sent(campaign: Campaign) -> bool:
     db = campaign_db(campaign)
     return db.exists() and StateStore(db).may_have_sent()  # never creates the DB
@@ -142,6 +155,8 @@ def settings_locked(campaign: Campaign, user=None) -> str:
     - "waiting": a send is on its way, though nothing has gone out yet.
     A send that failed before sending anything locks nothing, so a wrong
     template can still be fixed."""
+    if numbers_removed(campaign):
+        return "numbers_removed"
     active = Job.objects.filter(campaign=campaign, kind=Job.Kind.SEND, state__in=ACTIVE)
     if active.filter(state=Job.State.QUEUED, not_before__gt=timezone.now()).exists():
         return "scheduled"
@@ -166,7 +181,8 @@ def can_unlock(campaign: Campaign) -> bool:
     busy = Job.objects.filter(
         campaign=campaign, kind=Job.Kind.SEND, state__in=(Job.State.QUEUED, Job.State.RUNNING),
     ).exists()
-    return not busy and may_have_sent(campaign) and not message_unlocked(campaign)
+    return (not busy and may_have_sent(campaign) and not message_unlocked(campaign)
+            and not numbers_removed(campaign))
 
 
 def unlock_message(campaign: Campaign, user) -> tuple[str, list[int]]:
@@ -215,6 +231,7 @@ def requeue(campaign: Campaign, status: str) -> tuple[int, str | None]:
     backup changes nothing). Returns (rows, backup name)."""
     if status not in REQUEUE:
         raise ValueError(status)
+    _refuse_when_numbers_removed(campaign)
     if Job.objects.filter(campaign=campaign, kind=Job.Kind.SEND, state__in=ACTIVE).exists():
         raise JobConflict("requeue_while_sending")
     db = campaign_db(campaign)
@@ -257,6 +274,7 @@ def request_test(campaign: Campaign, user, *, parts: int | None = None) -> Job:
     or running is returned. `parts`: the message's SMS parts, when the
     template's text is known, so its cost gives a price per part for
     estimates."""
+    _refuse_when_numbers_removed(campaign)
     phone = test_phone_of(user)
     if not phone:
         raise JobConflict("no_test_number")
@@ -317,6 +335,7 @@ def start_send(campaign: Campaign, user, *, at=None, smoke_test: bool = False) -
     instead (the worker leaves it queued until that time). `smoke_test`:
     send to one recipient first, and stop if that SMS doesn't go out."""
     _refuse_while_held()
+    _refuse_when_numbers_removed(campaign)
     test = approval(campaign)
     if test is None:
         latest = latest_test(campaign)

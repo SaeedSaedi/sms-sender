@@ -29,6 +29,7 @@ RULES = (
     _("Numbers on the suppression list get no SMS."),
     _("When a system admin sets a frequency cap, nobody gets more campaign SMS than it allows."),
     _("Every short link is made before the first SMS. If one can't be made, nothing is sent."),
+    _("Phone numbers are kept for {months} months after a campaign's last send, then removed: its counts stay, and it can't send again."),
     _("A test SMS goes only to your own number and to the team's numbers a system admin keeps. Settings changed after its approval need a new test."),
 )
 

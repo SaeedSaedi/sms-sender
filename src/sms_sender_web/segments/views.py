@@ -16,6 +16,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from .. import live
 from ..accounts.decorators import requires
 from ..audit.record import record
+from ..dashboard.templatetags.fa import jalali
 from sms_sender.input_loader import SLUG_RE
 from sms_sender.state import StateStore
 
@@ -160,6 +161,11 @@ def segment_detail(request, slug: str):
                                                         **segment_steps(request)})
     return render(request, "segments/detail.html", {
         "segment": segment,
+        # Plan 06, D2: its file went, its counts stay.
+        "removed": segment.status == Segment.Status.REMOVED,
+        "removed_line": _(
+            "Its file was removed on %(when)s: it held phone numbers older than they're kept. Its counts stay."
+        ) % {"when": jalali(segment.numbers_removed_at, "%Y/%m/%d")} if segment.numbers_removed_at else "",
         "summary": segment.summary,
         "used_by": campaigns_using(segment),
         "replace_blocked": _replace_blocked(segment),

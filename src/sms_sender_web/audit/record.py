@@ -19,6 +19,7 @@ ACTIONS = (
     "preset_created", "preset_changed", "preset_archived", "preset_restored",
     "job_requested", "job_paused", "job_resumed", "job_cancelled",
     "phone_revealed", "report_downloaded", "number_looked_up",
+    "numbers_removed",
 )
 
 

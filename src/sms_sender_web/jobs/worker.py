@@ -44,7 +44,7 @@ from sms_sender.locking import RunLock, RunLockError
 from sms_sender.reconcile import DEFAULT_MIN_AGE_SEC, REQUEUE_NOT_FOUND, reconcile_unknown
 from sms_sender.notify import notify_text
 from sms_sender.sharing import clear_heartbeat, foreign_worker, write_heartbeat
-from sms_sender.state import CampaignMismatchError
+from sms_sender.state import CampaignMismatchError, NumbersRemovedError
 from sms_sender.window import DEFAULT_WINDOW, now_tehran, parse_window
 
 from .engine import Engine, campaign_db
@@ -196,6 +196,8 @@ class Worker:
         self._backup: threading.Thread | None = None
         self._backup_retry_at: datetime | None = None
         self._backup_failing = False
+        self._retention: threading.Thread | None = None
+        self._retention_retry_at: datetime | None = None
 
     def beat(self) -> None:
         WorkerBeat.objects.update_or_create(worker_id=self.id, defaults={"seen_at": timezone.now()})
@@ -268,13 +270,17 @@ class Worker:
                 self.schedule()
                 self.resume_when_window_opens()
                 self.back_up_if_due()
+                self.remove_old_numbers_if_due()
             except Exception:  # noqa: BLE001 — keep the worker alive
                 logger.exception("worker_error", extra={"worker": self.id})
             self.stop.wait(poll_sec)
         for lane in lanes:
             lane.join()  # each lets its job requeue itself (shutdown) first
-        if self._backup is not None:
-            self._backup.join()  # a half-made backup would only be thrown away
+        # A half-made backup would only be thrown away; the daily removal
+        # finishes the campaign DB it's on.
+        for thread in (self._backup, self._retention):
+            if thread is not None:
+                thread.join()
         self.sign_off()
         logger.info("worker_stopped", extra={"worker": self.id})
 
@@ -378,6 +384,10 @@ class Worker:
             if not test:
                 _announce_failure(job, why)
             return Job.State.FAILED, {"stop_reason": "busy"}, why
+        except NumbersRemovedError as e:
+            if not test:
+                _announce_failure(job, "its phone numbers were removed (they're kept for a limited time)")
+            return Job.State.FAILED, {"stop_reason": "numbers_removed"}, str(e)
         except CampaignMismatchError as e:
             if not test:
                 _announce_failure(job, f"the campaign's records were sent with other settings ({e})")
@@ -544,6 +554,35 @@ class Worker:
             self._backup_retry_at, self._backup_failing = None, False
             logger.info("backup_made", extra={"backup": result.path.name, "files": result.files,
                                               "pruned": len(result.pruned)})
+
+    def remove_old_numbers_if_due(self, now: datetime | None = None) -> threading.Thread | None:
+        """Once a day (plan 06, D2), in a thread of its own: the numbers older
+        than the system setting go (retention.py)."""
+        from .. import retention
+
+        now = now or timezone.now()
+        if self._retention is not None and self._retention.is_alive():
+            return None
+        if self._retention_retry_at is not None and now < self._retention_retry_at:
+            return None
+        if not retention.due(now):
+            return None
+        self._retention = threading.Thread(target=self._remove_old_numbers, name="retention")
+        self._retention.start()
+        return self._retention
+
+    def _remove_old_numbers(self) -> None:
+        from .. import retention
+
+        try:
+            retention.run_and_record()
+        except Exception:  # noqa: BLE001 — tried again in an hour
+            logger.exception("retention_failed", extra={"worker": self.id})
+            self._retention_retry_at = timezone.now() + retention.RETRY
+        else:
+            self._retention_retry_at = None
+        finally:
+            connection.close()
 
     def _enqueue_if_due(self, campaign: Campaign, kind: str, every: timedelta) -> None:
         jobs = Job.objects.filter(campaign=campaign, kind=kind)

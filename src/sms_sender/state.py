@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import sqlite3
 import threading
 import time
@@ -135,6 +136,28 @@ class StateSchemaError(RuntimeError):
 
 class CampaignMismatchError(ValueError):
     """The DB belongs to another campaign, or was sent with other settings."""
+
+
+class NumbersRemovedError(CampaignMismatchError):
+    """The DB's phone numbers were removed (plan 06, D2): it no longer knows
+    who it sent to, so it never sends again."""
+
+
+# Plan 06, D2: once a campaign is old enough, every phone number in its DB
+# becomes a placeholder (`removed:000001`, the same one wherever the same
+# number was), so the counts stay and the numbers don't.
+REMOVED = "removed:"
+# A mobile number inside free text (errors, call details): ASCII, Persian or
+# Arabic-Indic digits, with or without the country code.
+_DIGIT = "[0-9\u06f0-\u06f9\u0660-\u0669]"
+_PHONE_IN_TEXT = re.compile(
+    f"(?<!{_DIGIT})(?:(?:\\+|00)?(?:98|\u06f9\u06f8)|[0\u06f0\u0660])?[9\u06f9\u0669]{_DIGIT}{{9}}(?!{_DIGIT})"
+)
+
+
+def scrub_numbers(text: str | None) -> str | None:
+    """`text` with every mobile number in it replaced by ***."""
+    return _PHONE_IN_TEXT.sub("***", text) if text else text
 
 
 # Status values
@@ -483,6 +506,7 @@ class StateStore:
             return 0
         now = time.time()
         with self._tx() as conn:
+            self._refuse_if_numbers_removed(conn)
             before = conn.total_changes
             conn.executemany(
                 "INSERT OR IGNORE INTO recipients "
@@ -758,6 +782,8 @@ class StateStore:
         with `allow_change`. Returns the names of changed settings.
         """
         with self._tx() as conn:
+            self._refuse_if_numbers_removed(conn)
+
             def get(key: str) -> str | None:
                 row = conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
                 return row["value"] if row else None
@@ -793,6 +819,113 @@ class StateStore:
                 )
             put("settings", encoded)
             return changed
+
+    # ---------- removing the numbers (plan 06, D2) ----------
+
+    def numbers_removed_at(self) -> float | None:
+        """When this DB's phone numbers were removed (unix time), or None."""
+        value = self.get_meta("numbers_removed_at")
+        return float(value) if value else None
+
+    def _refuse_if_numbers_removed(self, conn: sqlite3.Connection) -> None:
+        row = conn.execute("SELECT value FROM meta WHERE key='numbers_removed_at'").fetchone()
+        if row:
+            when = time.strftime("%Y-%m-%d", time.localtime(float(row["value"])))
+            raise NumbersRemovedError(
+                f"{self.db_path}: its phone numbers were removed on {when} (they're kept for a "
+                "limited time), so it no longer knows who it sent to and never sends again. "
+                "Start a new campaign."
+            )
+
+    def segments_active_since(self, since: float) -> set[str]:
+        """Segments whose recipients were added here, or sent to, since then."""
+        rows = self._conn().execute(
+            "SELECT DISTINCT segment FROM recipients WHERE segment IS NOT NULL "
+            "AND (first_seen_at >= ? OR last_attempt_at >= ?)", (since, since),
+        ).fetchall()
+        return {row[0] for row in rows}
+
+    def last_activity(self) -> float | None:
+        """When a number was last added here or sent to (unix time), or None
+        for a DB without any."""
+        conn = self._conn()
+        added, tried = conn.execute(
+            "SELECT MAX(first_seen_at), MAX(last_attempt_at) FROM recipients"
+        ).fetchone()
+        called = conn.execute("SELECT MAX(started_at) FROM attempts").fetchone()[0]
+        moments = [m for m in (added, tried, called) if m is not None]
+        return max(moments) if moments else None
+
+    def remove_numbers(self, now: float | None = None) -> int:
+        """Put a placeholder in place of every phone number this DB holds:
+        recipients, calls, link keys and conversions, one placeholder per
+        number, so every count, cost, delivery, click and conversion stays
+        and joins as before. Text that may hold a number (errors, call
+        details) is scrubbed, and the raw input cells go. Afterwards the DB
+        never sends again (`bind_campaign`, `upsert_pending`). Returns how
+        many numbers went (0 when they already had).
+
+        The rows are overwritten with secure_delete on, then the file is
+        vacuumed and its WAL truncated, so the old values don't linger in
+        free pages. Call it under the DB's run lock."""
+        aliases: dict[str, str] = {}
+
+        def alias(phone: str) -> str:
+            if phone.startswith(REMOVED):
+                return phone
+            if phone not in aliases:
+                aliases[phone] = f"{REMOVED}{len(aliases) + 1:06d}"
+            return aliases[phone]
+
+        def link_key(key: str | None) -> str | None:
+            # A recipient's own link is keyed by the phone, the test SMS's by
+            # test:<phone>; shared ones by segment or campaign.
+            if key is None or key.startswith(("segment:", "campaign:")):
+                return key
+            if key.startswith("test:"):
+                return "test:" + alias(key[len("test:"):])
+            return alias(key)
+
+        conn = self._conn()
+        conn.execute("PRAGMA secure_delete = ON")
+        try:
+            with self._tx() as conn:
+                if conn.execute("SELECT 1 FROM meta WHERE key='numbers_removed_at'").fetchone():
+                    return 0
+                rows = conn.execute(
+                    "SELECT rowid, phone, link_key, last_error FROM recipients ORDER BY rowid"
+                ).fetchall()
+                conn.executemany(
+                    "UPDATE recipients SET phone=?, raw='', link_key=?, last_error=? WHERE rowid=?",
+                    [(
+                        "INVALID:" + alias(r["phone"]) if r["phone"].startswith("INVALID:") else alias(r["phone"]),
+                        link_key(r["link_key"]), scrub_numbers(r["last_error"]), r["rowid"],
+                    ) for r in rows],
+                )
+                calls = conn.execute("SELECT id, phone, detail FROM attempts ORDER BY id").fetchall()
+                conn.executemany(
+                    "UPDATE attempts SET phone=?, detail=? WHERE id=?",
+                    [(alias(c["phone"]), scrub_numbers(c["detail"]), c["id"]) for c in calls],
+                )
+                for link in conn.execute("SELECT key, last_error FROM links").fetchall():
+                    conn.execute(
+                        "UPDATE links SET key=?, last_error=? WHERE key=?",
+                        (link_key(link["key"]), scrub_numbers(link["last_error"]), link["key"]),
+                    )
+                for (phone,) in conn.execute("SELECT DISTINCT phone FROM conversions").fetchall():
+                    conn.execute("UPDATE conversions SET phone=? WHERE phone=?", (alias(phone), phone))
+                conn.executemany(
+                    "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                    [("numbers_removed_at", repr(now or time.time())), ("numbers_removed", str(len(aliases)))],
+                )
+            for statement in ("VACUUM", "PRAGMA wal_checkpoint(TRUNCATE)"):
+                try:
+                    conn.execute(statement)
+                except sqlite3.OperationalError:
+                    pass  # a reader holds the file: secure_delete already zeroed the old values
+        finally:
+            self.close()  # this connection has secure_delete on; the next one won't
+        return len(aliases)
 
     # ---------- settling `unknown` rows (see reconcile.py) ----------
 

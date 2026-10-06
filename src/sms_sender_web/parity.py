@@ -156,6 +156,9 @@ PARITY: dict[str, tuple[Part, ...]] = {
         Excluded("Needs both services stopped: an ops procedure (docs/deploy.md)."),
     ),
     "manage.py worker_status": (Control("status", VIEWER),),
+    "manage.py remove_old_numbers": (
+        Control("system", ADMIN, note="how long numbers are kept; the worker removes older ones daily"),
+    ),
     "manage.py run_worker": (Implied("The worker service runs it."),),
 }
 

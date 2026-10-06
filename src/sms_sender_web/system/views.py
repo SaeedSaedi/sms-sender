@@ -16,11 +16,12 @@ from sms_sender.phone import InvalidPhoneError, normalize
 from sms_sender.rate import parse_rate
 from sms_sender.window import parse_window
 
+from .. import retention
 from ..accounts.decorators import requires
 from ..accounts.roles import count_who_can
 from ..audit.record import record
 from ..backup import BackupError
-from ..dashboard.templatetags.fa import fa_number
+from ..dashboard.templatetags.fa import fa_number, jalali
 from ..jobs import services
 from ..privacy import mask_phone
 from . import operations
@@ -157,8 +158,37 @@ def _approval(request, current: SystemSettings) -> str:
     return ""
 
 
+def _retention(request, current: SystemSettings) -> str:
+    """How long phone numbers are kept (plan 06, D2)."""
+    months = _number(request.POST, "retention_months", range(1, 61))
+    if months not in retention.MONTHS:
+        return _("Choose how long to keep them.")
+    if months != current.retention_months:
+        before = current.retention_months
+        current.retention_months, current.updated_by = months, request.user
+        current.save()
+        record("system_settings_changed", request=request, retention_months={"before": before, "after": months})
+    return ""
+
+
+def _retention_lines(current: SystemSettings) -> dict:
+    """The last daily check, in a line, and the old campaigns kept for now."""
+    done = current.retention_result or {}
+    lines = {"retention_choices": [(m, _("%(n)s months") % {"n": fa_number(m)}) for m in retention.MONTHS]}
+    if current.retention_ran_at:
+        lines["retention_line"] = _(
+            "Last checked %(when)s: numbers removed from %(campaigns)s campaigns and %(segments)s segment "
+            "files; %(backups)s old backups and %(exports)s old downloads deleted."
+        ) % {"when": jalali(current.retention_ran_at), "campaigns": fa_number(len(done.get("campaigns", []))),
+             "segments": fa_number(len(done.get("segments", []))), "backups": fa_number(len(done.get("backups", []))),
+             "exports": fa_number(done.get("exports", 0))}
+    if done.get("kept"):
+        lines["retention_kept"] = done["kept"]
+    return lines
+
+
 _HANDLERS = {"cap": _cap, "defaults": _defaults, "credit": _credit, "approval": _approval,
-             "team_add": _team, "team_remove": _team}
+             "team_add": _team, "team_remove": _team, "retention": _retention}
 # The box an error shows in: each form's own.
 _ERROR_BOX = {"team_add": "team", "team_remove": "team"}
 
@@ -170,6 +200,8 @@ def _saved(section: str) -> str:
         return _("Saved. It applies to the next test SMS.")
     if section == "approval":
         return _("Saved. It applies to test SMS waiting for a decision too.")
+    if section == "retention":
+        return _("Saved. The worker removes older numbers at its next daily check.")
     return ""  # a test notification says how it went itself
 
 
@@ -197,6 +229,7 @@ def system_settings(request):
         "team_max": TEAM_TEST_MAX,
         # With a second approver, one person alone could approve nothing.
         "runners": count_who_can("run_campaigns"),
+        **_retention_lines(current),
     })
 
 

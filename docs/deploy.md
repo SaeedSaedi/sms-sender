@@ -98,6 +98,21 @@ The campaign DBs are the memory that stops a second SMS. A deleted or
 replaced campaign DB means the next send of that campaign goes to everyone
 again. Don't move, rename or delete files in `db/`.
 
+**Phone numbers are kept for a limited time:** 12 months after a
+campaign's last send by default. An admin sets it on «تنظیمات سامانه»
+(System settings). Once a day the worker:
+- replaces every number in that campaign's DB with a placeholder, and
+  rewrites the file so no number is left in it. Its counts stay, and it
+  never sends again;
+- deletes the segment files no campaign has used since, and the files in
+  `exports/` and `backups/` older than that;
+- masks the numbers in old jobs and in the activity log.
+
+The suppression list is never touched. To see what would go:
+`docker compose exec -T web python manage.py remove_old_numbers --dry-run`.
+Keep off-site backup copies no longer than the same period, or numbers
+outlive it there.
+
 ### Where the data may live
 
 Everything above is SQLite, by design: one host, one worker, files the CLI
@@ -292,7 +307,8 @@ upgrade.
 `backups/` is on the same disk as the data. Copy each backup off the
 machine, **encrypted** before it leaves (e.g. `age`, `restic`): it holds
 every phone number. Keep off-site copies no longer than the business needs
-them. Both commands exit non-zero on failure, so alert on that.
+them, and no longer than numbers are kept (see above). Both commands exit
+non-zero on failure, so alert on that.
 
 ### Restore
 

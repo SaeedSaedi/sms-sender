@@ -67,6 +67,22 @@
   </form>
 </section>
 
+<section class="card medium" aria-labelledby="retention-heading">
+  <h2 id="retention-heading">{% icon "history" %}{% translate "Keeping phone numbers" %}</h2>
+  <p>{% translate "Phone numbers are removed this long after a campaign's last send. Its counts, costs, deliveries and clicks stay, and it can't send again. Segment files no campaign has used since, downloads and backups older than that are deleted too. The suppression list stays as it is." %}</p>
+  <form method="post" id="retention-form">
+    {% csrf_token %}<input type="hidden" name="section" value="retention">
+    {% if errors.retention %}<div class="field-errors" id="retention-error" role="alert" tabindex="-1" data-autofocus><p class="error">{{ errors.retention }}</p></div>{% endif %}
+    <label for="id_retention_months">{% translate "Keep them for" %}</label>
+    <select id="id_retention_months" name="retention_months" data-cli="manage.py remove_old_numbers"{% if errors.retention %} aria-describedby="retention-error"{% endif %}>
+      {% for months, label in retention_choices %}<option value="{{ months }}"{% if months == settings.retention_months %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <div class="form-actions"><button type="submit" class="secondary">{% translate "Save" %}</button></div>
+  </form>
+  {% if retention_line %}<p class="hint">{{ retention_line }}</p>{% endif %}
+  {% if retention_kept %}<p class="hint">{% translate "Kept until the job on its way ends:" %} {% for slug in retention_kept %}{{ slug|ltr }}{% if not forloop.last %}، {% endif %}{% endfor %}</p>{% endif %}
+</section>
+
 <section class="card medium" aria-labelledby="notify-heading">
   <h2 id="notify-heading">{% icon "send" %}{% translate "Notifications" %}</h2>
   <p>{% translate "When a send ends or stops, these hear how it went: the CLI's run report, with the campaign's short name. Their addresses hold secrets, so they're shown masked." %}</p>
