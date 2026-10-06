@@ -35,7 +35,7 @@ def sandbox(request) -> dict:
 
 # Which menu entry a page belongs to, by its URL name.
 _SECTIONS = {
-    "home": "campaigns", "campaign_new": "campaigns", "campaign_detail": "campaigns",
+    "home": "control", "campaign_list": "campaigns", "campaign_new": "campaigns", "campaign_detail": "campaigns",
     "campaign_settings": "campaigns", "campaign_check": "campaigns", "report": "campaigns",
     "segment_list": "segments", "segment_upload": "segments", "segment_detail": "segments",
     "segment_map": "segments", "suppression": "suppression", "status": "status",

@@ -42,6 +42,25 @@ def fa_number(value) -> str:
 
 
 @register.filter
+def jalali_long(value) -> str:
+    """A moment as its Solar Hijri day in words, Tehran time: «سه‌شنبه ۱۴ مهر ۱۴۰۵»."""
+    if value is None or value == "":
+        return ""
+    local = timezone.localtime(value) if timezone.is_aware(value) else value
+    day = jdatetime.date.fromgregorian(date=local.date())
+    return f"{day.j_weekdays_fa[day.weekday()]} {fa_digits(day.day)} {day.j_months_fa[day.month - 1]} {fa_digits(day.year)}"
+
+
+@register.filter
+def fa_percent(rate) -> str:
+    """0.0432 → '۴٫۳٪' (one decimal, the Persian decimal mark); None → '—'."""
+    if rate is None or rate == "":
+        return "—"
+    text = f"{float(rate) * 100:.1f}".replace(".", "٫").translate(_PERSIAN_DIGITS)
+    return f"{text}٪"
+
+
+@register.filter
 def jalali(value, fmt: str = "%Y/%m/%d %H:%M") -> str:
     """A moment (datetime or unix seconds) as a Solar Hijri date in Tehran
     time, with Persian digits: '۱۴۰۵/۰۷/۱۲ ۱۳:۵۲'."""

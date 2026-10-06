@@ -59,7 +59,7 @@ def test_a_campaign_is_purged_only_after_its_name_and_a_backup(world, verified, 
     admin.post("/campaigns/completed/purge/", {"confirm": "Completed"})
     assert db.exists() and not (tmp_path / "backups").exists()
     response = admin.post("/campaigns/completed/purge/", {"confirm": "completed"})
-    assert response.status_code == 302 and response["Location"] == "/"
+    assert response.status_code == 302 and response["Location"] == "/campaigns/"
     assert not db.exists() and not Campaign.objects.filter(slug="completed").exists()
     (backup,) = list((tmp_path / "backups").iterdir())
     assert (backup / "db" / "completed.db").is_file()  # what it recorded is in the backup
@@ -82,7 +82,7 @@ def test_a_cli_campaign_comes_to_the_dashboard(world, verified, tmp_path):
     cli_db.claim("09120000041")
     cli_db.mark_sent("09120000041", 7001, 200, 3020)
     operator = signed_in(world.users["operator"], verified)
-    assert 'action="/campaigns/coin-cli/adopt/"' in operator.get("/").content.decode()
+    assert 'action="/campaigns/coin-cli/adopt/"' in operator.get("/campaigns/").content.decode()
     response = operator.post("/campaigns/coin-cli/adopt/")
     assert response.status_code == 302 and response["Location"] == "/campaigns/coin-cli/"
     campaign = Campaign.objects.get(slug="coin-cli")

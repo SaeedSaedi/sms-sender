@@ -153,9 +153,9 @@ def upload(client, text: str = PROFILES):
 def test_only_an_admin_imports(world, verified):
     operator = signed_in(world.users["operator"], verified)
     assert operator.get("/campaigns/import/").status_code == 403
-    assert "/campaigns/import/" not in operator.get("/").content.decode()
+    assert "/campaigns/import/" not in operator.get("/campaigns/").content.decode()
     admin = signed_in(world.users["admin"], verified)
-    assert 'href="/campaigns/import/"' in admin.get("/").content.decode()
+    assert 'href="/campaigns/import/"' in admin.get("/campaigns/").content.decode()
     assert 'name="file"' in admin.get("/campaigns/import/").content.decode()
 
 
@@ -174,7 +174,7 @@ def test_the_ticked_profiles_become_draft_campaigns(world, verified):
     client = signed_in(world.users["admin"], verified)
     upload(client)
     response = client.post("/campaigns/import/", {"step": "import", "profile": ["coin-price-7", "transaction-1-seg2", "broken"]})
-    assert response.status_code == 302 and response["Location"] == "/"
+    assert response.status_code == 302 and response["Location"] == "/campaigns/"
     coin = Campaign.objects.get(slug="coin-price-7")
     assert coin.created_by == world.users["admin"] and coin.settings["segment"] == "vip"
     assert lc.lifecycle(coin).stage == lc.READY  # its segment came along: a check and a test SMS next

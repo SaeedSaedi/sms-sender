@@ -3472,3 +3472,120 @@ msgstr "یک شماره موبایل بنویسید؛ مثلاً ۰۹۱۲۱۲۳�
 
 msgid "{phone} isn't among these segments' recipients."
 msgstr "{phone} جزو گیرندگان این گروه‌های مخاطبان نیست."
+
+msgid "7 days: {n}"
+msgstr "۷ روز: {n}"
+
+msgid "7 days: {n} rials"
+msgstr "۷ روز: {n} ریال"
+
+msgid "At the recent pace, enough for about {days} days."
+msgstr "با روند اخیر، حدود {days} روز دیگر کافی است."
+
+msgid "At the recent pace, enough for about {sends} more sends, or {days} days."
+msgstr "با روند اخیر، برای حدود {sends} ارسال دیگر یا {days} روز کافی است."
+
+msgid "At the recent pace, enough for about {sends} more sends."
+msgstr "با روند اخیر، برای حدود {sends} ارسال دیگر کافی است."
+
+msgid "Click rate"
+msgstr "نرخ کلیک"
+
+msgid "Click rate · 7 days"
+msgstr "نرخ کلیک · ۷ روز"
+
+msgid "Clicks · today"
+msgstr "کلیک · امروز"
+
+msgid "Control room"
+msgstr "اتاق کنترل"
+
+msgid "Credit, what needs you, and this week"
+msgstr "اعتبار، کارهای مانده و این هفته"
+
+msgid "Delivered · 7 days"
+msgstr "تحویل‌شده · ۷ روز"
+
+msgid "Every campaign"
+msgstr "همه کمپین‌ها"
+
+msgid "Getting ready…"
+msgstr "در حال آماده‌سازی…"
+
+msgid "Kavenegar credit"
+msgstr "اعتبار کاوه‌نگار"
+
+msgid "Latest campaigns"
+msgstr "آخرین کمپین‌ها"
+
+msgid "Needs you"
+msgstr "نیازمند شما"
+
+msgid "No delivery report yet"
+msgstr "هنوز گزارش تحویلی نیست"
+
+msgid "No links of their own yet"
+msgstr "هنوز لینک شخصی‌ای فرستاده نشده"
+
+msgid "Not asked yet: the worker asks Kavenegar every 15 minutes."
+msgstr "هنوز پرسیده نشده است: اجراکننده کارها هر ۱۵ دقیقه از کاوه‌نگار می‌پرسد."
+
+msgid "Nothing is set for later."
+msgstr "هیچ ارسالی برای بعد زمان‌بندی نشده است."
+
+msgid "Nothing waits for you."
+msgstr "کاری منتظر شما نیست."
+
+msgid "SMS accepted · today"
+msgstr "پیامک پذیرفته‌شده · امروز"
+
+msgid "Sends each day this week"
+msgstr "ارسال‌های هر روز این هفته"
+
+msgid "Short links"
+msgstr "لینک‌های کوتاه"
+
+msgid "Spent · today"
+msgstr "هزینه · امروز"
+
+msgid "This week"
+msgstr "این هفته"
+
+msgid "Today and the last 7 days"
+msgstr "امروز و ۷ روز اخیر"
+
+msgid "Under the warning level. Top up the account before the next send."
+msgstr "کمتر از سطح هشدار است. پیش از ارسال بعدی حساب را شارژ کنید."
+
+msgid "When"
+msgstr "زمان"
+
+msgid "about {h} h {m} min left"
+msgstr "حدود {h} ساعت و {m} دقیقه مانده"
+
+msgid "about {m} minutes left"
+msgstr "حدود {m} دقیقه مانده"
+
+msgid "of {n} with a delivery report"
+msgstr "از {n} پیامک با گزارش تحویل"
+
+msgid "segments"
+msgstr "گروه مخاطبان"
+
+msgid "under a minute left"
+msgstr "کمتر از یک دقیقه مانده"
+
+msgid "{date} · today {sends} sends, {active} on their way"
+msgstr "{date} · امروز {sends} ارسال، {active} در جریان"
+
+msgid "{day}: {sent} sent, {later} set for later"
+msgstr "{day}: {sent} ارسال‌شده، {later} زمان‌بندی‌شده"
+
+msgid "{n} of {of} clicked their own link"
+msgstr "{n} نفر از {of} روی لینک خودشان کلیک کردند"
+
+msgid "{n} rials"
+msgstr "{n} ریال"
+
+msgid "{n} per second"
+msgstr "{n} در ثانیه"

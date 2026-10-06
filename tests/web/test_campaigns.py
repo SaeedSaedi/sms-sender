@@ -370,7 +370,7 @@ def test_my_account_keeps_my_number_for_test_sms(operator_client, operator):
 
 
 def test_the_home_page_lists_new_campaigns(operator_client, campaign, signed_in):
-    html = operator_client.get("/").content.decode()
+    html = operator_client.get("/campaigns/").content.decode()
     assert 'href="/campaigns/coin-7/"' in html and "قیمت سکه" in html
     assert 'href="/campaigns/new/"' in html
-    assert 'href="/campaigns/new/"' not in signed_in.get("/").content.decode()  # viewers
+    assert 'href="/campaigns/new/"' not in signed_in.get("/campaigns/").content.decode()  # viewers

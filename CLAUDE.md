@@ -507,7 +507,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - A test newer than the latest send takes over.
   - `step` (1–5: message and list, check and preview, test SMS, send, results) drives the stepper, and `tone` the pill.
   - The campaign page includes `campaigns/stage/_<stage>.html` as its current step. `present.py` turns jobs into Persian: `result_line`, `notes`, `top_errors`, `send_summary`.
-  - The overview (`dashboard/views.home`) counts stages into tiles and lists what needs attention: tests to approve, stopped sends with their reason, and leftovers after a send.
+  - The campaign list (`dashboard/views.campaign_list`, `/campaigns/`) counts stages into tiles and lists what needs attention: tests to approve, stopped sends with their reason, and leftovers after a send (`campaign_rows`, shared with the control room).
   - **Sending window:** a send the window stops (`stop_reason` `window_closed` or `outside_window`) is `paused`, and `Worker.resume_when_window_opens` (every loop) queues it again once the window is open. An operator's pause is never resumed for them.
 - **Settings page, templates, preview (plan 05 P2):**
   - The page's split controls (window from/until, rate number + unit, link-format choice + pattern, translation rows `vm_column`/`vm_source`/`vm_target`) are turned back into the form's combined fields by `forms.combined()` before validation. The CLI-shaped fields still work, so the validation is unchanged.
@@ -543,7 +543,15 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - **Messages** (`ui/messages.html`): errors and warnings stay on the page (`.messages`). Success and information are `.toasts` that leave after 8 s, held while pointed at or focused.
   - **Forms:** `.form-section` for a form in sections (title and help beside the fields). Fieldset legends read as titles inside the box.
   - **Other parts:** `.tabs` / `.segmented-tabs`, `.toolbar`, `.timeline`, `.health-grid` / `.health-state` (status page), `.auth-card` (sign-in), `.chip` (meta).
-  - **Overview** (`dashboard/views.home`): tabs (all, in progress, needs attention, ended), stage tiles that filter (`?stage=`), a search by name, short name or template (`?q=`, nothing personal), 50 to a page, at most 5 attention items with "show all".
+  - **The control room** (`/`, `dashboard/views.home`, plan 06 L4):
+    - Figures for today and the last 7 days: accepted, delivered, clicks, click rate and spend.
+    - The sends on their way (`control.active_sends`, polled at `/home/sends/`, 286 when none), each with its pace and time left.
+    - The credit (`ProviderCheck`), with its runway (`control.credit`): sends like the recent ones (their average cost) and days at the last 30 days' spending.
+    - What needs you, and this week (`control.week`, Saturday to Friday, with what went out and what's scheduled).
+    - The latest 8 campaigns, each with its numbers.
+
+    The numbers come from `dashboard/activity.folder_activity`: one pass per campaign DB, `query_only` (never `mode=ro`, which can't open a WAL DB whose `-shm` is gone), for today (Tehran midnight), 7, 30 days and all time. Test SMS costs are included; clicks come from `click_hours`.
+  - **The campaign list** (`/campaigns/`, `campaign_list`): tabs (all, in progress, needs attention, ended), stage tiles that filter (`?stage=`), a search by name, short name or template (`?q=`, nothing personal), 50 to a page, at most 5 attention items with "show all". The breadcrumbs' «کمپین‌ها» lead here.
   - **Settings:** when the template's text is in the library, only the tokens it uses show (`campaigns/_token_row.html`). The rest fold under "the tokens the text doesn't use"; a filled one stays in view.
 - **Design system v1 ([app.css](src/sms_sender_web/static/css/app.css), plan 05 P1):**
   - **Basics:**

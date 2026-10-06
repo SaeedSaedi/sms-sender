@@ -2,7 +2,7 @@
 {% block title %}{% translate "Report" %} · {{ name }}{% endblock %}
 {% block breadcrumbs %}
 <nav class="breadcrumbs" aria-label="{% translate "Breadcrumb" %}"><ol>
-  <li><a href="{% url 'home' %}">{% translate "Campaigns" %}</a></li>
+  <li><a href="{% url 'campaign_list' %}">{% translate "Campaigns" %}</a></li>
   <li>{% if campaign %}<a href="{% url 'campaign_detail' slug %}"><bdi>{{ name }}</bdi></a>{% else %}<bdi>{{ name }}</bdi>{% endif %}</li>
   <li aria-current="page">{% translate "Report" %}</li>
 </ol></nav>

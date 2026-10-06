@@ -172,7 +172,7 @@ def campaign_import(request):
             "%(n)s campaigns were made from the profiles, each as a draft: choose its segment if it has none, "
             "check it, then send a test SMS."
         ) % {"n": fa_number(len(created))})
-        return redirect("home")
+        return redirect("campaign_list")
     upload = request.FILES.get("file")
     if upload is None:
         return render(request, "campaigns/import.html", {"error": IMPORT_FILE_ERRORS["missing"]})
@@ -288,7 +288,7 @@ def campaign_purge(request, slug: str):
         return redirect("campaign_detail", slug=slug)
     record("campaign_purged", request=request, campaign=slug, backup=backup)
     messages.success(request, _("The campaign and its records were deleted. Backup: %(name)s.") % {"name": backup})
-    return redirect("home")
+    return redirect("campaign_list")
 
 
 @requires("edit_campaigns")
@@ -366,7 +366,7 @@ def campaign_settings(request, slug: str):
         "changing_sent_message": services.may_have_sent(campaign),
         "campaign": campaign,
         "page_title": _("Campaign settings"), "subject_name": campaign.name,
-        "crumbs": [(reverse("home"), _("Campaigns")), (reverse("campaign_detail", args=[slug]), campaign.name)],
+        "crumbs": [(reverse("campaign_list"), _("Campaigns")), (reverse("campaign_detail", args=[slug]), campaign.name)],
         "back_url": reverse("campaign_detail", args=[slug]), "back_label": _("Back to the campaign"),
         "preview_url": reverse("campaign_settings_preview", args=[slug]),
         "save_note": _("Changing the message, its tokens, the link or the segment needs a new test SMS before sending."),

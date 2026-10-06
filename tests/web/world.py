@@ -64,7 +64,8 @@ SETTINGS = {
 # Page name → (path, who opens it).
 PAGES: dict[str, tuple[str, str | None]] = {
     "login": ("/login/", None),
-    "home": ("/", "viewer"),
+    "home": ("/", "viewer"),  # the control room
+    "campaigns": ("/campaigns/", "viewer"),
     "segment.list": ("/segments/", "viewer"),
     "segment.detail": ("/segments/vip/", "viewer"),
     "segment.upload": ("/segments/upload/", "operator"),

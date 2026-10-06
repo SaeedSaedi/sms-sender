@@ -41,7 +41,7 @@ def test_signing_in_with_the_keyboard_alone(world, open_as):
     page.keyboard.type(PASSWORD)
     with page.expect_navigation():
         page.keyboard.press("Enter")
-    page.get_by_role("heading", name=fa("Campaigns"), exact=True).wait_for()
+    page.get_by_role("heading", name=fa("Control room"), exact=True).wait_for()  # where signing in leads
 
 
 def test_the_skip_link_moves_focus_to_the_content(world, open_as):

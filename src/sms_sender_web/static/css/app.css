@@ -1517,3 +1517,56 @@ details.schedule .field-grid { max-inline-size: 24rem; }
 .sample-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); margin-block-end: var(--s-2); color: var(--text-2); font-size: var(--fs-sm); }
 .find-recipient { margin-block-start: var(--s-3); }
 
+
+/* ---------- The control room (plan 06, L4) ---------- */
+.control-figures > li { padding: var(--s-4) var(--s-5); }
+.figure-sub { display: block; margin-block-start: var(--s-1); color: var(--muted); font-size: var(--fs-xs); }
+.control { display: flex; flex-wrap: wrap; gap: var(--s-5); align-items: flex-start; }
+.control-main { flex: 999 1 34rem; min-inline-size: 0; display: flex; flex-direction: column; gap: var(--s-4); }
+.control-main > .card, .control-main > #active-sends > .card { margin: 0; }
+.control-side { flex: 1 1 19rem; min-inline-size: 0; display: flex; flex-direction: column; gap: var(--s-4); }
+.control-side > .card { margin: 0; }
+#active-sends { display: flex; flex-direction: column; gap: var(--s-4); }
+#active-sends:empty { display: none; }
+.send-card { border-inline-start: 4px solid var(--primary); }
+.send-card .card-header { align-items: flex-start; margin-block-end: var(--s-3); }
+.send-card h2 { margin: var(--s-1) 0 0; font-size: var(--fs-lg); }
+.send-card h2 a { color: var(--text); text-decoration: none; }
+.send-card h2 a:hover { color: var(--primary); text-decoration: underline; }
+.send-left { color: var(--text-2); font-weight: 600; }
+.send-progress { block-size: .9rem; }
+.send-figures { margin: var(--s-2) 0 0; color: var(--text-2); }
+.send-figures strong { color: var(--text); font-size: var(--fs-lg); }
+.credit-value { margin: 0; font-size: 1.6rem; font-weight: 780; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.credit-value span { color: var(--muted); font-size: var(--fs-sm); font-weight: 600; }
+.credit-card.is-low { border-color: var(--warning-border); background: var(--warning-soft); }
+.week-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--s-1); margin: var(--s-3) 0; padding: 0; list-style: none; }
+.week-strip li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--s-2) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.week-strip li.is-past { background: var(--surface-2); }
+.week-strip li.is-today { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
+.week-day { color: var(--muted); font-size: var(--fs-xs); }
+.week-date { font-weight: 700; }
+.week-dots { display: flex; gap: 3px; min-block-size: .5rem; }
+.dot { inline-size: .5rem; block-size: .5rem; border-radius: 50%; }
+.dot-sent { background: var(--success); }
+.dot-scheduled { border: 2px solid var(--primary); }
+.scheduled-list li { display: flex; align-items: center; gap: var(--s-2); padding-block: var(--s-1); }
+/* On a phone: what's on its way, then what needs you, the credit and the
+   week, and the latest campaigns last (they're the longest). */
+@media (max-width: 1023px) {
+  .control { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+  .control-main { display: contents; }
+  #active-sends { order: 1; }
+  .control-side { order: 2; }
+  .control-recent { order: 3; }
+}
+

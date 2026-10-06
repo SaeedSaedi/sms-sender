@@ -1,6 +1,9 @@
 from collections import defaultdict
+from datetime import datetime
+from datetime import timezone as dt_timezone
 
 from django.shortcuts import render
+from django.utils import timezone
 
 from sms_sender.window import DEFAULT_WINDOW
 
@@ -14,9 +17,12 @@ from ..jobs.models import Campaign, Job
 from ..jobs.worker import worker_alive
 from ..system import credit
 from ..system.models import SystemSettings
+from . import control
 from . import help as guide
+from .activity import folder_activity, overall, starts
 from .campaigns import CampaignSummary, list_campaigns
-from .terms import LIST_VIEWS, STATUS_ORDER
+from .templatetags.fa import jalali_long
+from .terms import LIST_VIEWS, STATUS_ORDER, TODAY_LINE
 
 # The overview's tiles: how many campaigns are at each of these stages.
 TILES = (SENDING, AWAITING, STOPPED, SCHEDULED)
@@ -42,11 +48,11 @@ def _attention(campaign: Campaign, life, counts: dict) -> list[str]:
     return []
 
 
-@requires("view_campaigns")
-def home(request):
-    """Every campaign with where it stands, and what needs someone now. The
-    campaigns in data/db (the CLI's and the dashboard's), and dashboard
-    campaigns that haven't sent yet. A dashboard campaign links to its page."""
+def campaign_rows() -> tuple[list[dict], list[dict], dict]:
+    """Every campaign with where it stands (the newest first), what needs
+    someone now, and how many are at each tile's stage. The campaigns in
+    data/db (the CLI's and the dashboard's), and dashboard campaigns that
+    haven't sent yet."""
     managed = {c.slug: c for c in Campaign.objects.all()}
     summaries = list_campaigns()
     on_disk = {s.slug for s in summaries}
@@ -80,6 +86,53 @@ def home(request):
             "stage": STAGES[life.stage] if life else CLI_CAMPAIGN,
             "tone": life.tone if life else "neutral",
         })
+    return rows, attention, tiles
+
+
+@requires("view_campaigns")
+def home(request):
+    """The control room (plan 06, L4): how sending is going today and this
+    week, the sends on their way, the credit, what needs someone, this
+    week's sends, and the latest campaigns."""
+    rows, attention, _tiles = campaign_rows()
+    activity = folder_activity()
+    total = overall(activity)
+    sends = control.active_sends()
+    started_today = Job.objects.filter(kind=Job.Kind.SEND, started_at__gte=datetime.fromtimestamp(
+        starts()["today"], tz=dt_timezone.utc)).count()
+    return render(request, "dashboard/home.html", {
+        "today_line": say(TODAY_LINE, {"date": jalali_long(timezone.now()), "sends": started_today,
+                                       "active": len(sends)}),
+        "figures": control.figures(total["today"], total["week"]),
+        "active_sends": sends,
+        "credit": control.credit(total["month"]),
+        "credit_warning": credit.warning(),
+        "attention": attention[:ATTENTION_SHOWN],
+        "attention_more": max(0, len(attention) - ATTENTION_SHOWN),
+        "this_week": control.week(),
+        "recent": control.recent(rows, activity),
+        "campaigns_total": len(rows),
+        "worker_alive": worker_alive(),
+    })
+
+
+# HTMX swaps a 286 answer in, then stops polling: nothing is on its way.
+STOP_POLLING = 286
+
+
+@requires("view_campaigns")
+def home_sends(request):
+    """The sends on their way alone, for the control room to poll."""
+    sends = control.active_sends()
+    return render(request, "dashboard/_active_sends.html", {"active_sends": sends},
+                  status=200 if sends else STOP_POLLING)
+
+
+@requires("view_campaigns")
+def campaign_list(request):
+    """Every campaign with where it stands: tabs (in progress, needs
+    attention, ended), a stage from a tile, and a search."""
+    rows, attention, tiles = campaign_rows()
     # The list: a tab (in progress, needs attention, finished), a stage from
     # a tile, and a search by name, short name or template. Nothing personal
     # goes in the address.
@@ -113,7 +166,7 @@ def home(request):
         page = 1
     pages = max(1, -(-len(shown) // PAGE))
     page = min(page, pages)
-    return render(request, "dashboard/home.html", {
+    return render(request, "dashboard/campaigns.html", {
         "campaigns": rows,
         "shown": shown[(page - 1) * PAGE: page * PAGE],
         "matching": len(shown),

@@ -47,7 +47,7 @@ def test_an_operator_runs_a_campaign_from_a_list_to_its_report(sandbox, sandbox_
     secret = page.locator(".secret").inner_text().replace(" ", "")
     page.get_by_label(fa("Enter the six-digit code the app shows:"), exact=True).fill(f"{totp(b32decode(secret)):06d}")
     page.get_by_role("button", name=fa("Confirm"), exact=True).click()
-    page.get_by_role("heading", name=fa("Campaigns"), exact=True).wait_for()
+    page.get_by_role("heading", name=fa("Control room"), exact=True).wait_for()  # where signing in leads
 
     # My own number, where test SMS go.
     page.get_by_role("link", name=fa("My account"), exact=True).click()

@@ -2,7 +2,7 @@
 {% block title %}{{ campaign.name }} · {% translate "SMS campaigns" %}{% endblock %}
 {% block breadcrumbs %}
 <nav class="breadcrumbs" aria-label="{% translate "Breadcrumb" %}"><ol>
-  <li><a href="{% url 'home' %}">{% translate "Campaigns" %}</a></li>
+  <li><a href="{% url 'campaign_list' %}">{% translate "Campaigns" %}</a></li>
   <li aria-current="page"><bdi>{{ campaign.name }}</bdi></li>
 </ol></nav>
 {% endblock %}

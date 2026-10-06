@@ -1,0 +1,31 @@
+{% load i18n fa ui %}
+<div id="active-sends"{% if active_sends %} hx-get="{% url 'home_sends' %}" hx-trigger="every 3s" hx-swap="morph:outerHTML"{% endif %}>
+  {% for a in active_sends %}
+    <section class="card send-card" aria-labelledby="send-{{ a.job.pk }}">
+      <div class="card-header">
+        <div>
+          <span class="pill pill-{% if a.job.state == "paused" %}warning{% else %}info{% endif %}">{{ a.job.get_state_display }}</span>
+          <h2 id="send-{{ a.job.pk }}"><a href="{{ a.url }}"><bdi>{{ a.campaign.name }}</bdi></a></h2>
+        </div>
+        {% if a.left %}<span class="send-left">{{ a.left }}</span>{% endif %}
+      </div>
+      {% if a.total %}
+        <progress class="send-progress" max="{{ a.total }}" value="{{ a.done }}" aria-labelledby="send-{{ a.job.pk }}"></progress>
+        <p class="send-figures num">
+          {% if a.stage == "links" %}{% translate "Short links" %}: {% endif %}<strong>{{ a.done|fa_number }}</strong> / {{ a.total|fa_number }}
+          {% if a.pace and a.stage != "links" %} · {{ a.pace }}{% endif %}
+        </p>
+        {% if a.stage != "links" %}
+          <ul class="meta-list">
+            <li>{% translate "Accepted" %} <span class="num">{{ a.counts.sent|fa_number }}</span></li>
+            <li>{% translate "Not sent" %} <span class="num">{{ a.counts.failed_retriable|fa_number }}</span></li>
+            <li>{% translate "Rejected" %} <span class="num">{{ a.counts.failed_permanent|fa_number }}</span></li>
+            <li>{% translate "Unknown" %} <span class="num">{{ a.counts.unknown|fa_number }}</span></li>
+          </ul>
+        {% endif %}
+      {% else %}
+        <p class="muted">{% translate "Getting ready…" %}</p>
+      {% endif %}
+    </section>
+  {% endfor %}
+</div>

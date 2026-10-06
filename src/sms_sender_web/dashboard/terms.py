@@ -68,3 +68,34 @@ LIST_VIEWS = {
     "finished": _("Ended"),
 }
 
+
+# The control room (plan 06, L4).
+TIME_LEFT = {
+    "under_a_minute": _("under a minute left"),
+    "minutes": _("about {m} minutes left"),
+    "hours": _("about {h} h {m} min left"),
+}
+RUNWAY = {
+    "both": _("At the recent pace, enough for about {sends} more sends, or {days} days."),
+    "sends": _("At the recent pace, enough for about {sends} more sends."),
+    "days": _("At the recent pace, enough for about {days} days."),
+}
+# The header's line about today.
+TODAY_LINE = _("{date} · today {sends} sends, {active} on their way")
+# The control room's figures: today's, with the last 7 days under each.
+FIGURES = {
+    "accepted": _("SMS accepted · today"),
+    "delivered": _("Delivered · 7 days"),
+    "clicks": _("Clicks · today"),
+    "click_rate": _("Click rate · 7 days"),
+    "spend": _("Spent · today"),
+    "week": _("7 days: {n}"),
+    "week_rials": _("7 days: {n} rials"),
+    "rials": _("{n} rials"),
+    "reports": _("of {n} with a delivery report"),
+    "no_reports": _("No delivery report yet"),
+    "clicked": _("{n} of {of} clicked their own link"),
+    "no_links": _("No links of their own yet"),
+}
+WEEK_DAY = _("{day}: {sent} sent, {later} set for later")
+PACE = _("{n} per second")
