@@ -17,6 +17,12 @@ One Docker image, `sms-sender-dashboard`, runs as two services from
 Both share one volume, `/app/data` (`./data` on the host). Everything with
 state lives there. The containers run as uid 1000 (`app`).
 
+Until the move, the same app ran natively on a Mac (`./sms-dashboard`,
+[README](../README.md)). The Mac launcher and these containers never share a
+data folder: it refuses to start while a container has the folder mounted,
+and [Moving from the Mac](#moving-from-the-mac) retires the Mac's copy for
+good.
+
 **Run exactly one worker.** The design assumes one. A second would run jobs
 side by side with the first, and a job that finds its campaign DB busy
 fails. (The lock on each campaign DB still keeps two processes from
@@ -62,6 +68,10 @@ values.
 | `SMS_SENDER_SANDBOX` | never in production | `1`: Kavenegar and Shlink are simulated and nothing is sent. For drills, see [Sandbox drills](#sandbox-drills). |
 | `SMS_SENDER_ALLOWED_NUMBERS` | no; only on purpose | Restricted sending: SMS go only to these numbers (comma-separated), from the dashboard and the CLI. A value that isn't a phone number stops all sending. Every page shows a banner while it's set. |
 | `DJANGO_DEBUG` | never in production | |
+| `SMS_SENDER_ENVIRONMENT` | never on the server | `local` is what `./sms-dashboard` sets on a Mac: the «محلی» badge and "keep me signed in on this Mac". Leave it unset here. |
+| `SMS_SENDER_SEND_WINDOW` | no | The command line's default sending window (`08:00-21:00` Tehran, `off`). Dashboard campaigns carry their own. |
+| `SMS_SENDER_TEST_NUMBER` | no | The command line's default number for `--approval-test`. Dashboard users set theirs on «حساب من». |
+| `SMS_SENDER_DATA_DIR`, `DJANGO_STATIC_ROOT` | set by the image | `/app/data` and `/app/static`. Don't change them. |
 
 Secrets (`DJANGO_SECRET_KEY`, both API keys) live only in `.env` or your
 secret store. Never put them in the image, the repository or a ticket.
@@ -142,6 +152,62 @@ The company's backend can read attribution over the same address:
 
 Give the backend NetBird access to the dashboard's port like a person's. The API is read only and sends nothing.
 
+## Moving from the Mac
+
+The dashboard ran on a Mac first. Its data comes to the server as one
+backup, restored into an empty data folder before the first start. The
+accounts, their roles and their authenticator apps come along in `app.db`,
+so nobody is created again and nobody links an app again.
+
+**The rule that matters:** after the move, only the server sends. The Mac's
+copy holds the same campaign DBs. A campaign sent from both would reach
+everyone a second time, because neither copy knows what the other sent.
+`retire` fences the Mac's copy off.
+
+On the Mac, in the checkout (best with no send running; one that is
+running stops cleanly, and its job continues on the server):
+
+```bash
+./sms-dashboard retire
+```
+
+It stops the dashboard and removes its start-at-login agent. It then takes
+a final backup, verifies it, and prints its folder. From then on that copy
+refuses to start (`data/MOVED.json`), and the command line refuses to send
+from it (`data/db/.sending-held.json`). Neither file is part of a backup.
+
+Copy that folder to the server, **encrypted on the way** (it holds every
+phone number), e.g. with `age`:
+
+```bash
+tar -C data/backups -czf - <time> | age -r <server's key> > sms-move.tgz.age   # on the Mac
+```
+
+On the server, in the deployment folder, before anything has started:
+
+```bash
+mkdir -p data/backups && age -d -i <key> sms-move.tgz.age | tar -C data/backups -xzf -
+sudo chown -R 1000:1000 data
+docker compose run --rm --no-deps web python manage.py verify_backup /app/data/backups/<time>
+docker compose run --rm --no-deps web python manage.py restore_backup /app/data/backups/<time>
+docker compose up -d
+```
+
+`restore_backup` into an empty folder puts every file back. Then:
+- `.env` on the server has its own `DJANGO_SECRET_KEY`. Everyone signs in
+  once more; passwords and authenticator apps work as before.
+- Set `SMS_SENDER_ALLOWED_NUMBERS` only if the server should start with
+  restricted sending, as the Mac may have had.
+- Sign in and check the status page (Kavenegar's credit and settings,
+  Shlink, the worker), then the control room. A send that was on its way
+  continues from its campaign DB; nobody already sent is sent again.
+- Logs, exports, `.env` and the Mac's other backups don't travel.
+
+Keep the Mac's retired copy until the server has run for a while, then
+delete its `data/` folder: it holds every phone number. To use that copy
+again on purpose (never while the server runs those campaigns), remove both
+files `retire` wrote.
+
 ## First start
 
 ```bash
@@ -149,7 +215,9 @@ docker compose up -d
 docker compose exec web python manage.py createsuperuser
 ```
 
-Then sign in. An admin links an authenticator app at first sign-in, then
+For a fresh install, with no data to bring. (Coming from the Mac? See
+[Moving from the Mac](#moving-from-the-mac) instead.) Then sign in. An admin
+links an authenticator app at first sign-in, then
 gives others their roles on the users page:
 - viewer: reads reports;
 - operator: runs campaigns;
@@ -306,6 +374,13 @@ so the recipient may have the SMS. Those rows are never resent blindly. Run
 reconciliation from the campaign page, or:
 `docker compose exec worker sms-sender reconcile --campaign <campaign>`.
 It asks Kavenegar and sends nothing.
+
+**Stop all sending, now.** An admin presses «توقف سراسری ارسال‌ها» (Hold
+all sending) on the status page («وضعیت سرویس‌ها»). A send pauses at its next heartbeat (seconds),
+test SMS on their way are cancelled, nothing new starts, and the command
+line refuses to send from the same folder. Every page says so until an
+admin lifts the hold there; the sends it paused then continue, and nobody
+is sent twice.
 
 **A send stopped with a Kavenegar error.** The campaign page names the code
 and what it means, e.g. 418: not enough credit. Fix the cause, then resume

@@ -322,3 +322,55 @@ def test_it_runs_the_dashboard_and_stops_cleanly(tmp_path):
     assert not place.state_file.exists()
     assert not (place.data_dir / "db" / HEARTBEAT).exists()  # the worker signed off
     assert "dashboard | stopped" in place.log_file.read_text()
+
+
+# ---------- moving to the server (plan 06, L7) ----------
+
+def _with_data(place: Place) -> None:
+    import sqlite3
+
+    from sms_sender.state import StateStore
+
+    place.data_dir.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(place.data_dir / "app.db")
+    conn.execute("CREATE TABLE t (x)")
+    conn.commit()
+    conn.close()
+    (place.data_dir / "db").mkdir(exist_ok=True)
+    StateStore(place.data_dir / "db" / "coin.db").upsert_pending([("09120000001", "09120000001")])
+
+
+def test_retiring_takes_a_verified_backup_and_fences_this_copy(tmp_path, capsys):
+    from sms_sender_web.backup import verify
+
+    from sms_sender.sharing import MOVED, held
+
+    place = _place(tmp_path)
+    _with_data(place)
+    assert local.retire(place) == 0
+    moved = json.loads(place.moved_file.read_text(encoding="utf-8"))
+    backup = Path(moved["backup"])
+    assert verify(backup) == [] and (backup / "db" / "coin.db").exists()
+    assert not (backup / local.MOVED_FILE).exists()  # the server starts without the fences
+    assert held(place.data_dir / "db")["reason"] == MOVED
+    for refused in (lambda: local.start(place, 8000, browser=False), lambda: local.upgrade(place, 8000),
+                    lambda: local.retire(place)):
+        with pytest.raises(Refused, match="moved to the server"):
+            refused()
+    assert "Retired." in capsys.readouterr().out
+
+
+def test_the_command_line_will_not_send_from_a_retired_copy(tmp_path, capsys):
+    from sms_sender import cli
+    from sms_sender.sharing import MOVED, write_hold
+
+    write_hold(tmp_path, by="sms-dashboard retire", reason=MOVED)
+    with pytest.raises(SystemExit) as stopped:
+        cli._refuse_while_held(tmp_path)
+    assert stopped.value.code == 2
+    assert "moved to the server" in capsys.readouterr().err
+
+
+def test_the_sandbox_has_nothing_to_retire(tmp_path):
+    with pytest.raises(Refused, match="nothing to retire"):
+        local.retire(Place.find(True, _root(tmp_path)))

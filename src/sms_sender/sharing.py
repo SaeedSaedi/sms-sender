@@ -82,12 +82,18 @@ def foreign_worker(folder: Path | str, *, now: float | None = None) -> dict | No
     return data
 
 
-def write_hold(folder: Path | str, *, by: str) -> None:
+# Why a folder is held when it isn't an admin's emergency stop: its data
+# moved to the server (`sms-dashboard retire`), so this copy never sends.
+MOVED = "moved"
+
+
+def write_hold(folder: Path | str, *, by: str, reason: str = "") -> None:
     """Mark the folder held. Raises OSError when it can't be written: the
     caller says so, as the CLI there wouldn't know."""
     folder = Path(folder)
     tmp = folder / f"{HOLD}.{os.getpid()}.tmp"
-    tmp.write_text(json.dumps({"by": by, "at": time.time()}), encoding="utf-8")
+    tmp.write_text(json.dumps({"by": by, "at": time.time(), **({"reason": reason} if reason else {})}),
+                   encoding="utf-8")
     tmp.replace(folder / HOLD)
 
 
