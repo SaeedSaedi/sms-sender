@@ -253,6 +253,21 @@ test SMS before every campaign goes there, then to the team's numbers an
 admin keeps on «تنظیمات سامانه» (System settings). Once colleagues join, an
 admin can ask there for a second person to approve each test SMS.
 
+### Before the first real send
+
+Sign these off with the team. The campaign DBs are the only record of who
+already got each SMS: lose them and the next send reaches everyone again.
+
+- [ ] `data/` is on this host's local disk (see [Where the data may live](#where-the-data-may-live)).
+- [ ] Every day's backup leaves the machine, encrypted (see [Backups](#backups)).
+- [ ] A restore from that off-site copy into an empty folder has been tried
+      ([Restore](#restore)), and is tried again every few months.
+- [ ] An alert fires when the data disk is 80% full. A full disk stops
+      SQLite from writing, and sending stops with it.
+- [ ] An alert fires when the worker's health check fails, or no new
+      backup appears for a day. The dashboard's notification targets also
+      hear when a backup fails.
+
 ## Health and logs
 
 - `web`: `GET /healthz` answers `{"status": "ok"}` when the app and its
