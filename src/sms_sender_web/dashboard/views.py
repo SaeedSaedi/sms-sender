@@ -1,13 +1,19 @@
+import re
 from collections import defaultdict
 from datetime import datetime
 from datetime import timezone as dt_timezone
+from pathlib import Path
 
+from django.conf import settings
+from django.http import JsonResponse
 from django.shortcuts import render
+from django.urls import reverse
 from django.utils import timezone
 
 from sms_sender.window import DEFAULT_WINDOW
 
 from ..accounts.decorators import requires
+from ..accounts.roles import can
 from ..campaigns.lifecycle import (
     AWAITING, CANCELLED, COMPLETED, PAUSED, SCHEDULED, SENDING, STOPPED, lifecycle,
 )
@@ -17,8 +23,10 @@ from ..jobs.models import Campaign, Job
 from ..jobs.worker import worker_alive
 from ..system import credit
 from ..system.models import SystemSettings
+from . import calendar as months
 from . import control
 from . import help as guide
+from . import notices
 from .activity import folder_activity, overall, starts
 from .campaigns import CampaignSummary, list_campaigns
 from .templatetags.fa import jalali_long
@@ -183,6 +191,64 @@ def campaign_list(request):
         "worker_alive": worker_alive(),
         "credit_warning": credit.warning(),
     })
+
+
+@requires("view_campaigns")
+def notifications(request):
+    """The last 7 days' notifications, the new ones marked. Opening the
+    page marks them all seen, so the menu's count goes back to zero."""
+    now = timezone.now()
+    seen = notices.seen_at(request.user)
+    items = [{"notice": n, "new": seen is None or n.at > seen} for n in notices.notices(request.user, now)]
+    notices.mark_seen(request.user, now)
+    return render(request, "dashboard/notifications.html", {"items": items, "days": notices.WINDOW.days})
+
+
+_SLUG = re.compile(r"^[-a-zA-Z0-9_]+$")
+
+
+def _changed(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:  # deleted since: last
+        return 0.0
+
+
+@requires("view_campaigns")
+def palette(request):
+    """What Ctrl+K (Cmd+K) finds besides the menu's pages, which the page
+    has already: every campaign (the CLI's too, by its DB's name), segment
+    and preset, the newest first, each with where it opens for you. Names
+    and short names only, nothing personal."""
+    from ..campaigns.models import Preset
+    from ..segments.models import Segment
+
+    managed = list(Campaign.objects.order_by("-created_at", "-id").only("slug", "name", "preset_id"))
+    known = {c.slug for c in managed}
+    on_disk = sorted(Path(settings.SMS_SENDER_DB_DIR).glob("*.db"), key=_changed, reverse=True)
+    campaigns = [{"name": c.name, "hint": c.slug, "url": control._url(c)} for c in managed]
+    campaigns += [{"name": p.stem, "hint": p.stem, "url": reverse("report", args=[p.stem])}
+                  for p in on_disk if p.stem not in known and _SLUG.match(p.stem)]
+    segments = [{"name": s.name or s.slug, "hint": s.slug, "url": reverse("segment_detail", args=[s.slug])}
+                for s in Segment.objects.order_by("-uploaded_at", "-id").only("slug", "name")]
+    run, edit = can(request.user, "run_campaigns"), can(request.user, "edit_campaigns")
+    presets = []
+    for p in Preset.objects.only("slug", "name", "archived_at"):
+        if run and p.archived_at is None:
+            url = reverse("compose", args=[p.slug])  # a new alert from it
+        elif edit:
+            url = reverse("preset_edit", args=[p.slug])
+        else:
+            url = reverse("preset_list")
+        presets.append({"name": p.name, "hint": p.slug, "url": url})
+    return JsonResponse({"campaigns": campaigns, "segments": segments, "presets": presets})
+
+
+@requires("view_campaigns")
+def calendar_page(request):
+    """A month of sends, Solar Hijri: ?month=1405-07, else this month."""
+    year, month = months.month_of(request.GET.get("month"))
+    return render(request, "dashboard/calendar.html", {"month": months.month(year, month)})
 
 
 @requires("view_campaigns")

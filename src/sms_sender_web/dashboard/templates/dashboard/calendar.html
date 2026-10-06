@@ -1,0 +1,74 @@
+{% extends "base.html" %}{% load fa i18n ui %}
+{% block title %}{% translate "Calendar" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{% translate "Calendar" %}</h1>
+    <p class="page-meta">{% translate "The sends that went out each day, and those set for later, in Tehran time." %}</p>
+  </div>
+</header>
+
+<section class="card month-card" aria-labelledby="month-title">
+  <div class="card-header">
+    <h2 id="month-title">{% icon "calendar" %}{{ month.title }}</h2>
+    <nav class="month-nav" aria-label="{% translate "Months" %}">
+      <a class="button secondary" href="?month={{ month.previous }}" rel="prev">{% icon "chevron-right" %}{% translate "Previous month" %}</a>
+      {% if not month.this_month %}<a class="button secondary" href="{% url 'calendar' %}">{% translate "This month" %}</a>{% endif %}
+      <a class="button secondary" href="?month={{ month.next }}" rel="next">{% translate "Next month" %}{% icon "chevron-left" %}</a>
+    </nav>
+  </div>
+
+  {% if month.stages %}
+  <ul class="plain month-legend" aria-label="{% translate "What the colours mean" %}">
+    {% for e in month.stages %}<li><span class="month-dot stage-{{ e.stage }} tone-{{ e.tone }}" aria-hidden="true"></span>{{ e.label }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  <table class="month-grid">
+    <caption class="visually-hidden">{{ month.title }}</caption>
+    <thead>
+      <tr>{% for d in month.weekdays %}<th scope="col"><abbr title="{{ d.name }}">{{ d.short }}</abbr></th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+      {% for week in month.weeks %}
+      <tr>
+        {% for cell in week %}
+          {% if cell %}
+          <td class="{% if cell.today %}is-today{% endif %}{% if cell.past %} is-past{% endif %}"{% if cell.today %} aria-current="date"{% endif %}>
+            <span class="month-day num">{{ cell.number }}</span>
+            {% if cell.entries %}
+            <ul class="plain month-entries">
+              {% for e in cell.entries %}
+              <li><span class="month-dot stage-{{ e.stage }} tone-{{ e.tone }}" aria-hidden="true"></span><a href="{{ e.url }}"><bdi class="month-name">{{ e.campaign.name }}</bdi><span class="month-time num">{{ e.time }}<span class="visually-hidden"> · {{ e.label }}</span></span></a></li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+          </td>
+          {% else %}
+          <td class="is-outside"></td>
+          {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if month.days %}
+  {# On a phone, the days that have sends, as a list. #}
+  <ol class="plain month-agenda">
+    {% for cell in month.days %}
+    <li{% if cell.today %} aria-current="date"{% endif %}>
+      <h3>{{ cell.name }}</h3>
+      <ul class="plain month-entries">
+        {% for e in cell.entries %}
+        <li><span class="month-dot stage-{{ e.stage }} tone-{{ e.tone }}" aria-hidden="true"></span><a href="{{ e.url }}"><bdi>{{ e.campaign.name }}</bdi></a><span class="num muted">{{ e.time }}</span><span class="pill pill-{{ e.tone }}">{{ e.label }}</span></li>
+        {% endfor %}
+      </ul>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="muted month-none">{% translate "No sends this month." %}</p>
+  {% endif %}
+</section>
+{% endblock %}

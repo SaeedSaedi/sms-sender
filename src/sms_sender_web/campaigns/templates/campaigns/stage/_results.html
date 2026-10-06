@@ -8,6 +8,14 @@
   <div><dt>{% translate "Cost" %}</dt><dd class="num">{{ send_summary.cost|fa_number }} {% translate "rials" %}</dd></div>
   <div><dt>{% translate "Duration" %}</dt><dd class="num"><bdi dir="ltr">{{ send_summary.elapsed }}</bdi></dd></div>
 </dl>
+{% if delivery_bar %}
+  <div class="delivery-bar" id="delivery-bar">
+    <h3>{% translate "Delivery" %}</h3>
+    <div class="statusbar" aria-hidden="true">{% for part in delivery_bar %}<span class="sb-{{ part.tone }}" style="flex-grow: {{ part.n }}"></span>{% endfor %}</div>
+    <ul class="legend">{% for part in delivery_bar %}<li class="sb-{{ part.tone }}">{{ part.label }} <span class="num">{{ part.n|fa_number }}</span></li>{% endfor %}</ul>
+    <p class="hint">{% translate "Kavenegar reports delivery for 48 hours after sending; the panel asks every 15 minutes." %}</p>
+  </div>
+{% endif %}
 {% if send_summary.errors %}
   <h3>{% translate "Most common errors" %}</h3>
   <ul class="plain">{% for text, count in send_summary.errors %}<li>{{ text }} — <span class="num">{{ count|fa_number }}</span></li>{% endfor %}</ul>

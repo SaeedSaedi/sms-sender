@@ -3589,3 +3589,96 @@ msgstr "{n} ریال"
 
 msgid "{n} per second"
 msgstr "{n} در ثانیه"
+
+msgid "Each segment"
+msgstr "هر گروه مخاطبان"
+
+msgid "Kavenegar reports delivery for 48 hours after sending; the panel asks every 15 minutes."
+msgstr "کاوه‌نگار تا ۴۸ ساعت پس از ارسال وضعیت تحویل را گزارش می‌کند؛ پنل هر ۱۵ دقیقه یک بار می‌پرسد."
+
+msgid "unseen"
+msgstr "تازه"
+
+msgid "New"
+msgstr "تازه"
+
+msgid "The test SMS of «{name}» is waiting for your approval."
+msgstr "پیامک آزمایشی «{name}» در انتظار تأیید است."
+
+msgid "The test SMS of «{name}» didn't go out."
+msgstr "پیامک آزمایشی «{name}» ارسال نشد."
+
+msgid "«{name}» finished: {n} SMS accepted."
+msgstr "ارسال «{name}» تمام شد: {n} پیامک پذیرفته شد."
+
+msgid "«{name}» stopped."
+msgstr "ارسال «{name}» متوقف شد."
+
+msgid "«{name}» was cancelled."
+msgstr "ارسال «{name}» لغو شد."
+
+msgid "Kavenegar's credit is under the warning level: {credit} rials."
+msgstr "اعتبار کاوه‌نگار کمتر از سطح هشدار است: {credit} ریال."
+
+msgid "The daily backup is overdue."
+msgstr "پشتیبان‌گیری روزانه عقب افتاده است."
+
+msgid "What happened in the last 7 days that may need you: tests waiting for approval, finished or stopped sends, low credit and an overdue backup."
+msgstr "رویدادهای ۷ روز گذشته که شاید به شما نیاز داشته باشند: پیامک‌های آزمایشی در انتظار تأیید، ارسال‌های تمام‌شده یا متوقف‌شده، اعتبار کم و پشتیبان‌گیری عقب‌افتاده."
+
+msgid "Nothing in the last 7 days"
+msgstr "در ۷ روز گذشته خبری نبوده است"
+
+msgid "When a test SMS waits for approval, a send ends or stops, the credit runs low or a backup is overdue, it shows here."
+msgstr "وقتی پیامک آزمایشی در انتظار تأیید باشد، ارسالی تمام یا متوقف شود، اعتبار کم شود یا پشتیبان‌گیری عقب بیفتد، اینجا نشان داده می‌شود."
+
+msgid "Search…"
+msgstr "جست‌وجو…"
+
+msgid "Go to a page, campaign, segment or preset"
+msgstr "رفتن به صفحه، کمپین، گروه مخاطبان یا پیش‌تنظیم"
+
+msgid "Search pages, campaigns, segments and presets"
+msgstr "جست‌وجوی صفحه‌ها، کمپین‌ها، گروه‌های مخاطبان و پیش‌تنظیم‌ها"
+
+msgid "{n} results"
+msgstr "{n} نتیجه"
+
+msgid "Find this number"
+msgstr "جست‌وجوی این شماره"
+
+msgid "Nothing matches."
+msgstr "چیزی پیدا نشد."
+
+msgid "Move"
+msgstr "جابه‌جایی"
+
+msgid "Open"
+msgstr "باز کردن"
+
+msgid "Calendar"
+msgstr "تقویم"
+
+msgid "The sends that went out each day, and those set for later, in Tehran time."
+msgstr "ارسال‌هایی که هر روز انجام شد و آن‌هایی که برای بعد زمان‌بندی شده‌اند، به وقت تهران."
+
+msgid "Months"
+msgstr "ماه‌ها"
+
+msgid "Previous month"
+msgstr "ماه قبل"
+
+msgid "This month"
+msgstr "این ماه"
+
+msgid "Next month"
+msgstr "ماه بعد"
+
+msgid "What the colours mean"
+msgstr "معنی رنگ‌ها"
+
+msgid "No sends this month."
+msgstr "این ماه ارسالی نیست."
+
+msgid "The whole month"
+msgstr "کل ماه"

@@ -552,6 +552,21 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 
     The numbers come from `dashboard/activity.folder_activity`: one pass per campaign DB, `query_only` (never `mode=ro`, which can't open a WAL DB whose `-shm` is gone), for today (Tehran midnight), 7, 30 days and all time. Test SMS costs are included; clicks come from `click_hours`.
   - **The campaign list** (`/campaigns/`, `campaign_list`): tabs (all, in progress, needs attention, ended), stage tiles that filter (`?stage=`), a search by name, short name or template (`?q=`, nothing personal), 50 to a page, at most 5 attention items with "show all". The breadcrumbs' «کمپین‌ها» lead here.
+  - **Notifications** (`/notifications/`, `dashboard/notices.py`, plan 06 L4), derived from the last 7 days, never stored:
+    - each campaign's latest test SMS waiting for a decision on its current settings, or one that failed (for `run_campaigns`);
+    - sends done, stopped (with the reason) or cancelled (not withdrawn or superseded);
+    - the credit under the warning level (`ProviderCheck.below_since`);
+    - the daily backup overdue (admins), dated from when it became overdue.
+
+    Each keeps the moment it happened, so the menu counts those newer than `Profile.notifications_seen_at`, which opening the page sets. A refused account check has no such moment, so it isn't one (the credit card and the status page show it). The count reaches the menu as a memoized callable (`views.navigation`): computed once a page, never for an HTMX fragment.
+  - **Ctrl+K / Cmd+K** (`app.js` `setupPalette`, `#palette` in `base.html`):
+    - the menu's pages come from the page itself (so they follow the role); `/palette/` adds campaigns (the CLI's DBs too), segments and presets as JSON, each with the URL it opens for this role, names and short names only;
+    - matching folds Arabic «ي»/«ك», Persian and Arabic digits, and half-spaces;
+    - the shortcut also matches `event.code`, since on a Persian layout K types «ن»;
+    - a phone number offers the number lookup (`reveal_phone`) through a hidden POST form, never a URL;
+    - the menu's «جست‌وجو…» button stays `hidden` until the script shows it.
+  - **The calendar** (`/calendar/?month=1405-07`, `dashboard/calendar.py`): a Solar Hijri month, Saturday first, Tehran time. A send is on the day it started; a queued one on the day it's set for (a hollow dot); withdrawn sends never started, so they aren't on it. Below 48 rem the grid gives way to a list of the days with sends.
+  - **A send as it goes** (the campaign page): its pace and time left (`control.active_send`), a bar per segment when there are several (`StateStore.segment_progress`), and afterwards the delivery bar (`StateStore.delivery_groups`).
   - **Settings:** when the template's text is in the library, only the tokens it uses show (`campaigns/_token_row.html`). The rest fold under "the tokens the text doesn't use"; a filled one stays in view.
 - **Design system v1 ([app.css](src/sms_sender_web/static/css/app.css), plan 05 P1):**
   - **Basics:**

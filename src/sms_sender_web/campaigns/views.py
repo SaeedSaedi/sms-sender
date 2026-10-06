@@ -30,7 +30,8 @@ from ..accounts.roles import can
 from ..audit.record import record
 from ..dashboard.campaigns import read_campaign
 from ..dashboard.templatetags.fa import fa_number, jalali
-from ..dashboard.terms import STATUS_ORDER, SUBMISSION_STATUS as STATUS_LABELS
+from ..dashboard import control
+from ..dashboard.terms import DELIVERY_FILTERS, STATUS_ORDER, SUBMISSION_STATUS as STATUS_LABELS
 from ..jobs import services
 from ..jobs.engine import campaign_db
 from ..jobs.models import Campaign, Job
@@ -562,7 +563,9 @@ def _live(request, campaign: Campaign, *, ready_step: bool = True, **preview) ->
         ready["other_segments"], ready["lacking_segments"] = _other_segments(campaign)
     if life.stage in (COMPLETED, CANCELLED, STOPPED):
         ready["requeue_items"] = _requeue_items(campaign, request.user)
+    active_job = next((j for j in active if j.kind == Job.Kind.SEND), None)
     return {
+        **_live_send(campaign, db, active_job, counts),
         **ready,
         **_sends(campaign),
         "cancel_confirm": _(
@@ -615,6 +618,34 @@ def _live(request, campaign: Campaign, *, ready_step: bool = True, **preview) ->
             {"job": job, "result": result_line(job), "notes": notes(job)} for job in jobs
         ],
     }
+
+
+# The delivery bar's parts, in the order they show, with their tone.
+_DELIVERY_PARTS = (("delivered", "success"), ("on_its_way", "info"), ("unchecked", "neutral"),
+                   ("not_delivered", "danger"), ("expired", "warning"))
+
+
+def _live_send(campaign: Campaign, db, active_job: Job | None, counts: dict) -> dict:
+    """The send as it goes (plan 06, L4): its pace and time left, and a bar
+    per segment when it reads several; afterwards, delivery as Kavenegar
+    reports it, which goes on for 48 hours."""
+    out: dict = {"send_pace": control.active_send(active_job) if active_job else None,
+                 "segment_bars": [], "delivery_bar": []}
+    if not db.exists():
+        return out
+    store = StateStore(db)
+    if active_job is not None:
+        rows = store.segment_progress()
+        if len(rows) > 1:
+            names = dict(Segment.objects.filter(slug__in=[r["segment"] for r in rows]).values_list("slug", "name"))
+            out["segment_bars"] = [{"name": names.get(r["segment"]) or r["segment"] or "—", "total": r["total"],
+                                    "sent": r["sent"] or 0, "waiting": r["waiting"] or 0} for r in rows]
+    if counts.get("sent"):
+        groups = store.delivery_groups()
+        labels = dict(DELIVERY_FILTERS)
+        out["delivery_bar"] = [{"key": key, "tone": tone, "label": labels[key], "n": groups[key]}
+                               for key, tone in _DELIVERY_PARTS if groups.get(key)]
+    return out
 
 
 def _check_context(campaign: Campaign, loaded=None) -> dict:

@@ -1569,4 +1569,184 @@ details.schedule .field-grid { max-inline-size: 24rem; }
   .control-side { order: 2; }
   .control-recent { order: 3; }
 }
+/* The send as it goes, and its delivery after (plan 06, L4). */
+.segment-bars-title { margin: var(--s-4) 0 var(--s-2); font-size: var(--fs-sm); }
+.segment-bars { display: grid; gap: var(--s-2); }
+.segment-bars li { display: grid; grid-template-columns: minmax(6rem, 10rem) 1fr auto; align-items: center; gap: var(--s-3); }
+.segment-bar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.delivery-bar { margin-block-start: var(--s-4); }
+.delivery-bar h3 { margin: 0 0 var(--s-2); font-size: var(--fs-sm); }
 
+
+/* ---------- notifications (plan 06, L4) ---------- */
+
+/* The menu's count of unseen notifications. */
+.nav-count {
+  margin-inline-start: auto;
+  min-inline-size: 1.4rem;
+  padding-inline: .4rem;
+  border-radius: 999px;
+  background: var(--nav-accent);
+  color: #0b1220;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1.4rem;
+  text-align: center;
+}
+.notices > li.is-new .timeline-head a { font-weight: 750; }
+.notices .timeline-head a { color: var(--text); }
+
+/* ---------- go to anything: Ctrl+K / Cmd+K (plan 06, L4) ---------- */
+
+kbd {
+  display: inline-block;
+  min-inline-size: 1.4em;
+  padding: 0 .35em;
+  border: 1px solid var(--border-strong);
+  border-block-end-width: 2px;
+  border-radius: .3rem;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font: 600 .78em/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center;
+}
+/* The menu's button: looks like a search field. */
+.palette-open {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  inline-size: 100%;
+  min-block-size: 2.4rem;
+  margin-block: 0 var(--s-2);
+  padding: .4rem .75rem;
+  border: 1px solid var(--nav-border);
+  border-radius: var(--radius);
+  background: rgb(255 255 255 / .05);
+  color: var(--nav-muted);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.palette-open:hover { background: var(--nav-hover); color: var(--nav-text); }
+.palette-open .icon { inline-size: 1.05rem; block-size: 1.05rem; }
+.palette-open kbd { margin-inline-start: auto; border-color: var(--nav-border); background: transparent; color: var(--nav-muted); }
+
+.dialog.palette {
+  inline-size: min(38rem, calc(100vw - 2rem));
+  margin-block: min(12vh, 6rem) auto;
+}
+.palette-body { display: grid; }
+.palette-field {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding-inline: var(--s-4);
+  border-block-end: 1px solid var(--border);
+}
+.palette-field .icon { flex: none; color: var(--muted); }
+.palette-field input {
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: 3.25rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-md);
+  box-shadow: none;
+}
+.palette-field input:focus { outline: none; }
+.palette-field:focus-within { box-shadow: inset 0 -2px 0 var(--primary); }
+.palette-list { max-block-size: min(60vh, 26rem); overflow-y: auto; padding: var(--s-2); }
+.palette-list:empty { display: none; }
+.palette-group {
+  padding: var(--s-2) var(--s-3) var(--s-1);
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+.palette-option {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  min-block-size: 2.5rem;
+  padding: .55rem var(--s-3);
+  border-inline-start: 3px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.palette-option[aria-selected="true"] { border-inline-start-color: var(--primary); background: var(--primary-soft); }
+.palette-label { font-weight: 600; overflow-wrap: anywhere; }
+.palette-hint { margin-inline-start: auto; color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
+.palette-empty { margin: 0; padding: var(--s-5) var(--s-4); color: var(--muted); text-align: center; }
+.palette-help {
+  margin: 0;
+  padding: var(--s-2) var(--s-4);
+  border-block-start: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--fs-xs);
+}
+.palette-help kbd { margin-inline-end: .2em; }
+@media (max-width: 40rem) {
+  .palette-help { display: none; }  /* no keyboard on a phone, most often */
+}
+
+/* ---------- the calendar: a month of sends (plan 06, L4) ---------- */
+
+.month-nav { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.month-legend { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-4); margin: 0 0 var(--s-3); color: var(--text-2); font-size: var(--fs-xs); }
+.month-legend li { display: inline-flex; align-items: center; gap: var(--s-1); }
+.month-dot {
+  flex: none;
+  inline-size: .6rem;
+  block-size: .6rem;
+  border: 2px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+.month-dot.tone-success { border-color: var(--success); background: var(--success); }
+.month-dot.tone-info { border-color: var(--primary); background: var(--primary); }
+.month-dot.tone-warning { border-color: var(--warning); background: var(--warning); }
+.month-dot.tone-danger { border-color: var(--danger); background: var(--danger); }
+.month-dot.stage-scheduled { background: transparent; }  /* still to go: hollow */
+.month-grid { inline-size: 100%; border-collapse: collapse; table-layout: fixed; }
+.month-grid th { padding: var(--s-2) var(--s-1); color: var(--muted); font-size: var(--fs-xs); font-weight: 700; text-align: center; }
+.month-grid th abbr { text-decoration: none; }
+.month-grid td {
+  block-size: 6.5rem;
+  padding: var(--s-1) var(--s-2);
+  border: 1px solid var(--border);
+  vertical-align: top;
+}
+.month-grid td.is-outside { background: var(--surface-2); }
+.month-grid td.is-past .month-day { color: var(--muted); }
+.month-grid td.is-today { box-shadow: inset 0 0 0 2px var(--primary); }
+.month-grid td.is-today .month-day { color: var(--primary); }
+.month-day { display: block; font-size: var(--fs-sm); font-weight: 700; }
+.month-entries { display: grid; gap: var(--s-1); margin: var(--s-1) 0 0; padding: 0; list-style: none; font-size: var(--fs-xs); }
+.month-entries li { display: flex; align-items: baseline; gap: var(--s-1); min-inline-size: 0; }
+.month-entries li + li { margin: 0; }
+.month-entries .num { flex: none; }
+/* In a day of the month: the name on its line (cut short if it must be),
+   the time under it; the link is both, at least 24 px tall. */
+.month-grid .month-entries a {
+  display: grid;
+  min-inline-size: 0;
+  min-block-size: 1.5rem;
+  color: var(--text);
+  text-decoration: none;
+}
+.month-grid .month-entries a:hover .month-name { text-decoration: underline; }
+.month-name { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.month-time { color: var(--muted); font-size: .7rem; }
+.month-agenda { display: none; margin: 0; padding: 0; list-style: none; }
+.month-agenda > li + li { margin-block-start: var(--s-4); }
+.month-agenda h3 { margin: 0 0 var(--s-1); font-size: var(--fs-sm); }
+.month-agenda .month-entries { gap: var(--s-1); font-size: var(--fs-sm); }
+.month-agenda .month-entries .pill { margin-inline-start: auto; }
+.month-agenda [aria-current="date"] h3 { color: var(--primary); }
+@media (max-width: 47.99rem) {
+  /* Seven columns don't fit a phone: the days that have sends, as a list. */
+  .month-grid { display: none; }
+  .month-agenda { display: block; }
+}

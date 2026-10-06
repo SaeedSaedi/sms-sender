@@ -432,6 +432,15 @@ internal, multi-user tool built with Django and HTMX. So far it has:
   - the latest campaigns with their numbers.
 
   Every campaign is one click away on «کمپین‌ها»;
+- **notifications** («اعلان‌ها»): a test SMS waiting for approval, sends that
+  ended, stopped or were cancelled, low credit and an overdue backup, from
+  the last 7 days; the menu counts the ones you haven't seen;
+- **go to anything** with Ctrl+K (Cmd+K on a Mac): any page, campaign,
+  segment or preset, or a phone number to look up;
+- **a calendar** («تقویم») of what went out each day and what's scheduled, by
+  the Solar Hijri month;
+- **a send as it goes**: its pace, time left and a bar per segment; after it,
+  how many were delivered;
 - **a new alert in one page** («هشدار تازه»), for messages you send again
   and again:
   - A **preset** («پیش‌تنظیم») keeps a message's template, what fills each

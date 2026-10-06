@@ -177,3 +177,55 @@ def test_the_menu_has_the_control_room_and_the_campaign_list(signed_in):
     assert '<a href="/" aria-current="true">' in html
     html = signed_in.get("/campaigns/").content.decode()
     assert '<a href="/campaigns/" aria-current="true">' in html
+
+
+# ---------- the send as it goes, and its delivery after ----------
+
+def test_each_segments_progress_and_the_delivery_groups(tmp_path):
+    store = StateStore(tmp_path / "db" / "two.db")
+    store.upsert_pending([("09120000001", "a"), ("09120000002", "b")], segment="vip")
+    store.upsert_pending([("09120000003", "c")], segment="new")
+    store.record_invalid_many([("nope", "not a phone number")])
+    conn = store._conn()
+    conn.execute("UPDATE recipients SET status='sent', sent_at=?, delivery_status=10 WHERE phone='09120000001'",
+                 (NOW,))
+    conn.execute("UPDATE recipients SET status='sent', sent_at=?, delivery_status=11 WHERE phone='09120000003'",
+                 (NOW,))
+    conn.commit()
+    rows = [tuple(r) for r in store.segment_progress()]
+    assert rows == [("vip", 2, 1, 1), ("new", 1, 1, 0)]  # in the order they came; the invalid row aside
+    assert store.delivery_groups() == {"delivered": 1, "not_delivered": 1, "on_its_way": 0, "expired": 0,
+                                       "unchecked": 0}
+
+
+def test_the_campaign_page_shows_each_segment_while_sending(signed_in, settings, tmp_path):
+    from sms_sender_web.segments.models import Segment
+
+    Segment.objects.create(slug="vip", name="مشتریان ویژه", status=Segment.Status.READY)
+    campaign = Campaign.objects.create(slug="two", name="دو گروه", settings={"segment": "vip",
+                                                                            "more_segments": ["new"]})
+    store = StateStore(tmp_path / "db" / "two.db")
+    store.upsert_pending([("09120000001", "a"), ("09120000002", "b")], segment="vip")
+    store.upsert_pending([("09120000003", "c")], segment="new")
+    store._conn().execute("UPDATE recipients SET status='sent', sent_at=? WHERE phone='09120000001'", (NOW,))
+    store._conn().commit()
+    Job.objects.create(campaign=campaign, kind=Job.Kind.SEND, state=Job.State.RUNNING,
+                       started_at=timezone.now() - timedelta(seconds=10),
+                       progress={"total": 3, "processed": 1, "sent": 1})
+    html = signed_in.get("/campaigns/two/").content.decode()
+    bars = html.split('class="plain segment-bars"')[1].split("</ul>")[0]
+    assert "مشتریان ویژه" in bars and "new" in bars
+    assert 'max="2" value="1"' in bars and 'max="1" value="0"' in bars
+    assert "در ثانیه" in html and "مانده" in html  # the pace and the time left
+
+
+def test_a_finished_send_shows_its_delivery(signed_in, sent):
+    campaign = Campaign.objects.create(slug="coin", name="قیمت سکه", settings={"segment": "vip"})
+    Job.objects.create(campaign=campaign, kind=Job.Kind.SEND, state=Job.State.DONE, started_at=timezone.now(),
+                       finished_at=timezone.now(), result={"sent": 4, "cost": 12080})
+    html = signed_in.get("/campaigns/coin/").content.decode()
+    bar = html.split('id="delivery-bar"')[1].split('<p class="hint">')[0]
+    # Of the four accepted: two delivered, one undelivered, one not asked yet.
+    assert 'class="sb-success">تحویل‌شده <span class="num">۲</span>' in bar
+    assert 'class="sb-danger">' in bar and 'class="sb-neutral">' in bar
+    assert "۴۸ ساعت" in html

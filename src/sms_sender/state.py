@@ -1185,6 +1185,28 @@ class StateStore:
         ).fetchall()
         return {r["delivery_status"]: r["n"] for r in rows}
 
+    def delivery_groups(self) -> dict[str, int]:
+        """Sent rows by what their delivery status means for the person
+        (`DELIVERY_GROUPS`), and UNCHECKED: not asked about yet."""
+        groups = dict.fromkeys([*DELIVERY_GROUPS, UNCHECKED], 0)
+        for code, n in self.delivery_counts().items():
+            # A code no group names is still on its way, as far as anyone knows.
+            key = UNCHECKED if code is None else next(
+                (k for k, codes in DELIVERY_GROUPS.items() if code in codes), "on_its_way")
+            groups[key] += n
+        return groups
+
+    def segment_progress(self) -> list[sqlite3.Row]:
+        """Per segment, in the order they were added: its recipients (input
+        rows that weren't numbers aside), how many were accepted, and how
+        many still wait to be sent."""
+        return self._conn().execute(
+            "SELECT COALESCE(segment, '') AS segment, COUNT(*) AS total, "
+            "SUM(status = ?) AS sent, SUM(status IN (?, ?, ?)) AS waiting "
+            "FROM recipients WHERE phone NOT LIKE 'INVALID:%' GROUP BY segment ORDER BY MIN(rowid)",
+            (SENT, PENDING, IN_FLIGHT, FAILED_RETRIABLE),
+        ).fetchall()
+
     def total_cost(self) -> int:
         """What this campaign paid for its accepted SMS, in rials."""
         row = self._conn().execute("SELECT COALESCE(SUM(cost), 0) FROM recipients").fetchone()

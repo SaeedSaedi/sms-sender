@@ -12,14 +12,24 @@
       <progress id="send-progress" max="{{ send_links.total }}" value="{{ send_links.done }}" aria-labelledby="send-progress-label"></progress>
       <p class="num" id="send-progress-label">{{ send_links.label }}{% if send_links.left %} · {{ send_links.left }}{% endif %}</p>
     {% elif p.total %}
-      <progress id="send-progress" max="{{ p.total }}" value="{{ p.processed|default:0 }}" aria-labelledby="send-progress-label"></progress>
-      <p class="num" id="send-progress-label">{{ p.processed|default:0|fa_number }} / {{ p.total|fa_number }}</p>
+      <progress id="send-progress" class="send-progress" max="{{ p.total }}" value="{{ p.processed|default:0 }}" aria-labelledby="send-progress-label"></progress>
+      <p class="num send-figures" id="send-progress-label"><strong>{{ p.processed|default:0|fa_number }}</strong> / {{ p.total|fa_number }}{% if send_pace.pace %} · {{ send_pace.pace }}{% endif %}{% if send_pace.left %} · {{ send_pace.left }}{% endif %}</p>
       <ul class="meta-list">
         <li>{% translate "Accepted" %} <span class="num">{{ p.sent|default:0|fa_number }}</span></li>
         <li>{% translate "Not sent" %} <span class="num">{{ p.failed_retriable|default:0|fa_number }}</span></li>
         <li>{% translate "Rejected" %} <span class="num">{{ p.failed_permanent|default:0|fa_number }}</span></li>
         <li>{% translate "Unknown" %} <span class="num">{{ p.unknown|default:0|fa_number }}</span></li>
       </ul>
+      {% if segment_bars %}
+        <h3 class="segment-bars-title">{% translate "Each segment" %}</h3>
+        <ul class="plain segment-bars">
+          {% for b in segment_bars %}
+            <li><span class="segment-bar-name"><bdi>{{ b.name }}</bdi></span>
+              <progress max="{{ b.total }}" value="{{ b.sent }}" aria-label="{{ b.name }}"></progress>
+              <span class="num">{{ b.sent|fa_number }} / {{ b.total|fa_number }}</span></li>
+          {% endfor %}
+        </ul>
+      {% endif %}
     {% endif %}
   {% endwith %}
   {% if user|can:"run_campaigns" %}

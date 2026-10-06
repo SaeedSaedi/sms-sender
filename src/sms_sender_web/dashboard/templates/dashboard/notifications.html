@@ -1,0 +1,31 @@
+{% extends "base.html" %}{% load fa i18n ui %}
+{% block title %}{% translate "Notifications" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>{% translate "Notifications" %}</h1>
+    <p class="page-meta">{% translate "What happened in the last 7 days that may need you: tests waiting for approval, finished or stopped sends, low credit and an overdue backup." %}</p>
+  </div>
+</header>
+
+{% if items %}
+<section class="card">
+  <ol class="timeline notices">
+    {% for item in items %}
+    <li{% if item.new %} class="is-new"{% endif %}>
+      <span class="timeline-dot tone-{{ item.notice.tone }}" aria-hidden="true"></span>
+      <div class="timeline-head"><a href="{{ item.notice.url }}">{{ item.notice.text }}</a>{% if item.new %} <span class="pill pill-info">{% translate "New" %}</span>{% endif %}</div>
+      <div class="timeline-meta"><span class="num">{{ item.notice.at|jalali }}</span></div>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% else %}
+<div class="empty-state">
+  {% icon "bell" %}
+  <h2>{% translate "Nothing in the last 7 days" %}</h2>
+  <p>{% translate "When a test SMS waits for approval, a send ends or stops, the credit runs low or a backup is overdue, it shows here." %}</p>
+  <div class="actions"><a class="button secondary" href="{% url 'home' %}">{% icon "gauge" %}{% translate "Control room" %}</a></div>
+</div>
+{% endif %}
+{% endblock %}

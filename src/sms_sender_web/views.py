@@ -1,3 +1,5 @@
+import functools
+
 from django.conf import settings
 from django.contrib.auth.decorators import login_not_required
 from django.db import connection
@@ -45,10 +47,22 @@ _SECTIONS = {
     "help": "help", "campaign_import": "campaigns", "number_lookup": "numbers",
     "compose_start": "compose", "compose": "compose", "compose_campaign": "compose",
     "preset_list": "presets", "preset_new": "presets", "preset_edit": "presets",
+    "notifications": "notifications", "calendar": "calendar",
 }
 
 
 def navigation(request) -> dict:
-    """The menu marks the section of the page you're on."""
+    """The menu marks the section of the page you're on, and counts the
+    notifications you haven't seen. The count is a callable the template
+    calls only when it renders the menu, once a request: the live parts
+    that poll every few seconds never pay for it."""
     match = getattr(request, "resolver_match", None)
-    return {"nav_section": _SECTIONS.get(match.url_name if match else None, "")}
+    user = getattr(request, "user", None)
+
+    @functools.cache
+    def unseen() -> int:
+        from .dashboard.notices import unseen
+
+        return unseen(user) if user is not None and user.is_authenticated else 0
+
+    return {"nav_section": _SECTIONS.get(match.url_name if match else None, ""), "notices_unseen": unseen}

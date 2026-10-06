@@ -59,6 +59,32 @@
     <p data-when="offline">{% translate "The connection to the server was lost. Trying again…" %}</p>
     <p data-when="stale" hidden>{% translate "This page is out of date." %} <button type="button" class="link" data-reload>{% translate "Reload it" %}</button></p>
   </div>
+  {% if user|fully_signed_in and user|can:"view_campaigns" %}
+  {# Ctrl+K (Cmd+K): go to a page, campaign, segment or preset (app.js). #}
+  <dialog class="dialog palette" id="palette" aria-labelledby="palette-title" data-source="{% url 'palette' %}"
+          data-pages="{% translate "Pages" %}" data-campaigns="{% translate "Campaigns" %}"
+          data-segments="{% translate "Segments" %}" data-presets="{% translate "Presets" %}"
+          data-results="{% translate "{n} results" %}"{% if user|can:"reveal_phone" %} data-find="{% translate "Find this number" %}"{% endif %}>
+    <div class="palette-body">
+      <h2 class="visually-hidden" id="palette-title">{% translate "Go to a page, campaign, segment or preset" %}</h2>
+      <div class="palette-field">
+        {% icon "search" %}
+        <input id="palette-input" type="text" role="combobox" aria-expanded="false" aria-controls="palette-list"
+               aria-autocomplete="list" autocomplete="off" spellcheck="false"
+               aria-label="{% translate "Search pages, campaigns, segments and presets" %}"
+               placeholder="{% translate "Search pages, campaigns, segments and presets" %}">
+      </div>
+      <div class="palette-list" id="palette-list" role="listbox" aria-label="{% translate "Results" %}"></div>
+      <p class="palette-empty" data-palette-empty hidden>{% translate "Nothing matches." %}</p>
+      <p class="visually-hidden" role="status" data-palette-count></p>
+      <p class="palette-help" aria-hidden="true"><kbd>↑</kbd><kbd>↓</kbd> {% translate "Move" %} · <kbd dir="ltr">Enter</kbd> {% translate "Open" %} · <kbd dir="ltr">Esc</kbd> {% translate "Close" %}</p>
+    </div>
+  </dialog>
+  {% if user|can:"reveal_phone" %}
+  {# A number is looked up with a POST, never in a URL. #}
+  <form method="post" action="{% url 'number_lookup' %}" hidden data-palette-number>{% csrf_token %}<input type="hidden" name="number"></form>
+  {% endif %}
+  {% endif %}
   <dialog class="dialog" id="confirm-dialog" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-text">
     <form method="dialog" class="dialog-body">
       <h2 class="dialog-title" id="confirm-dialog-title" data-confirm-title></h2>
