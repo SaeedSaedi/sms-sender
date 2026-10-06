@@ -23,6 +23,7 @@ from sms_sender.state import FAILED_PERMANENT, SENT, StateStore
 from sms_sender.rate import parse_rate
 from sms_sender.sender import TOKEN_MAX_SPACES
 
+from .. import live, undo
 from ..accounts.decorators import forbidden, requires
 from ..backup import BackupError
 from ..accounts.models import test_phone_of
@@ -65,6 +66,7 @@ _ACTIONS = {
     "reject": "run_campaigns",
     "send": "run_campaigns",
     "unschedule": "run_campaigns",
+    "reschedule": "run_campaigns",  # the unschedule's undo
     "start_now": "run_campaigns",
     "pause": "run_campaigns",
     "resume": "run_campaigns",
@@ -79,6 +81,8 @@ _ACTIONS = {
 @require_http_methods(["GET", "POST"])
 def campaign_new(request):
     form = NewCampaignForm(request.POST or None, initial={"segment": request.GET.get("segment", "")})
+    if live.validating(request):  # as someone types: the errors, nothing saved
+        return live.errors(form)
     if request.method == "POST" and form.is_valid():
         d = form.cleaned_data
         segment = d["segment"]
@@ -106,6 +110,8 @@ def campaign_duplicate(request, slug: str):
     form = DuplicateForm(request.POST or None, initial={
         "name": _("%(name)s (copy)") % {"name": source.name}, "slug": free_slug(source.slug),
     })
+    if live.validating(request):  # as someone types: the errors, nothing saved
+        return live.errors(form)
     if request.method == "POST" and form.is_valid():
         campaign = Campaign.objects.create(
             slug=form.cleaned_data["slug"], name=form.cleaned_data["name"], created_by=request.user,
@@ -346,6 +352,8 @@ def campaign_settings(request, slug: str):
         combined(request.POST) if request.method == "POST" else None, columns=columns, initial=initial,
         advanced=can(request.user, "manage_settings"),
     )
+    if live.validating(request):  # as someone types: the errors, nothing saved
+        return live.errors(form)
     if request.method == "POST" and form.is_valid():
         before = dict(campaign.settings)
         campaign.settings = form.settings(campaign)
@@ -815,7 +823,13 @@ def campaign_action(request, slug: str, action: str):
         elif action == "unschedule":
             services.unschedule(_job(campaign, request, (Job.Kind.SEND,)))
             record("send_unscheduled", request=request, campaign=slug)
-            messages.success(request, _("The schedule is cancelled. The campaign is ready to send, now or at another time."))
+            undo.offer(request, _("The schedule is cancelled. The campaign is ready to send, now or at another time."),
+                       reverse("campaign_action", args=[slug, "reschedule"]))
+        elif action == "reschedule":
+            job = services.reschedule(campaign, request.user)
+            record("send_scheduled", request=request, campaign=slug, at=job.not_before.isoformat(),
+                   smoke_test=bool(job.params.get("smoke_test")), undone=True)
+            messages.success(request, _("Sending is scheduled for %(when)s.") % {"when": jalali(job.not_before)})
         elif action == "start_now":
             job = services.start_now(_job(campaign, request, (Job.Kind.SEND,)))
             record("send_started", request=request, campaign=slug,

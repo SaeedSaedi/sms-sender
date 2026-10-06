@@ -10,12 +10,13 @@
   {% endfor %}
 </div>{% endif %}
 {% if notices %}<div class="toasts">
-  {% for message in notices %}
-    <div class="callout callout-{{ message.level_tag }}" role="status" data-toast>
+  {% for message in notices %}{% with undo=message|undo_url %}
+    <div class="callout callout-{{ message.level_tag }}" role="status" data-toast{% if undo %} data-undo{% endif %}>
       {% if message.level_tag == "success" %}{% icon "circle-check" %}{% else %}{% icon "info" %}{% endif %}
       <p>{{ message }}</p>
+      {% if undo %}<form method="post" action="{{ undo }}" class="toast-undo">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button type="submit" class="small secondary">{% icon "refresh-cw" %}{% translate "Undo" %}</button></form>{% endif %}
       <button type="button" class="icon-button" data-dismiss aria-label="{% translate "Close" %}">{% icon "x" %}</button>
     </div>
-  {% endfor %}
+  {% endwith %}{% endfor %}
 </div>{% endif %}
 {% endwith %}{% endif %}

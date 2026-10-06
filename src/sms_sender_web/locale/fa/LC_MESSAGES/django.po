@@ -371,9 +371,6 @@ msgstr "جدیدتر"
 msgid "Older"
 msgstr "قدیمی‌تر"
 
-msgid "Nothing recorded yet."
-msgstr "هنوز فعالیتی ثبت نشده است."
-
 msgid "Signed in"
 msgstr "ورود"
 
@@ -3925,3 +3922,24 @@ msgstr "{n} دقیقه پیش"
 
 msgid "{n} rials per SMS"
 msgstr "هر پیامک {n} ریال"
+
+msgid "It's too late to undo that: set the send's time again."
+msgstr "برای واگرد دیر شده است؛ زمان ارسال را دوباره تعیین کنید."
+
+msgid "Nothing matches these filters"
+msgstr "چیزی با این فیلترها پیدا نشد"
+
+msgid "Sign-ins, settings, test SMS, sends and downloads show here as people do them."
+msgstr "ورودها، تنظیمات، پیامک‌های آزمایشی، ارسال‌ها و دریافت فایل‌ها همین‌جا ثبت می‌شوند."
+
+msgid "Try a longer period, another person or another action, or clear the filters to see everything."
+msgstr "بازه‌ای طولانی‌تر، شخص یا کار دیگری را امتحان کنید، یا فیلترها را پاک کنید تا همه چیز را ببینید."
+
+msgid "Undo"
+msgstr "واگرد"
+
+msgid "Nothing recorded yet"
+msgstr "هنوز فعالیتی ثبت نشده است"
+
+msgid "Put it away"
+msgstr "کنار گذاشتن"

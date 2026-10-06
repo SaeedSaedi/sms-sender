@@ -13,6 +13,7 @@ from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
 from django.views.decorators.http import require_http_methods, require_POST
 
+from .. import live
 from ..accounts.decorators import requires
 from ..audit.record import record
 from sms_sender.input_loader import SLUG_RE
@@ -54,6 +55,8 @@ def segment_list(request):
 @require_http_methods(["GET", "POST"])
 def segment_upload(request):
     form = UploadForm(request.POST or None, request.FILES or None)
+    if live.validating(request):  # as someone types: the errors, nothing saved
+        return live.errors(form)
     if request.method == "POST" and form.is_valid():
         d = form.cleaned_data
         segment = Segment(

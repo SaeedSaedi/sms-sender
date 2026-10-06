@@ -9,7 +9,7 @@
 {% block content %}
 <section class="card medium">
   <h1>{% if template %}{{ template.name|ltr }}{% else %}{% translate "Add a template" %}{% endif %}</h1>
-  <form method="post" data-guard>
+  <form method="post" data-guard data-validate>
     {% csrf_token %}
     <label for="id_name">{% translate "Template name" %}</label>
     <input id="id_name" name="name" type="text" dir="ltr" maxlength="100" required value="{{ form.name.value|default:'' }}"{% aria form.name hint=True %}>

@@ -12,7 +12,7 @@
 </header>
 
 <div class="split settings-layout">
-<form method="post" class="settings split-main" id="settings-form" data-guard data-settings novalidate>
+<form method="post" class="settings split-main" id="settings-form" data-guard data-settings data-validate novalidate>
   {% csrf_token %}
   {% if changing_sent_message %}
     <div class="callout callout-warning" role="note">{% icon "triangle-alert" %}

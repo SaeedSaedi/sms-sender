@@ -61,7 +61,18 @@
   {% if page.has_next %}<a href="?{% if filter_query %}{{ filter_query }}&amp;{% endif %}page={{ page.next_page_number }}">{% translate "Older" %}</a>{% endif %}
 </nav>
 {% endif %}
+{% elif filter_query %}
+<div class="empty-state">
+  {% icon "search" %}
+  <h2>{% translate "Nothing matches these filters" %}</h2>
+  <p>{% translate "Try a longer period, another person or another action, or clear the filters to see everything." %}</p>
+  <div class="actions"><a class="button secondary" href="{% url 'audit_log' %}">{% icon "x" %}{% translate "Clear the filters" %}</a></div>
+</div>
 {% else %}
-<p class="empty">{% translate "Nothing recorded yet." %}</p>
+<div class="empty-state">
+  {% icon "history" %}
+  <h2>{% translate "Nothing recorded yet" %}</h2>
+  <p>{% translate "Sign-ins, settings, test SMS, sends and downloads show here as people do them." %}</p>
+</div>
 {% endif %}
 {% endblock %}

@@ -40,6 +40,14 @@ def field_errors(field, alert: bool = True):
 
 
 @register.filter
+def undo_url(message) -> str:
+    """Where a message's «واگرد» posts to, if it offers one (undo.py)."""
+    from ...undo import url_of
+
+    return url_of(message)
+
+
+@register.filter
 def problems(messages) -> list:
     """Errors and warnings: they stay on the page until dealt with."""
     return [m for m in messages if m.level_tag in ("error", "warning")]

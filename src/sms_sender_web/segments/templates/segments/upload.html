@@ -11,7 +11,7 @@
 <section class="card medium">
   <h1>{% translate "Upload a segment" %}</h1>
   <p>{% translate "A CSV or TXT file with one recipient per row. In the next step you choose which column holds the mobile numbers." %}</p>
-  <form method="post" enctype="multipart/form-data">
+  <form method="post" enctype="multipart/form-data" data-validate>
     {% csrf_token %}
     <label for="id_file">{% translate "File" %}</label>
     <div class="file-field">

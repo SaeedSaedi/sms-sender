@@ -11,7 +11,7 @@
 <section class="card medium">
   <h1>{% translate "Duplicate the campaign" %}</h1>
   <p>{% translate "A new campaign with the same settings: the segment, the template and what fills its tokens, the link and its tracking values, the window and the rate. Its test SMS, approval and sends start afresh." %}</p>
-  <form method="post">
+  <form method="post" data-validate>
     {% csrf_token %}
     <label for="id_name">{% translate "Name" %}</label>
     <input id="id_name" name="name" type="text" maxlength="200" required value="{{ form.name.value|default:'' }}"{% aria form.name %}>

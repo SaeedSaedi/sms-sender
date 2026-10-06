@@ -113,3 +113,124 @@ def test_the_parts_that_refresh_as_you_type_can_shimmer():
                          ("settings.html", 'id="preview" data-skeleton'),
                          ("stage/_recipients_preview.html", 'id="recipients-preview" data-skeleton')):
         assert marker in (root / path).read_text(encoding="utf-8"), path
+
+
+# ---------- validation as you type (live.py) ----------
+
+LIVE = {"HTTP_X_VALIDATE": "1"}
+
+
+@pytest.fixture
+def operator_client(client, make_user, verified):
+    verified(client, make_user("op", "operator"))
+    return client
+
+
+def test_a_new_campaign_checks_itself_and_saves_nothing(operator_client):
+    response = operator_client.post("/campaigns/new/", {"name": "قیمت", "slug": "Bad Slug!", "template": ""}, **LIVE)
+    assert response["Content-Type"] == "application/json"
+    errors = response.json()["errors"]
+    assert set(errors) >= {"slug", "segment", "template"} and errors["slug"]
+    assert not Campaign.objects.exists()
+
+
+def test_the_settings_check_a_token_as_you_type(operator_client):
+    campaign = Campaign.objects.create(slug="oil", name="نفت", settings={"segment": "vip", "template": "t"})
+    response = operator_client.post(f"/campaigns/{campaign.slug}/settings/",
+                                     {"template": "t", "token_source": "value", "token_value": "a_b"},
+                                     **LIVE)  # Kavenegar refuses "_"
+    errors = response.json()["errors"]
+    assert "token_value" in errors and "_" in errors["token_value"][0]
+    campaign.refresh_from_db()
+    assert campaign.settings == {"segment": "vip", "template": "t"}  # nothing saved
+
+
+def test_a_presets_two_forms_answer_together(operator_client):
+    from sms_sender_web.campaigns.models import Preset
+
+    response = operator_client.post("/presets/new/", {"template": "t", "slug": "Not ok"}, **LIVE)
+    errors = response.json()["errors"]
+    assert "slug" in errors and "name" in errors  # the preset's own fields, beside the settings'
+    assert not Preset.objects.exists()
+
+
+def test_an_upload_checks_its_names_without_the_file(operator_client):
+    from sms_sender_web.segments.models import Segment
+
+    response = operator_client.post("/segments/upload/", {"name": "", "slug": "upload"}, **LIVE)
+    errors = response.json()["errors"]
+    assert "slug" in errors  # "upload" is reserved
+    assert not Segment.objects.exists()
+
+
+def test_my_test_number_checks_itself(operator_client):
+    response = operator_client.post("/account/", {"test_phone": "123"}, **LIVE)
+    assert "test_phone" in response.json()["errors"]
+
+
+def test_errors_stay_where_a_submit_shows_them(operator_client):
+    """Every field's error box is on the page, hidden while empty, so the
+    errors found as you type land where a submit would put them."""
+    html = operator_client.get("/campaigns/new/").content.decode()
+    assert '<form method="post" data-validate>' in html
+    assert '<div class="field-errors" id="id_slug_error" hidden>' in html
+
+
+# ---------- undo, where an action is safe to take back (undo.py) ----------
+
+def test_putting_a_preset_away_can_be_undone(operator_client):
+    from sms_sender_web.campaigns.models import Preset
+
+    Preset.objects.create(slug="price", name="قیمت", settings={"template": "t"})
+    html = operator_client.post("/presets/price/archive/", follow=True).content.decode()
+    toast = html.split('data-undo>')[1].split("</div>")[0]
+    assert 'action="/presets/price/archive/"' in toast and "واگرد" in toast
+    assert Preset.objects.get().archived_at is not None
+    operator_client.post("/presets/price/archive/", follow=True)  # the toast's button
+    assert Preset.objects.get().archived_at is None
+
+
+@pytest.fixture
+def scheduled(make_user):
+    from datetime import timedelta
+
+    user = make_user("planner", "operator")
+    campaign = Campaign.objects.create(slug="coin", name="سکه", settings={"segment": "vip", "template": "t",
+                                                                          "tokens": {"token": "x"}})
+    Job.objects.create(campaign=campaign, kind=Job.Kind.TEST, state=Job.State.DONE, finished_at=timezone.now(),
+                       settings_hash=services.settings_hash(campaign), decision=Job.Decision.APPROVED,
+                       decided_by=user, result={"cost_per_sms": 3020})
+    at = (timezone.now() + timedelta(days=1)).replace(second=0, microsecond=0)
+    services.start_send(campaign, user, at=at, smoke_test=True)
+    return campaign, at
+
+
+def test_taking_a_send_off_its_schedule_can_be_undone(scheduled, operator_client):
+    campaign, at = scheduled
+    job = Job.objects.get(kind=Job.Kind.SEND, state=Job.State.QUEUED)
+    html = operator_client.post("/campaigns/coin/unschedule/", {"job": job.pk}, follow=True).content.decode()
+    toast = html.split('data-undo>')[1].split("</div>")[0]
+    assert 'action="/campaigns/coin/reschedule/"' in toast
+    assert not Job.objects.filter(kind=Job.Kind.SEND, state=Job.State.QUEUED).exists()
+    operator_client.post("/campaigns/coin/reschedule/", follow=True)  # the toast's button
+    again = Job.objects.get(kind=Job.Kind.SEND, state=Job.State.QUEUED)
+    assert again.not_before == at and again.params["smoke_test"] is True  # the same time, one recipient first
+
+
+def test_an_undo_only_soon_after_and_before_the_time(scheduled, make_user):
+    from datetime import timedelta
+
+    campaign, at = scheduled
+    user = make_user("other", "operator")
+    services.unschedule(Job.objects.get(kind=Job.Kind.SEND, state=Job.State.QUEUED))
+    with pytest.raises(services.JobConflict) as late:
+        services.reschedule(campaign, user, now=timezone.now() + timedelta(minutes=11))
+    assert late.value.code == "too_late"
+    with pytest.raises(services.JobConflict):
+        services.reschedule(campaign, user, now=at + timedelta(minutes=1))  # its time has passed
+
+
+def test_the_activity_log_says_when_filters_match_nothing(client, make_user, verified):
+    verified(client, make_user("boss", "admin"))
+    html = client.get("/activity/?action=api_called").content.decode()
+    assert "چیزی با این فیلترها پیدا نشد" in html and 'href="/activity/"' in html

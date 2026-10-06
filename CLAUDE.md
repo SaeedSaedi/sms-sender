@@ -52,7 +52,7 @@ pytest -k "claim or in_flight"           # by name pattern
 pytest -m e2e                            # browser tests: pip install -e ".[dev,web,e2e]" + Google Chrome
 E2E_SHOTS=/tmp/shots pytest -m e2e       # + a screenshot of every page at every width
 E2E_UPDATE_BASELINE=1 pytest -m e2e tests/web/e2e/test_pages.py   # rewrite baseline.json
-pytest -m perf                           # a 100,000-recipient campaign's pages, each under 2 s
+pytest -m perf                           # 100,000-recipient pages under 1 s; every test-world page under 300 ms
 ```
 
 CI (`.github/workflows/tests.yml`) runs `pytest` and `pytest -m perf` on Python 3.10 (the `requires-python` floor) and 3.14, and `pytest -m e2e`, for pushes to `main` and every PR. Code must keep working on 3.10.
@@ -547,6 +547,17 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
     - `.page-progress` in `base.html`: app.js sets `html.is-navigating` 150 ms after a link or form leaves the page. Whether it leaves is checked after every other handler, so a confirmation, a tab or HTMX stops it. `a[download]` never starts it, so every file download link carries `download`. It clears on `pageshow`, or after 15 s.
     - `data-skeleton` on a region that refreshes as you type (the composer's preview and counts, the settings preview, the recipients preview): app.js sets `aria-busy` while its HTMX request runs, and app.css shimmers it after a beat. Never on a poll.
   - **Focus:** the sidebar and drawer ring in `--nav-accent`, which shows on navy.
+  - **Validation as you type** (`live.py`, app.js `setupValidation`):
+    - a form marked `data-validate` posts itself with `X-Validate: 1` (files left out) 450 ms after typing in a field it has left, or a change;
+    - its view, right after binding and before saving anything, answers `if live.validating(request): return live.errors(form, …)`: the forms' own field errors as JSON, in Persian (`__all__` waits for the submit);
+    - `ui/field_errors.html` always renders the error box (`id_<name>_error`, hidden while empty), so the live errors land where a submit puts them, with `aria-invalid` and `aria-describedby`;
+    - a field speaks up once typed in and left, or changed; a combined field with no input of its own (the settings' window, its rate) once its section has been. Errors a submit showed count as begun.
+
+    On: new campaign, duplicate, campaign and preset settings, the template library, segment upload (a typed short name is checked on its own, `UploadForm.clean_slug`), and My account's test number.
+  - **Undo** (`undo.py`): `undo.offer(request, text, url)` makes a success toast with a «واگرد» button that POSTs to `url`, and stays 15 s instead of 8 s. The URL rides in the message's extra tags (the `undo_url` filter). Only for actions safe to take back:
+    - putting a preset away (`preset_archive` again);
+    - unscheduling a send (`services.reschedule`: the same time and smoke-test choice, through `start_send`, so every gate is checked again; within `UNDO_WITHIN`, 10 minutes, and only while that time is ahead, else `too_late`).
+  - **Budgets** (`tests/web/test_performance.py`, `-m perf`): 100,000-recipient pages under 1 s; every page of the test world, as its person, under 300 ms.
   - **Links by role:** `control.campaign_url(campaign, user)` sends an alert to the composer only for someone who can `run_campaigns` (the composer needs it); anyone else, and a call without a user, gets the campaign page. Every caller passes `request.user`.
   - **Control room:**
     - delivered and click rate (7 days) against the 30-day average, with a tone (`control._against_month`), once the 30 days hold more than the 7;
