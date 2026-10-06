@@ -47,9 +47,11 @@ from urllib.request import ProxyHandler, build_opener
 
 from dotenv import dotenv_values
 
-from sms_sender.sharing import HEARTBEAT, foreign_worker
+from sms_sender.sharing import HEARTBEAT, HOLD, MOVED, foreign_worker, write_hold
 
 LABEL = "team.kifpool.sms-dashboard"
+# In the data folder once its data has moved to the server (`retire`).
+MOVED_FILE = "MOVED.json"
 PORTS = {False: 8000, True: 8001}
 HOST = "127.0.0.1"
 # The worker lets requests in flight finish; Docker gives it 90 s.
@@ -118,6 +120,26 @@ class Place:
         env = environment(root, sandbox)
         asked = env.pop("SMS_SENDER_SANDBOX_ASKED", "").strip().lower() in TRUE
         return cls(root, sandbox, env, asked)
+
+    @property
+    def moved_file(self) -> Path:
+        return self.data_dir / MOVED_FILE
+
+    def check_moved(self) -> None:
+        """A copy whose data moved to the server never runs again: two
+        places sending one campaign could reach people twice."""
+        if not self.moved_file.exists():
+            return
+        try:
+            moved = json.loads(self.moved_file.read_text(encoding="utf-8"))
+            when = time.strftime("%Y-%m-%d %H:%M", time.localtime(float(moved["at"])))
+        except (OSError, ValueError, KeyError, TypeError):
+            when = "?"
+        raise Refused(
+            f"This data moved to the server on {when} (sms-dashboard retire): work there. Starting it here "
+            f"too could send a campaign twice. To use this copy again on purpose, remove {self.moved_file} "
+            f"and {self.data_dir / 'db' / HOLD}."
+        )
 
     def check_mode(self) -> None:
         """`.env` (or the shell) asking for the sandbox means it: the real
@@ -545,6 +567,7 @@ def agent_loaded(place: Place) -> bool:
 
 def start(place: Place, port: int, *, browser: bool) -> int:
     place.check_mode()
+    place.check_moved()
     info = running(place)
     if info is None:
         proc = None
@@ -633,6 +656,7 @@ def upgrade(place: Place, port: int) -> int:
     from .backup import make_backup
 
     place.check_mode()
+    place.check_moved()
     was_running = running(place) is not None
     if was_running and stop(place) != 0:
         return 1
@@ -691,6 +715,41 @@ def install_agent(place: Place) -> int:
     return start(place, PORTS[place.sandbox], browser=False)
 
 
+def retire(place: Place) -> int:
+    """For moving to the server (plan 06, L7): stop, a final verified backup
+    to take there, and this copy never sends again. The launcher refuses to
+    start it (MOVED.json) and the CLI refuses to send from it (the folder's
+    hold, with reason "moved"). Neither file is in a backup, so the server
+    starts without them."""
+    from .backup import make_backup, verify
+
+    if place.sandbox:
+        raise Refused("The sandbox sends nothing, so there's nothing to retire.")
+    place.check_moved()
+    if running(place) is not None and stop(place) != 0:
+        return 1
+    if agent_path(place).exists():
+        remove_agent(place)
+    result = make_backup(place.data_dir, place.backup_dir, keep=None)
+    problems = verify(result.path)
+    if problems:
+        print(f"The backup in {result.path} didn't verify, so nothing was retired:", file=sys.stderr)
+        for problem in problems:
+            print(f"  {problem}", file=sys.stderr)
+        return 1
+    (place.data_dir / "db").mkdir(parents=True, exist_ok=True)
+    write_hold(place.data_dir / "db", by="sms-dashboard retire", reason=MOVED)
+    place.moved_file.write_text(json.dumps({"at": time.time(), "backup": str(result.path)}), encoding="utf-8")
+    print(f"""Retired. The final backup, verified: {result.path}
+This copy won't start, and the command line won't send from it.
+
+Next, on the server (docs/deploy.md, "Moving from the Mac"):
+  1. Copy that folder there, encrypted on the way (it holds every phone number).
+  2. Restore it into an empty data folder, then start the services.
+""")
+    return 0
+
+
 def remove_agent(place: Place) -> int:
     path = agent_path(place)
     if agent_loaded(place):
@@ -713,6 +772,7 @@ def main(argv: list[str] | None = None) -> int:
         ("upgrade", "After git pull: a backup, stop, install, start again."),
         ("install-agent", "Start at login, and again after a crash (launchd)."),
         ("remove-agent", "No longer start at login."),
+        ("retire", "Moving to the server: stop, a final verified backup, and this copy never sends again."),
     ):
         command = commands.add_parser(name, help=text, description=text)
         command.add_argument("--sandbox", action="store_true",
@@ -729,6 +789,7 @@ def main(argv: list[str] | None = None) -> int:
         place = Place.find(args.sandbox)
         port = getattr(args, "port", None) or PORTS[args.sandbox]
         if args.command == "run":
+            place.check_moved()
             return serve(place, port, echo=sys.stdout.isatty())
         if args.command == "start":
             return start(place, port, browser=not args.no_browser)
@@ -741,7 +802,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "upgrade":
             return upgrade(place, port)
         if args.command == "install-agent":
+            place.check_moved()
             return install_agent(place)
+        if args.command == "retire":
+            return retire(place)
         return remove_agent(place)
     except Refused as e:
         print(f"Error: {e}", file=sys.stderr)

@@ -621,6 +621,7 @@ python -m venv .venv && .venv/bin/pip install -e ".[web]"   # once
 ./sms-dashboard stop             # a send lets its requests in flight finish, then waits
 ./sms-dashboard upgrade          # after git pull: a backup, stop, install, start again
 ./sms-dashboard install-agent    # start at login, and again after a crash (launchd)
+./sms-dashboard retire           # moving to the server: a final verified backup; this copy never sends again
 ./sms-dashboard start --sandbox  # http://127.0.0.1:8001 on data/sandbox/: nothing is sent
 ```
 

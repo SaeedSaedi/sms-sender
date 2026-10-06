@@ -349,6 +349,13 @@ def _refuse_while_held(folder: Path) -> None:
     if hold is None:
         return
     since = f" since {time.strftime('%Y-%m-%d %H:%M', time.localtime(hold['at']))}" if hold.get("at") else ""
+    if hold.get("reason") == sharing.MOVED:
+        click.echo(
+            f"Error: this data moved to the server{since} (sms-dashboard retire), so nothing is sent from "
+            f"{folder}: send from the server. A send from this copy too could reach people twice.",
+            err=True,
+        )
+        sys.exit(2)
     click.echo(
         f"Error: all sending is held from the dashboard (by {hold.get('by') or '?'}{since}). Nothing is "
         f"sent from {folder} until an admin lifts the hold on the dashboard's status page.",
