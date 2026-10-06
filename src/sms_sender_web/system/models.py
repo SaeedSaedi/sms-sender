@@ -1,11 +1,15 @@
 """Settings for every campaign, that only an admin changes (plan 05): one
 row. The frequency cap (decision 6: built, off until set), notification
-targets, defaults for new campaigns, the hold on all sending and the credit
-warning level; and Kavenegar's account as last checked."""
+targets, defaults for new campaigns, the hold on all sending, the credit
+warning level, and who gets and approves test SMS (plan 06, D1 and D3); and
+Kavenegar's account as last checked."""
 from django.conf import settings as django_settings
 from django.db import models
 
 from sms_sender.frequency import FrequencyCap
+
+# How many team numbers an admin keeps for test SMS (plan 06, D1).
+TEAM_TEST_MAX = 5
 
 
 class SystemSettings(models.Model):
@@ -37,6 +41,12 @@ class SystemSettings(models.Model):
     # keeping the newest `backup_keep`. Empty: no daily backup.
     backup_hour = models.PositiveSmallIntegerField(null=True, blank=True, default=9)
     backup_keep = models.PositiveSmallIntegerField(default=14)
+    # The team's numbers (canonical, at most TEAM_TEST_MAX): every test SMS
+    # also goes to them, after the number of whoever asked for it (D1).
+    team_test_numbers = models.JSONField(default=list, blank=True)
+    # Someone other than whoever asked for a test SMS approves it (D3). Off
+    # while one person runs campaigns; whoever asked can always reject it.
+    second_approver = models.BooleanField(default=False)
 
     @classmethod
     def load(cls) -> "SystemSettings":

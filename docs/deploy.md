@@ -224,7 +224,9 @@ gives others their roles on the users page:
 - admin: also manages users and removes numbers from the suppression list.
 
 Each operator sets their own test number on «حساب من» (My account). The
-test SMS before every campaign goes there.
+test SMS before every campaign goes there, then to the team's numbers an
+admin keeps on «تنظیمات سامانه» (System settings). Once colleagues join, an
+admin can ask there for a second person to approve each test SMS.
 
 ## Health and logs
 

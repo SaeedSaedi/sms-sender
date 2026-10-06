@@ -95,8 +95,10 @@ class RunSummary:
     credit: int | None = None
     cost_per_sms: int | None = None
     estimate: int | None = None
-    # The approval test's message ID, when one was sent.
+    # The approval test's message ID, when one was sent, and how many of
+    # the team's numbers got it too.
     test_message_id: int | None = None
+    test_team_sent: int = 0
     # A `test_only` run: everything up to the test SMS, and no sending.
     test_only: bool = False
     # Why the run halted or stopped early, as a key plus its numbers (see
@@ -208,6 +210,7 @@ class Runner:
         smoke_test: bool = False,
         rate_per_sec: float = 0.0,
         approval_test_number: str | None = None,
+        approval_test_team: Sequence[str] = (),
         approval_prompt: ApprovalPrompt | None = None,
         token_columns: TokenColumns | None = None,
         reconcile_min_age_sec: float = DEFAULT_MIN_AGE_SEC,
@@ -281,6 +284,14 @@ class Runner:
         self.preflight = preflight
         self.smoke_test = smoke_test
         self.approval_test_number = approval_test_number
+        # The team's numbers (the dashboard's, plan 06 D1) get the same test
+        # SMS after the operator's own, each once; restricted sending skips
+        # those it doesn't allow (`_check_allowlist`).
+        self._test_team: tuple[str, ...] = tuple(dict.fromkeys(
+            phone for phone in approval_test_team if phone != approval_test_number
+        )) if approval_test_number else ()
+        self._team_link_tokens: dict[str, str] = {}
+        self._team_sent = 0
         self._approval_prompt: ApprovalPrompt = approval_prompt or _click_approval_prompt
         self.token_columns = token_columns
         self._reporter: Reporter = reporter or TqdmReporter()
@@ -475,7 +486,7 @@ class Runner:
         # (decided 2026-10-04), so the operator gets the test SMS in seconds.
         recipients = {} if self.test_only else {p: segments.get(p) or self.segment for p in phones}
         try:
-            result = stage.run(recipients, test_phone=self.approval_test_number)
+            result = stage.run(recipients, test_phone=self.approval_test_number, team=self._test_team)
         except ShlinkHaltError as e:
             logger.error("links_halt", extra={"status": e.status, "detail": str(e)})
             raise PreflightError(
@@ -487,6 +498,7 @@ class Runner:
         self._link_tokens = result.tokens
         self._link_keys = result.keys
         self._test_link_token = result.test_token
+        self._team_link_tokens = result.team_tokens
         self._links_ready, self._links_created = result.needed, result.created
         # (`created` would clash with LogRecord's own attribute.)
         logger.info(
@@ -627,12 +639,14 @@ class Runner:
         aborts before the prompt — there's no point asking the operator to
         approve something that didn't reach them. The approval prompt also
         treats a closed stdin / EOF as 'declined' so CI is safe.
+
+        Then the same SMS goes to the team's numbers (`_team_test`).
         """
         if not self.approval_test_number:
             return
 
         target = self.approval_test_number
-        tokens = None
+        base = None
         if self._row_tokens is not None:
             # Per-recipient tokens: show the operator a real recipient's
             # message — their own row if they're in the file, else the first.
@@ -641,11 +655,9 @@ class Runner:
                 raise PreflightError(
                     "approval test needs a recipient row to borrow tokens from", "test_needs_recipient",
                 )
-            tokens = self._row_tokens[sample]
+            base = self._row_tokens[sample]
             self._reporter.note(f"Approval test uses the tokens of {sample}.", "test_tokens_from", phone=sample)
-        if self.links is not None and self._test_link_token is not None:
-            # Its own link, so the operator's click never counts for a recipient.
-            tokens = {**(tokens or {}), self.links.token: self._test_link_token}
+        tokens = self._with_test_link(base, self._test_link_token)
         logger.info("approval_test_target", extra={"phone": target})
         self._reporter.note(f"Approval test: sending to {target} synchronously …", "test_sending", phone=target)
 
@@ -675,6 +687,7 @@ class Runner:
         self._approval_cost = result.cost or self._approval_cost
         self._approval_message_id = result.message_id
         self._add_cost(result.cost)
+        self._team_test(base)
         if self.test_only:
             self._reporter.note("Test SMS sent; it's approved in the dashboard before sending.", "test_sent")
             return
@@ -686,6 +699,47 @@ class Runner:
             )
         logger.info("approval_granted", extra={"phone": target})
         self._reporter.note("Approval granted.")
+
+    def _with_test_link(self, tokens: dict[str, str] | None, link: str | None) -> dict[str, str] | None:
+        """A test SMS's tokens with its own short link, so a test click
+        never counts for a recipient."""
+        if self.links is None or link is None:
+            return tokens
+        return {**(tokens or {}), self.links.token: link}
+
+    def _team_test(self, base: dict[str, str] | None) -> None:
+        """The operator's test SMS went out: the same message to each team
+        number (plan 06, D1), with a test link of its own. One Kavenegar
+        refuses is noted and skipped, since the operator's own SMS is what
+        they approve; a halt (the key, the account) still stops the run."""
+        for phone in self._test_team:
+            if self._stop.is_set():
+                return
+            link = self._team_link_tokens.get(phone)
+            if self.links is not None and link is None:
+                continue  # never without its link
+            self._reporter.note(f"Approval test: also sending to team number {phone} …", "team_test_sending", phone=phone)
+            kind = _ATTEMPT_KIND.set("test")
+            try:
+                result = self.sender.send(phone, tokens=self._with_test_link(base, link))
+            except HaltError as e:
+                self._record_error(e.status_code, e.message)
+                raise PreflightError(
+                    f"approval test send to team number {phone} halted: [{e.status_code}] {e.message}",
+                    "test_refused", code=e.status_code,
+                ) from e
+            except SendError as e:
+                logger.warning("team_test_failed", extra={"phone": phone, "status": e.status_code, "detail": e.message})
+                self._reporter.note(
+                    f"The test SMS to team number {phone} didn't go out: [{e.status_code}] {e.message}",
+                    "team_test_failed", phone=phone, code=e.status_code,
+                )
+                continue
+            finally:
+                _ATTEMPT_KIND.reset(kind)
+            logger.info("team_test_sent", extra={"phone": phone, "msg_id": result.message_id})
+            self._add_cost(result.cost)
+            self._team_sent += 1
 
     def _reconcile_unknown(self, when: str) -> None:
         """Settle `unknown` rows that are old enough, by asking Kavenegar.
@@ -1000,6 +1054,15 @@ class Runner:
                 f"restricted sending: the test number isn't on {ENV_ALLOWED_NUMBERS}",
                 "test_number_not_allowed",
             )
+        skipped = [phone for phone in self._test_team if not allowed.allows(phone)]
+        if skipped:
+            # The operator's own test SMS still goes; these just don't get it.
+            self._test_team = tuple(phone for phone in self._test_team if allowed.allows(phone))
+            self._reporter.note(
+                f"Restricted sending: {len(skipped)} team number(s) aren't on {ENV_ALLOWED_NUMBERS}, "
+                "so they don't get the test SMS.",
+                "team_not_allowed", n=len(skipped),
+            )
         if self.test_only:
             return
         outside = sum(1 for phone in phones if not allowed.allows(phone))
@@ -1089,6 +1152,7 @@ class Runner:
             cost_per_sms=self._approval_cost or self.state.average_cost() or None,
             estimate=self._estimate,
             test_message_id=self._approval_message_id,
+            test_team_sent=self._team_sent,
             test_only=self.test_only,
             stop_reason=reason,
             stop_fields=fields,
@@ -1221,6 +1285,7 @@ def make_runner(
     smoke_test: bool = False,
     rate_per_sec: float = 0.0,
     approval_test_number: str | None = None,
+    approval_test_team: Sequence[str] = (),
     token_columns: TokenColumns | None = None,
     campaign: str | None = None,
     allow_settings_change: bool = False,
@@ -1252,6 +1317,7 @@ def make_runner(
         smoke_test=smoke_test,
         rate_per_sec=rate_per_sec,
         approval_test_number=approval_test_number,
+        approval_test_team=approval_test_team,
         token_columns=token_columns,
         campaign=campaign,
         settings=campaign_settings(sender_cfg, token_columns, links),

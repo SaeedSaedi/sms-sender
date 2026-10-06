@@ -22,7 +22,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Iterable, Protocol
+from typing import Callable, Iterable, Protocol, Sequence
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from .rate import TokenBucket
@@ -226,6 +226,8 @@ class LinkStageResult:
     tokens: dict[str, str]          # phone → link token value
     keys: dict[str, str] = field(default_factory=dict)  # phone → link key (recorded at claim)
     test_token: str | None = None   # for the approval test SMS
+    # The team's numbers that get the test SMS too: phone → its own test link.
+    team_tokens: dict[str, str] = field(default_factory=dict)
 
 
 class LinkStage:
@@ -374,11 +376,13 @@ class LinkStage:
 
     # ---------- run ----------
 
-    def run(self, recipients: dict[str, str | None], test_phone: str | None = None) -> LinkStageResult:
+    def run(
+        self, recipients: dict[str, str | None], test_phone: str | None = None, team: Sequence[str] = (),
+    ) -> LinkStageResult:
         """Make every link for `recipients` (phone → segment) and, with an
-        approval test, the test SMS's own link. Raises LinkError — before
-        any SMS — if one isn't ready; ShlinkHaltError if the key or setup
-        is wrong."""
+        approval test, the test SMS's own link, and one for each of the
+        `team` numbers that get it too. Raises LinkError — before any SMS —
+        if one isn't ready; ShlinkHaltError if the key or setup is wrong."""
         wanted: dict[str, tuple[str | None, bool]] = {}
         key_of: dict[str, str] = {}
         for phone, segment in recipients.items():
@@ -388,6 +392,9 @@ class LinkStage:
         test_key = f"test:{test_phone}" if test_phone else None
         if test_key:
             wanted[test_key] = (None, True)
+        team_keys = {phone: f"test:{phone}" for phone in team if test_key and phone != test_phone}
+        for key in team_keys.values():
+            wanted[key] = (None, True)
 
         rows = self._write(wanted)
         todo = [r for r in rows.values() if r.status != LINK_READY]
@@ -412,6 +419,7 @@ class LinkStage:
             tokens={phone: token(rows[key]) for phone, key in key_of.items()},
             keys=dict(key_of),
             test_token=token(rows[test_key]) if test_key else None,
+            team_tokens={phone: token(rows[key]) for phone, key in team_keys.items()},
         )
 
 

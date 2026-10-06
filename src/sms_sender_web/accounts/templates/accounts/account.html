@@ -13,7 +13,7 @@
 
   {% if sends_tests %}
   <h2>{% translate "Your number for test SMS" %}</h2>
-  <p>{% translate "Before a campaign sends, its test SMS goes to this number, and only to it, so you can see the final text." %}</p>
+  <p>{% translate "Before a campaign sends, the test SMS you ask for goes to this number, so you can see the final text." %}</p>
   <form method="post" data-validate>
     {% csrf_token %}
     <label for="id_test_phone">{% translate "Mobile number" %}</label>

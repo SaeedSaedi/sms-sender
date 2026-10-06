@@ -26,6 +26,47 @@
   </form>
 </section>
 
+<section class="card medium" aria-labelledby="tests-heading">
+  <h2 id="tests-heading">{% icon "message-square-text" %}{% translate "Test SMS" %}</h2>
+  <h3>{% translate "The team's numbers" %}</h3>
+  <p>{% translate "Each test SMS goes to whoever asks for it, then to these numbers, so the team sees the final text too. At most five." %}</p>
+  {% if errors.team %}<div class="field-errors" id="team-error" role="alert" tabindex="-1" data-autofocus><p class="error">{{ errors.team }}</p></div>{% endif %}
+  {% if team %}
+    <ul class="plain notify-targets" id="team-numbers">
+      {% for number in team %}
+        <li>
+          {{ number.phone|mask_phone|fa_digits|ltr }}
+          {% if number.skipped %}<span class="chip">{% translate "Not sent while sending is restricted" %}</span>{% endif %}
+          <form method="post" class="inline" data-confirm="{% translate "Remove this number? It won't get test SMS any more." %}">{% csrf_token %}<input type="hidden" name="section" value="team_remove"><input type="hidden" name="index" value="{{ forloop.counter0 }}">
+            <button type="submit" class="small danger">{% translate "Remove" %}</button></form>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+  {% if team|length < team_max %}
+    <form method="post" id="team-form">
+      {% csrf_token %}<input type="hidden" name="section" value="team_add">
+      <label for="id_team_phone">{% translate "Mobile number" %}</label>
+      <input id="id_team_phone" name="team_phone" type="text" dir="ltr" inputmode="tel" autocomplete="off" maxlength="32"
+             value="{{ post.team_phone|default:'' }}"{% if errors.team %} aria-describedby="team-error" aria-invalid="true"{% endif %}>
+      <div class="form-actions"><button type="submit" class="secondary">{% icon "plus" %}{% translate "Add a number" %}</button></div>
+    </form>
+  {% else %}
+    <p class="hint">{% translate "That's as many as there can be: remove one to add another." %}</p>
+  {% endif %}
+
+  <h3>{% translate "Who approves it" %}</h3>
+  <form method="post" id="approval-form">
+    {% csrf_token %}<input type="hidden" name="section" value="approval">
+    {% if settings.second_approver and runners < 2 %}
+      <div class="callout callout-warning">{% icon "triangle-alert" %}<p>{% translate "Only one person can run campaigns now, so nobody could approve their test SMS. Give a colleague the operator role, or turn this off." %}</p></div>
+    {% endif %}
+    <label class="check"><input type="checkbox" name="second_approver"{% if settings.second_approver %} checked{% endif %}> {% translate "Someone other than whoever asked for the test SMS approves it" %}</label>
+    <p class="hint">{% translate "Whoever asked for it can still reject it. Leave it off while one person runs campaigns." %}</p>
+    <div class="form-actions"><button type="submit" class="secondary">{% translate "Save" %}</button></div>
+  </form>
+</section>
+
 <section class="card medium" aria-labelledby="notify-heading">
   <h2 id="notify-heading">{% icon "send" %}{% translate "Notifications" %}</h2>
   <p>{% translate "When a send ends or stops, these hear how it went: the CLI's run report, with the campaign's short name. Their addresses hold secrets, so they're shown masked." %}</p>

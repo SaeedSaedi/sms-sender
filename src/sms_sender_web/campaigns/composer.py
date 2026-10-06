@@ -47,7 +47,7 @@ from .present import say
 from .preview import load_segment, preview_of
 from .terms import (
     CHECK_PROBLEMS, CONFLICTS, COST_EACH, COUNTS, LACKS_COLUMNS, SAMPLE_LINE, SAMPLE_MISSING, TEST_HINT,
-    TOKEN_ISSUES, fill,
+    TEST_HINT_TEAM, TOKEN_ISSUES, fill,
 )
 from .views import STOP_POLLING, _live
 
@@ -262,12 +262,13 @@ def _page(request, preset: Preset, settings: dict, draft: Draft, options: list[d
 
 
 def _test_context(request, settings: dict) -> dict:
-    """What the test button says: where the SMS goes, and whether the
-    sending window lets it go now."""
+    """What the test button says: where the SMS goes (the team's numbers
+    too), and whether the sending window lets it go now."""
     phone = test_phone_of(request.user)
+    team = len(services.team_numbers(phone))
     return {
         "test_phone": phone, **_window(settings),
-        "test_hint": say(TEST_HINT, {"phone": phone}) if phone else "",
+        "test_hint": say(TEST_HINT_TEAM if team else TEST_HINT, {"phone": phone, "n": team}) if phone else "",
     }
 
 

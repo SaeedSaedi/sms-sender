@@ -2,6 +2,7 @@
 `sms-sender send` runs. Tests swap this class for one with fakes."""
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from django.conf import settings as django_settings
@@ -65,12 +66,13 @@ class Engine:
 
     def runner(
         self, campaign: Campaign, reporter: Reporter, *,
-        test_number: str | None = None, cost_per_sms: int | None = None, smoke_test: bool = False,
-        allow_settings_change: bool = False,
+        test_number: str | None = None, team_numbers: Sequence[str] = (), cost_per_sms: int | None = None,
+        smoke_test: bool = False, allow_settings_change: bool = False,
     ) -> Runner:
         """A run for the campaign's settings (the CLI's flags). With
-        `test_number`, a test run: everything up to one SMS to that number,
-        then stop. Otherwise a send, given the approved test's cost per SMS."""
+        `test_number`, a test run: everything up to one SMS to that number
+        and the same to `team_numbers`, then stop. Otherwise a send, given
+        the approved test's cost per SMS."""
         s = campaign.settings
         tokens = {name: s.get("tokens", {}).get(name) for name in TOKEN_MAX_SPACES}
         sender_cfg = SenderConfig(
@@ -110,6 +112,7 @@ class Engine:
             reporter=reporter,
             install_signal_handlers=False,  # the worker handles signals
             approval_test_number=test_number,
+            approval_test_team=team_numbers,
             test_only=test_number is not None,
             smoke_test=smoke_test,
             allow_settings_change=allow_settings_change,

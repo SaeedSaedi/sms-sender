@@ -3,23 +3,28 @@ from __future__ import annotations
 
 import logging
 
+from django.conf import settings as django_settings
 from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods, require_POST
 
+from sms_sender.allowlist import allowlist
 from sms_sender.notify import notify_text, redact_target, valid_target
+from sms_sender.phone import InvalidPhoneError, normalize
 from sms_sender.rate import parse_rate
 from sms_sender.window import parse_window
 
 from ..accounts.decorators import requires
+from ..accounts.roles import count_who_can
 from ..audit.record import record
 from ..backup import BackupError
 from ..dashboard.templatetags.fa import fa_number
 from ..jobs import services
+from ..privacy import mask_phone
 from . import operations
-from .models import SystemSettings
+from .models import TEAM_TEST_MAX, SystemSettings
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +120,59 @@ def _credit(request, current: SystemSettings) -> str:
     return ""
 
 
+def _team(request, current: SystemSettings) -> str:
+    """The team's numbers for test SMS (plan 06, D1): add one, or remove
+    one. Like every number on a page, they're shown and recorded masked."""
+    numbers = list(current.team_test_numbers or [])
+    if request.POST.get("section") == "team_add":
+        try:
+            phone = normalize(request.POST.get("team_phone", "").strip())
+        except InvalidPhoneError:
+            return _("That isn't a valid mobile number.")
+        if phone in numbers:
+            return ""
+        if len(numbers) >= TEAM_TEST_MAX:
+            return _("There are already %(n)s numbers: remove one first.") % {"n": fa_number(TEAM_TEST_MAX)}
+        numbers.append(phone)
+        change = {"team_number_added": mask_phone(phone)}
+    else:
+        index = request.POST.get("index", "")
+        if not index.isdigit() or int(index) >= len(numbers):
+            return _("Choose a number from the list.")
+        change = {"team_number_removed": mask_phone(numbers.pop(int(index)))}
+    current.team_test_numbers, current.updated_by = numbers, request.user
+    current.save()
+    record("system_settings_changed", request=request, **change)
+    return ""
+
+
+def _approval(request, current: SystemSettings) -> str:
+    """Whether someone other than whoever asked for a test SMS approves it
+    (plan 06, D3)."""
+    second = request.POST.get("second_approver") == "on"
+    if second != current.second_approver:
+        current.second_approver, current.updated_by = second, request.user
+        current.save()
+        record("system_settings_changed", request=request, second_approver=second)
+    return ""
+
+
+_HANDLERS = {"cap": _cap, "defaults": _defaults, "credit": _credit, "approval": _approval,
+             "team_add": _team, "team_remove": _team}
+# The box an error shows in: each form's own.
+_ERROR_BOX = {"team_add": "team", "team_remove": "team"}
+
+
+def _saved(section: str) -> str:
+    if section in ("cap", "defaults", "credit", "notify_add", "notify_remove"):
+        return _("Saved. It applies to the next check and the next send of every campaign.")
+    if section in ("team_add", "team_remove"):
+        return _("Saved. It applies to the next test SMS.")
+    if section == "approval":
+        return _("Saved. It applies to test SMS waiting for a decision too.")
+    return ""  # a test notification says how it went itself
+
+
 @requires("manage_settings")
 @require_http_methods(["GET", "POST"])
 def system_settings(request):
@@ -122,17 +180,23 @@ def system_settings(request):
     errors: dict[str, str] = {}
     if request.method == "POST":
         section = request.POST.get("section", "cap")
-        handler = {"cap": _cap, "defaults": _defaults, "credit": _credit}.get(section, _notifications)
-        error = handler(request, current)
+        error = _HANDLERS.get(section, _notifications)(request, current)
         if error:
-            errors[section if section in ("cap", "defaults", "credit") else "notify"] = error
+            errors[_ERROR_BOX.get(section, section if section in _HANDLERS else "notify")] = error
         else:
-            if section in ("cap", "defaults", "credit", "notify_add", "notify_remove"):
-                messages.success(request, _("Saved. It applies to the next check and the next send of every campaign."))
+            if _saved(section):
+                messages.success(request, _saved(section))
             return redirect("system_settings")
+    # Restricted sending skips the team numbers it doesn't allow (the sandbox isn't bound).
+    allowed = None if django_settings.SANDBOX else allowlist()
     return render(request, "system/settings.html", {
         "settings": current, "errors": errors, "post": request.POST,
         "targets": [redact_target(t) for t in current.notify_targets or []],
+        "team": [{"phone": phone, "skipped": allowed is not None and not allowed.allows(phone)}
+                 for phone in current.team_test_numbers or []],
+        "team_max": TEAM_TEST_MAX,
+        # With a second approver, one person alone could approve nothing.
+        "runners": count_who_can("run_campaigns"),
     })
 
 

@@ -19,6 +19,7 @@ from ..campaigns.lifecycle import (
 )
 from ..campaigns.present import say
 from ..campaigns.terms import CLI_CAMPAIGN, FOLLOWUPS, NEXT_STEP, STAGES, fill, stop_reason
+from ..jobs import services
 from ..jobs.models import Campaign, Job
 from ..jobs.worker import worker_alive
 from ..system import credit
@@ -39,10 +40,10 @@ PAGE = 50  # campaigns a page
 ATTENTION_SHOWN = 5  # the rest are one tab away
 
 
-def _attention(campaign: Campaign, life, counts: dict) -> list[str]:
+def _attention(campaign: Campaign, life, counts: dict, user=None) -> list[str]:
     """What this campaign needs from someone, in a line or two."""
     if life.stage == AWAITING:
-        return [str(NEXT_STEP[AWAITING])]
+        return [str(NEXT_STEP["awaiting_other" if services.needs_another_approver(life.test, user) else AWAITING])]
     if life.stage == STOPPED:
         result = life.send.result or {}
         return [stop_reason(result.get("stop_reason"), result.get("stop_fields")) or str(NEXT_STEP[STOPPED])]
@@ -81,7 +82,7 @@ def campaign_rows(user=None) -> tuple[list[dict], list[dict], dict]:
         if life is not None:
             if life.stage in tiles:
                 tiles[life.stage] += 1
-            lines = _attention(campaign, life, summary.counts)
+            lines = _attention(campaign, life, summary.counts, user)
             if lines:
                 attention.append({
                     "campaign": campaign, "life": life, "stage": STAGES[life.stage], "lines": lines,
@@ -89,7 +90,8 @@ def campaign_rows(user=None) -> tuple[list[dict], list[dict], dict]:
                     "url": control.campaign_url(campaign, user),
                     # Only someone who can approve is asked to.
                     "action": ATTENTION_ACTIONS["awaiting"] if life.stage == AWAITING and user is not None
-                    and can(user, "run_campaigns") else ATTENTION_ACTIONS["open"],
+                    and can(user, "run_campaigns") and not services.needs_another_approver(life.test, user)
+                    else ATTENTION_ACTIONS["open"],
                 })
         progress = None
         if life is not None and life.stage in (SENDING, PAUSED) and life.send is not None:
