@@ -773,6 +773,11 @@ input[type="file"]:not(.file-input) { font: inherit; max-inline-size: 100%; }
 .card .figures { box-shadow: none; }
 /* Inside a card (a side panel, a step) the numbers are a size down, so they fit a narrow column. */
 .card .figures dd, .card .figure-value { font-size: var(--fs-xl); }
+/* A figure's unit (rials) a size down, so the number keeps its line in a narrow card. */
+.figures dd .unit, .figure-value .unit { color: var(--muted); font-size: var(--fs-sm); font-weight: 600; letter-spacing: 0; }
+.figures dd .amount, .figure-value .amount { white-space: nowrap; }
+/* A list that ends its card leaves no extra space at the bottom. */
+.card > .pairs:last-child, .card > .figures:last-child { margin-block-end: 0; }
 ul.figures { padding: 0; list-style: none; }
 .figures > li { flex: 1 1 8rem; min-inline-size: 0; background: var(--surface); }
 .figure-label { display: block; color: var(--muted); font-size: var(--fs-xs); font-weight: 600; }
@@ -1481,8 +1486,14 @@ details.schedule .field-grid { max-inline-size: 24rem; }
 
 /* ---------- service status ---------- */
 
-.health-grid { display: grid; gap: var(--s-5); grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); align-items: start; }
-.health-grid > .card { margin: 0; }
+/* The cards flow down two columns (one on a phone), so a short card never
+   leaves a hole beside a tall one; they read in order, column by column. */
+.health-grid { columns: 2 22rem; column-gap: var(--s-5); }
+.health-grid > .card { break-inside: avoid; margin: 0 0 var(--s-5); }
+.health-grid > .card.wide { column-span: all; }  /* Kavenegar's account: above both columns */
+.health-grid > .card:last-child { margin-block-end: 0; }
+/* A column's last card loses its bottom margin, so what follows keeps the space. */
+.health-grid + * { margin-block-start: var(--s-5); }
 .health-state { display: inline-flex; align-items: center; gap: var(--s-2); font-weight: 650; font-size: var(--fs-sm); }
 .health-state::before { content: ""; inline-size: .6rem; block-size: .6rem; border-radius: 50%; background: var(--border-strong); }
 .health-state.is-ok { color: var(--success); }
