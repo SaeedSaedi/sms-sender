@@ -479,7 +479,12 @@ class StateStore:
             conn = sqlite3.connect(self.db_path, timeout=30, isolation_level=None)
             conn.row_factory = sqlite3.Row
             # WAL itself is persistent (set by _migrate); synchronous is per-connection.
-            conn.execute("PRAGMA synchronous=NORMAL")
+            # FULL: a commit is on disk before it returns, so a power cut or
+            # an OS crash can't undo a claim or a `sent` mark and send those
+            # people again. NORMAL syncs only at a checkpoint, every ~120
+            # sends here. An fsync per commit is small next to Kavenegar's
+            # 10 SMS a second.
+            conn.execute("PRAGMA synchronous=FULL")
             self._local.conn = conn
         return conn
 

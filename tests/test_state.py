@@ -354,3 +354,14 @@ def test_each_segments_totals_and_how_fast_it_was_delivered(tmp_path):
     assert {k: tuple(v) for k, v in totals.items()} == {"vip": ("vip", 2, 1, 2, 6040), "new": ("new", 2, 1, 1, 6040)}
     sent, within = store.delivery_speed([3600, 4 * 3600, 8 * 3600])
     assert (sent, within) == (4, [1, 1, 2])  # the undelivered and the unchecked never count
+
+
+def test_every_commit_reaches_the_disk(tmp_path):
+    """A power cut or an OS crash mustn't roll back a claim or a `sent` mark
+    (synchronous=FULL), in every thread's connection."""
+    store = StateStore(tmp_path / "s.db")
+    seen = [store._conn().execute("PRAGMA synchronous").fetchone()[0]]
+    thread = threading.Thread(target=lambda: seen.append(store._conn().execute("PRAGMA synchronous").fetchone()[0]))
+    thread.start()
+    thread.join()
+    assert seen == [2, 2]  # 2 = FULL
