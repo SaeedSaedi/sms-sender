@@ -32,6 +32,8 @@ services:
       HTTP_PROXY: ${HTTP_PROXY:-}
       NO_PROXY: ${NO_PROXY:-}
     volumes:
+      # A directory on the Linux host's local disk. On Docker Desktop (a Mac,
+      # Windows), a named volume instead: see docs/deploy.md, "Where the data may live".
       - ./data:/app/data
     ports:
       - "${BIND_ADDR:-127.0.0.1}:${WEB_PORT:-8000}:8000"

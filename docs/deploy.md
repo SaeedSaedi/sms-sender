@@ -121,6 +121,16 @@ can also use. That holds as long as these do:
 - **A local disk.** Never NFS, SMB or another network filesystem: SQLite's
   locks and its write-ahead log need a local disk, and on a network share
   two writers can corrupt a DB without any error.
+- **Not Docker Desktop's file sharing either.** On a Mac or Windows,
+  `./data` is shared from the host into Docker's VM.
+  - In the 2026-10-06 rehearsal, SQLite there twice lost `app.db`'s
+    shared-memory file (`app.db-shm`) under the worker, which then failed
+    with "disk I/O error".
+  - That never happened when the app runs natively on the Mac, or on a
+    volume on the VM's own disk.
+  - So on Docker Desktop, put the data in a named volume
+    (`- smsdata:/app/data`, with `volumes: {smsdata: {}}`). On a Linux
+    server, a directory on its local disk is right, as in `compose.yaml`.
 - **One host.** Both services mount the same volume on the same machine.
   A second web server or worker host is the point to move `app.db` to
   PostgreSQL (the campaign DBs stay files, because the CLI and the rule
