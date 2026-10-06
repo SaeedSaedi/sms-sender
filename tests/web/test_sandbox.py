@@ -150,7 +150,7 @@ def test_every_page_says_it_is_the_sandbox(operator_client, campaign):
     for page in ("/", "/campaigns/try-1/", "/status/"):
         html = operator_client.get(page).content.decode()
         assert "محیط شبیه‌سازی: پاسخ کاوه‌نگار و سرویس لینک کوتاه ساختگی است" in html
-    assert "۱٬۰۰۰٬۰۰۰٬۰۰۰ ریال" in operator_client.get("/status/").content.decode()
+    assert '<span class="amount">۱٬۰۰۰٬۰۰۰٬۰۰۰</span> <span class="unit">ریال</span>' in operator_client.get("/status/").content.decode()
 
 
 def test_outside_the_sandbox_there_is_no_banner(settings, signed_in):

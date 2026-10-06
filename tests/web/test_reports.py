@@ -170,7 +170,7 @@ def test_the_status_page_asks_kavenegar_shlink_and_the_worker(signed_in, monkeyp
     monkeypatch.setattr(Engine, "link_client", lambda self: FakeShlink())
     WorkerBeat.objects.create(worker_id="w1", seen_at=timezone.now())
     html = signed_in.get("/status/").content.decode()
-    assert "۲۶۴٬۷۳۱٬۸۴۲ ریال" in html
+    assert '<span class="amount">۲۶۴٬۷۳۱٬۸۴۲</span> <span class="unit">ریال</span>' in html
     assert "حالت آزمایشی (debug) خاموش است" in html and "resend failed" in html
     assert "فعال" in html and "5.1.7" in html
     assert "در حال اجرا" in html

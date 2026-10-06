@@ -10,11 +10,11 @@
 </header>
 
 <div class="health-grid">
-<section class="card" data-cli="preview --check-account">
+<section class="card wide" data-cli="preview --check-account">
   <div class="card-header"><h2>{% icon "message-square-text" %}{% translate "Kavenegar account" %}</h2><span class="health-state {% if kavenegar.ok and not kavenegar.debug_mode %}is-ok{% else %}is-bad{% endif %}">{% if kavenegar.ok and not kavenegar.debug_mode %}{% translate "Working" %}{% else %}{% translate "Needs attention" %}{% endif %}</span></div>
   {% if kavenegar.ok %}
     <dl class="figures">
-      <div><dt>{% translate "Account credit" %}</dt><dd class="num">{% if kavenegar.credit is not None %}{{ kavenegar.credit|fa_number }} {% translate "rials" %}{% else %}—{% endif %}</dd></div>
+      <div><dt>{% translate "Account credit" %}</dt><dd class="num">{% if kavenegar.credit is not None %}<span class="amount">{{ kavenegar.credit|fa_number }}</span> <span class="unit">{% translate "rials" %}</span>{% else %}—{% endif %}</dd></div>
       <div><dt>{% translate "Valid until" %}</dt><dd class="num">{% if kavenegar.expires %}{{ kavenegar.expires|jalali:"%Y/%m/%d" }}{% elif kavenegar.never_expires %}{% translate "Doesn't expire" %}{% else %}—{% endif %}</dd></div>
     </dl>
     {% if kavenegar.debug_mode %}<div class="callout callout-error" role="alert">{% icon "circle-alert" %}<p>{% translate "Debug mode is on: no SMS is delivered. Turn it off in the Kavenegar panel." %}</p></div>
@@ -73,7 +73,7 @@
   <dl class="pairs">
     <dt>{% translate "Version" %}</dt><dd><bdi dir="ltr">{{ version }}</bdi></dd>
     <dt>{% translate "Last backup" %}</dt><dd>{% if last_backup %}{{ last_backup|jalali }}{% else %}{% translate "None yet" %}{% endif %}{% if user|can:"manage_settings" %} · <a href="{% url 'backups' %}">{% translate "Backups" %}</a>{% endif %}</dd>
-    <dt>{% translate "Daily backup" %}</dt><dd id="backup-schedule">{% if backup_at %}{{ backup_at|fa_digits|ltr }} · {{ backup_keep }}{% else %}{% translate "Off" %}{% endif %}{% if backup_overdue %} · <strong class="warn">{% translate "overdue" %}</strong>{% endif %}</dd>
+    <dt>{% translate "Daily backup" %}</dt><dd id="backup-schedule">{% if backup_at %}{{ backup_at|fa_digits|ltr }} · {{ backup_keep }}{% else %}{% translate "Off" %}{% endif %}{% if backup_overdue %} · <strong class="warn nowrap">{% translate "overdue" %}</strong>{% endif %}</dd>
     {% if allowlist %}
     <dt>{% translate "Restricted sending" %}</dt><dd id="restricted-sending">{% if allowlist.invalid %}{% translate "Set wrongly: nothing is sent." %}{% else %}{% translate "SMS go only to:" %} {% for phone in allowed_numbers %}{{ phone|mask_phone|fa_digits|ltr }}{% if not forloop.last %}، {% endif %}{% endfor %}{% endif %}</dd>
     {% endif %}
