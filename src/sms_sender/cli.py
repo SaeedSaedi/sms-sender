@@ -732,6 +732,10 @@ def status(db_path: str, campaign: str | None) -> None:
             f"last run   {when}: sent {run['sent']}, "
             f"failed {run['failed_permanent'] + run['failed_retriable']}{flags}"
         )
+    removed_at = store.numbers_removed_at()
+    if removed_at:
+        click.echo(f"numbers    removed {time.strftime('%Y-%m-%d', time.localtime(removed_at))} "
+                   "(kept for a limited time): the counts stay, and it never sends again")
     delivered = store.delivery_counts()
     if delivered:
         click.echo(f"delivery   {describe_delivery(delivered)}")

@@ -12,7 +12,7 @@
     <h1><bdi>{{ segment.name }}</bdi></h1>
     <p class="page-meta">{{ segment.slug|copyable }} · {{ segment.original_name|ltr }} · {{ segment.uploaded_at|jalali }}{% if segment.uploaded_by %} · {{ segment.uploaded_by.username|ltr }}{% endif %}</p>
   </div>
-  {% if not draft %}
+  {% if not draft and not removed %}
   <div class="page-actions">
     {% if user|can:"edit_campaigns" %}<a class="button" href="{% url 'campaign_new' %}?segment={{ segment.slug|urlencode }}">{% icon "plus" %}{% translate "New campaign with this segment" %}</a>{% endif %}
     {% if user|can:"export_people" %}<a class="button secondary" href="{% url 'segment_download' segment.slug %}" download>{% icon "download" %}{% translate "Download (CSV)" %}</a>{% endif %}
@@ -28,6 +28,9 @@
   </div>
   {% if user|can:"edit_campaigns" %}<p class="form-actions"><a class="button" href="{% url 'segment_map' segment.slug %}">{% icon "list-checks" %}{% translate "Choose the columns" %}</a></p>{% endif %}
 {% else %}
+  {% if removed %}
+    <div class="callout">{% icon "history" %}<p>{{ removed_line }}</p></div>
+  {% endif %}
   <dl class="figures">
     <div><dt>{% translate "Rows" %}</dt><dd class="num">{{ summary.rows|fa_number }}</dd></div>
     <div><dt>{% translate "Valid numbers" %}</dt><dd class="num">{{ summary.valid|fa_number }}</dd></div>
@@ -74,7 +77,7 @@
   {% endif %}
 {% endif %}
 
-{% if user|can:"edit_campaigns" and not draft %}
+{% if user|can:"edit_campaigns" and not draft and not removed %}
   <section class="card step" aria-labelledby="replace-heading">
     <h2 id="replace-heading">{% icon "file-up" %}{% translate "Replace the file" %}</h2>
     {% if replace_blocked %}

@@ -15,6 +15,7 @@
   </div>
   {% if campaign %}<div class="page-actions"><a class="button secondary" href="{% url 'campaign_detail' slug %}">{% translate "Campaign page" %}</a></div>{% endif %}
 </header>
+{% if numbers_removed %}<div class="callout">{% icon "history" %}<p>{{ numbers_removed_line }}</p></div>{% endif %}
 
 
 <nav class="tabs" data-tabs aria-label="{% translate "Report sections" %}">
@@ -268,7 +269,8 @@
       {% for r in rows %}
         <tr>
           <th scope="row">
-            {% if r.phone|slice:":8" == "INVALID:" %}{{ r.raw|mask_phone|fa_digits|ltr }}
+            {% if r.phone|slice:":8" == "INVALID:" and r.raw %}{{ r.raw|mask_phone|fa_digits|ltr }}
+            {% elif r.phone|slice:":8" == "removed:" or r.phone|slice:":8" == "INVALID:" %}<span class="muted">{% translate "removed" %}</span>
             {% else %}
               <span>{{ r.phone|mask_phone|fa_digits|ltr }}</span>
               {% if user|can:"reveal_phone" %}
@@ -303,7 +305,7 @@
   {% elif not query %}
   <p class="empty">{% translate "No recipient matches these filters." %}</p>
   {% endif %}
-  {% if user|can:"edit_campaigns" and total and not query %}
+  {% if user|can:"edit_campaigns" and total and not query and not numbers_removed %}
   <details class="subsection audience" id="audience">
     <summary>{% icon "users" %}{% translate "Make a segment from these recipients" %}</summary>
     <form method="post" action="{% url 'report_audience' slug %}">
@@ -318,7 +320,7 @@
     </form>
   </details>
   {% endif %}
-  {% if user|can:"export_people" %}
+  {% if user|can:"export_people" and not numbers_removed %}
   <div class="actions downloads">
     <a class="button secondary small" href="{% url 'report_recipients_csv' slug %}{% if filter_query %}?{{ filter_query }}{% endif %}" download>{% icon "download" %}{% if filters %}{% translate "These recipients, with phone numbers (CSV)" %}{% else %}{% translate "All recipients, with phone numbers (CSV)" %}{% endif %}</a>
     {% if counts.failed_permanent or counts.invalid %}<a class="button secondary small" href="{% url 'report_failed_csv' slug %}" data-cli="export-failed" download>{% icon "download" %}{% translate "Rejected and invalid rows, to fix and feed again (CSV)" %}</a>{% endif %}
@@ -370,7 +372,7 @@
     {% if user|can:"download_aggregates" %}<a class="button secondary" href="{% url 'report_summary_csv' slug %}" download>{% icon "download" %}{% translate "Summary (CSV)" %}</a>{% endif %}
     {% if user|can:"export_people" %}
       <a class="button secondary" href="{% url 'report_attribution_csv' slug %}" data-cli="export-attribution" download>{% icon "download" %}{% translate "Attribution, no phone numbers (CSV)" %}</a>
-      <a class="button secondary" href="{% url 'report_clickers_csv' slug %}" data-cli="export-clickers" download>{% icon "download" %}{% translate "People who clicked, with phone numbers (CSV)" %}</a>
+      {% if not numbers_removed %}<a class="button secondary" href="{% url 'report_clickers_csv' slug %}" data-cli="export-clickers" download>{% icon "download" %}{% translate "People who clicked, with phone numbers (CSV)" %}</a>{% endif %}
     {% endif %}
   </div>
   <p class="hint">{% translate "Files use English column names and Latin digits, for other systems. Every download is recorded in the activity log." %}</p>

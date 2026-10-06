@@ -110,6 +110,8 @@ def reconcile_unknown(
     `unknown`; a failed lookup for one phone just defers that row.
     """
     sent = requeued = needs_review = deferred = 0
+    if state.numbers_removed_at() is not None:
+        return ReconcileSummary()  # placeholders aren't numbers Kavenegar knows
     rows = state.list_unknown()
     if not rows:
         return ReconcileSummary()

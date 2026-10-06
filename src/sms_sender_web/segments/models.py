@@ -14,6 +14,9 @@ class Segment(models.Model):
     class Status(models.TextChoices):
         DRAFT = "draft", _("Columns not chosen yet")
         READY = "ready", _("Ready")
+        # Its file held numbers older than they're kept (plan 06, D2): gone,
+        # with the counts kept.
+        REMOVED = "removed", _("Numbers removed")
 
     # Lowercase letters, digits and dashes: it's recorded per recipient and
     # used in Shlink tags and UTM values, like the CLI's --segment.
@@ -36,6 +39,7 @@ class Segment(models.Model):
         related_name="+",
     )
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    numbers_removed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-uploaded_at", "-id"]

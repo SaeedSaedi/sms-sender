@@ -4028,3 +4028,60 @@ msgstr "پیامک آزمایشی فقط به شماره خودتان و شما�
 
 msgid "One SMS to the operator's own number, and to the team's numbers, before the main send, to see the final text."
 msgstr "یک پیامک به شماره خود اپراتور و شماره‌های تیم پیش از ارسال اصلی، برای دیدن متن نهایی."
+
+msgid "Choose how long to keep them."
+msgstr "مدت نگهداری را انتخاب کنید."
+
+#, python-format
+msgid "%(n)s months"
+msgstr "%(n)s ماه"
+
+#, python-format
+msgid "Last checked %(when)s: numbers removed from %(campaigns)s campaigns and %(segments)s segment files; %(backups)s old backups and %(exports)s old downloads deleted."
+msgstr "آخرین بررسی، %(when)s: شماره‌های %(campaigns)s کمپین و %(segments)s فایل گروه مخاطبان حذف شد و %(backups)s نسخه پشتیبان و %(exports)s فایل دریافتی قدیمی پاک شد."
+
+msgid "Saved. The worker removes older numbers at its next daily check."
+msgstr "ذخیره شد. اجراکننده کارها در بررسی روزانه بعدی، شماره‌های قدیمی‌تر را حذف می‌کند."
+
+msgid "Keeping phone numbers"
+msgstr "نگهداری شماره‌ها"
+
+msgid "Keep them for"
+msgstr "مدت نگهداری"
+
+msgid "Kept until the job on its way ends:"
+msgstr "تا پایان کاری که در جریان است نگه داشته می‌شوند:"
+
+msgid "This campaign's phone numbers were removed, so it can't send again. To send its message once more, duplicate it."
+msgstr "شماره‌های این کمپین حذف شده است، پس دیگر نمی‌تواند ارسال کند. برای ارسال دوباره پیام آن، «ساخت کمپین مشابه» را بزنید."
+
+msgid "Its phone numbers were removed on {when}: numbers are kept for {months} months after a campaign's last send. Its counts, costs, deliveries and clicks stay, and it can't send again. To send its message once more, duplicate it."
+msgstr "شماره‌های آن در {when} حذف شد: شماره‌ها تا {months} ماه پس از آخرین ارسال هر کمپین نگهداری می‌شوند. آمار، هزینه، تحویل و کلیک‌های آن می‌ماند و دیگر نمی‌تواند ارسال کند. برای ارسال دوباره پیام آن، «ساخت کمپین مشابه» را بزنید."
+
+msgid "Phone numbers removed"
+msgstr "شماره‌ها حذف شد"
+
+msgid "removed"
+msgstr "حذف‌شده"
+
+msgid "Numbers removed"
+msgstr "شماره‌ها حذف‌شده"
+
+#, python-format
+msgid "Its file was removed on %(when)s: it held phone numbers older than they're kept. Its counts stay."
+msgstr "فایل آن در %(when)s حذف شد، چون شماره‌هایی قدیمی‌تر از مدت نگهداری داشت. آمار آن می‌ماند."
+
+msgid "Old phone numbers removed"
+msgstr "حذف شماره‌های قدیمی"
+
+msgid "phone numbers kept: from {before} to {after} months"
+msgstr "مدت نگهداری شماره‌ها: از {before} به {after} ماه"
+
+msgid "older than {months} months: {campaigns} campaigns, {segments} segment files, {backups} backups"
+msgstr "قدیمی‌تر از {months} ماه: {campaigns} کمپین، {segments} فایل گروه مخاطبان، {backups} نسخه پشتیبان"
+
+msgid "Phone numbers are kept for {months} months after a campaign's last send, then removed: its counts stay, and it can't send again."
+msgstr "شماره‌ها تا {months} ماه پس از آخرین ارسال هر کمپین نگهداری و سپس حذف می‌شوند: آمار آن کمپین می‌ماند و دیگر نمی‌تواند ارسال کند."
+
+msgid "Phone numbers are removed this long after a campaign's last send. Its counts, costs, deliveries and clicks stay, and it can't send again. Segment files no campaign has used since, downloads and backups older than that are deleted too. The suppression list stays as it is."
+msgstr "شماره‌های هر کمپین پس از این مدت از آخرین ارسال آن حذف می‌شوند. آمار، هزینه، تحویل و کلیک‌های آن می‌ماند و دیگر نمی‌تواند ارسال کند. فایل گروه‌های مخاطبانی که از آن پس در کمپینی به کار نرفته‌اند، و فایل‌های دریافتی و نسخه‌های پشتیبان قدیمی‌تر از این مدت هم پاک می‌شوند. فهرست عدم ارسال دست نمی‌خورد."

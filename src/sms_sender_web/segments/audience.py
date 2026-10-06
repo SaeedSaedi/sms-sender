@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sms_sender.phone import InvalidPhoneError, normalize
-from sms_sender.state import RecipientFilter, StateStore
+from sms_sender.state import REMOVED, RecipientFilter, StateStore
 
 from ..suppression.service import phones_for
 from . import files
@@ -49,7 +49,9 @@ def _source_rows(segment: Segment) -> tuple[dict[str, dict[str, str]], list[str]
 
 
 def make_audience(store: StateStore, where: RecipientFilter, *, slug: str, name: str, user) -> Audience:
-    picked = [r for r in store.iter_recipients(where) if not r["phone"].startswith("INVALID:")]
+    # Invalid input rows have no number; a campaign whose numbers were
+    # removed (plan 06, D2) has placeholders, never a list to send to.
+    picked = [r for r in store.iter_recipients(where) if not r["phone"].startswith(("INVALID:", REMOVED))]
     sources: dict[str, tuple[dict, list[str]] | None] = {}
     for slug_ in sorted({r["segment"] for r in picked if r["segment"]}):
         found = Segment.objects.filter(slug=slug_).first()

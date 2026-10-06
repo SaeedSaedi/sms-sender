@@ -39,6 +39,7 @@ sms-sender clicks --campaign coin-price-7     # click counts from Shlink, per se
 sms-sender export-attribution --campaign coin-price-7   # ref → user ID for the backend, no phones
 sms-sender export-clickers --campaign coin-price-7      # who clicked, with phones
 sms-sender purge -y          # delete state DB (no undo)
+python manage.py remove_old_numbers [--dry-run]   # the worker's daily retention run (plan 06, D2)
 
 # The dashboard on a Mac, natively (plan 06, L1): gunicorn + the worker under one supervisor
 ./sms-dashboard start [--sandbox]   # real: 127.0.0.1:8000 on data/; sandbox: :8001 on data/sandbox/
@@ -160,6 +161,7 @@ Capped people got nothing from this campaign, so freeing them again can't send a
 - **The hold on all sending (`sharing.HOLD`).** While an admin holds all sending on the dashboard, `db/.sending-held.json` is in the folder, and `send`, `retry-failed` and `preview --send` exit 2 (`cli._refuse_while_held`, on any kernel). A marker that can't be read still holds.
 - **One process per DB (`locking.RunLock`).** `Runner.run` and the commands that change rows (`retry-failed`, `reset`, `purge`) hold `fcntl.flock` on `<db>.lock`. A second process exits with code 2 instead of treating the first one's `in_flight` rows as crash leftovers and sending them again. The OS drops the lock when the holder dies (even `kill -9`), so crash recovery still works. `status` / `export-failed` only read and don't lock.
 - **Invalid inputs are persisted with synthetic key `INVALID:<raw>`.** This keeps the `phone` PK constraint while letting `export-failed` surface them.
+- **Numbers kept for a limited time (plan 06, D2).** `StateStore.remove_numbers()` puts a placeholder (`state.REMOVED` + a number, `removed:000001`) in place of every phone in the DB, one per number: recipients (an invalid row stays `INVALID:` + its placeholder, its raw cell emptied), calls, link keys (`test:` ones too) and conversions. So every count, cost, delivery, click, conversion and the double-send check join as before. `scrub_numbers` masks numbers in free text (errors, call details). It runs with `secure_delete`, then `VACUUM` and a WAL truncate, so no number is left in the file. The DB records `numbers_removed_at` and never sends again: `bind_campaign` and `upsert_pending` raise `NumbersRemovedError` (a `CampaignMismatchError`, so the CLI exits 2), and reconciliation asks nothing. It no longer knows who it sent to, so another send would reach them twice. `status` prints the date. Take the run lock first.
 - **Schema versions.** `PRAGMA user_version` + append-only steps in `state._MIGRATIONS`. Opening a DB upgrades it in place, in one transaction; a DB written by a newer sms-sender is refused (`StateSchemaError`). Never edit a step that has shipped — existing DBs already applied it; add a new one.
 
 ### Reconciliation ([reconcile.py](src/sms_sender/reconcile.py))
@@ -271,7 +273,7 @@ Canonical form is `09XXXXXXXXX`. The normalizer accepts `+98…`, `0098…`, `98
 |---|---|
 | 0 | every recipient sent |
 | 1 | run finished with some `failed_permanent`, `failed_retriable`, `unknown` or `needs_review`; or it stopped early (`RunSummary.stopped`: Ctrl-C / SIGTERM / `Runner.cancel()`, or the sending window closed) |
-| 2 | `HaltError`, preflight failure (incl. a link that couldn't be made, or Shlink refusing the key), or declined approval-test aborted the run; another process holds the state DB; or the DB belongs to another campaign / was sent with other settings |
+| 2 | `HaltError`, preflight failure (incl. a link that couldn't be made, or Shlink refusing the key), or declined approval-test aborted the run; another process holds the state DB; or the DB belongs to another campaign / was sent with other settings / had its numbers removed |
 
 ### Dashboard (`sms_sender_web`, Phase 3, in progress)
 
@@ -671,6 +673,14 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - `world.py` builds the made-up dashboard (users, segments, a campaign in every state) for these tests and the parity test.
 - **Packaging:** the image installs the package, not the source tree, so each app's `templates/` must be listed in `[tool.setuptools.package-data]`.
 - **Docker:** `Dockerfile` + `compose.yaml` (service `web`, gunicorn with threaded workers (`gthread`: sync workers stall on browsers' idle connections and answer "Internal Server Error" when killed), `/healthz`; service `worker`, health check `manage.py worker_status`). The port is published on `${BIND_ADDR:-127.0.0.1}:${WEB_PORT:-8000}`, so it's shared over NetBird only on purpose. Images are `sms-sender-dashboard:${IMAGE_TAG:-latest}`. Both services' logs are capped (json-file, 10 MB × 5), since they hold phone numbers. `DJANGO_TRUST_PROXY_SSL=1` sets `SECURE_PROXY_SSL_HEADER`, only for a TLS proxy that overwrites `X-Forwarded-Proto`. The DevOps handover is [docs/deploy.md](docs/deploy.md); keep it in step with these files.
+- **Keeping phone numbers ([retention.py](src/sms_sender_web/retention.py), plan 06 D2):** `SystemSettings.retention_months` (6, 12, 18, 24 or 36; default 12) on the system settings page. `Worker.remove_old_numbers_if_due` runs `retention.run_and_record` once a day, in a thread of its own (retried after an hour on an error); `manage.py remove_old_numbers [--dry-run]` runs it by hand.
+  - A campaign DB (the CLI's too) whose `last_activity()` (a number added, a send, any call) is older than the cutoff gets `remove_numbers()` under its run lock. One with a job queued, running or **paused**, or whose lock the CLI holds, is kept for the next day (`Removed.kept`, listed on the page).
+  - A segment's files go when it, and its file's mtime (a replacement), are older and no campaign wants it: none made or with a job since the cutoff, none with a job on its way, and no campaign DB that added or sent to it since (`segments_active_since`). It becomes `Segment.Status.REMOVED` with `numbers_removed_at`, its counts kept.
+  - `exports/` files and backups older than the cutoff are deleted (a backup holds every number of its day).
+  - Old jobs' `test_number` / `team_numbers`, their notes' `phone`, `top_errors` and errors, and the activity log's `phone` details are masked in place. The log is otherwise append-only.
+  - The suppression list, `Profile.test_phone` and the team's numbers stay.
+  - `retention_ran_at` / `retention_result` show the last run; anything removed is recorded (`numbers_removed`, username `worker`) and announced to the targets.
+  - A campaign whose numbers went (`services.numbers_removed`) offers only its history and "duplicate": `request_test`, `start_send` and `requeue` raise `JobConflict("numbers_removed")`, `settings_locked` says so, `can_unlock` is false, the stage becomes `stage/_numbers_removed.html`. The report shows «حذف‌شده» for each number, reveals none, and hides the audience and the downloads with numbers; `make_audience` skips placeholders. The worker files a send that meets one as `numbers_removed`.
 - **Backups ([backup.py](src/sms_sender_web/backup.py), no Django):** `manage.py backup` / `verify_backup` / `restore_backup` (in `jobs/management/commands/`, with `worker_status`).
   - A backup copies `app.db`, `db/*.db` and `segments/*` into `BACKUP_DIR/<UTC stamp>/` (`SMS_SENDER_BACKUP_DIR`, default `<data>/backups`). Not the sandbox or exports. The dashboard's own backup, taken before an admin changes a sent message, uses `keep=None`, so it never prunes the scheduled ones.
   - DBs go through SQLite's online backup (a plain copy misses the `-wal`). Each is switched to DELETE mode, its leftover `-shm` removed, and integrity-checked.

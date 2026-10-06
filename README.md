@@ -486,6 +486,14 @@ internal, multi-user tool built with Django and HTMX. So far it has:
   nothing starts, from the dashboard or from the CLI on the same folder,
   until the hold is lifted. Lifting it resumes the sends it paused. Every
   page shows a banner while it lasts;
+- **keeping phone numbers** (admins, on «تنظیمات سامانه»; 12 months by
+  default): once a day the worker removes the numbers of campaigns whose
+  last send is older, the CLI's too. Their counts, costs, deliveries and
+  clicks stay in the reports, and they can't send again (start a new
+  campaign, or duplicate one). Segment files no campaign has used since,
+  downloads and backups older than that are deleted too. Nothing on its way
+  (or paused) is touched, and the suppression list stays.
+  `python manage.py remove_old_numbers --dry-run` shows what would go;
 - **find a number** (operators): what every campaign recorded for one
   number, the CLI's campaigns too: its status, segment, delivery, clicks,
   how many SMS it got, whether it's on the suppression list, and how close
@@ -772,7 +780,7 @@ ships.
 |---|---|
 | 0 | All recipients sent successfully. |
 | 1 | Some rows failed (permanent or retriable) or are `unknown` / `needs_review`; or the run stopped early (Ctrl-C, or the sending window closed) and the same command continues it. |
-| 2 | Nothing more was sent, because of one of these. Fix it and re-run:<br>• an account-level error (no credit, bad API key, plan);<br>• outside the sending window;<br>• a short link couldn't be made, or Shlink refused the key;<br>• another `sms-sender` is already using the same state DB;<br>• the DB belongs to another campaign, or was sent with other settings. |
+| 2 | Nothing more was sent, because of one of these. Fix it and re-run:<br>• an account-level error (no credit, bad API key, plan);<br>• outside the sending window;<br>• a short link couldn't be made, or Shlink refused the key;<br>• another `sms-sender` is already using the same state DB;<br>• the DB belongs to another campaign, or was sent with other settings;<br>• the DB's phone numbers were removed (they're kept for a limited time): start a new campaign. |
 
 ## Architecture
 

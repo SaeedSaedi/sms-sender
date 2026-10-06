@@ -53,8 +53,8 @@ from .profiles import MAX_BYTES as PROFILES_MAX_BYTES
 from .profiles import ProfileFileError, drafts as profile_drafts, read as read_profiles
 from .terms import (
     CHECK_PROBLEMS, CHECK_STATES, CONFLICTS, COST_EACH, COST_TOTAL, FOLLOWUPS, IMPORT_FILE_ERRORS,
-    IMPORT_PROBLEMS, INVALID_ROWS, LINKS_AT_SEND, NEXT_STEP, REQUEUE_CONFIRM, REQUEUED, STAGES, STEPS,
-    stop_reason,
+    IMPORT_PROBLEMS, INVALID_ROWS, LINKS_AT_SEND, NEXT_STEP, NUMBERS_REMOVED, REQUEUE_CONFIRM, REQUEUED,
+    STAGES, STEPS, stop_reason,
 )
 
 logger = logging.getLogger(__name__)
@@ -242,6 +242,9 @@ def campaign_segment(request, slug: str):
     approval covers the list, so a new test SMS comes first, and anyone
     this campaign already sent to is skipped."""
     campaign = get_object_or_404(Campaign, slug=slug)
+    if services.numbers_removed(campaign):
+        messages.error(request, CONFLICTS["numbers_removed"])
+        return redirect("campaign_detail", slug=slug)
     if Job.objects.filter(campaign=campaign, kind=Job.Kind.SEND, state__in=services.ACTIVE).exists():
         messages.error(request, CONFLICTS["send_on_its_way"])
         return redirect("campaign_detail", slug=slug)
@@ -437,6 +440,8 @@ def settings_preview_response(request, base_settings: dict):
 
 
 def _locked_message(why: str) -> str:
+    if why == "numbers_removed":
+        return str(CONFLICTS["numbers_removed"])
     if why == "scheduled":
         return _("A send is scheduled for this campaign. To change its settings, cancel the schedule first.")
     if why == "waiting":
@@ -554,8 +559,10 @@ def _live(request, campaign: Campaign, *, ready_step: bool = True, **preview) ->
     summary = read_campaign(db) if db.exists() else None
     counts = summary.counts if summary else {}
     waiting = counts.get("pending", 0) + counts.get("failed_retriable", 0)
+    # Plan 06, D2: once its numbers are removed, only the history is offered.
+    removed_at = services.numbers_removed(campaign)
     ready = {}
-    if life.stage == READY and ready_step:  # the poll renders this step too, so it's built here
+    if life.stage == READY and ready_step and not removed_at:  # the poll renders this step too, so it's built here
         segment = Segment.objects.filter(slug=campaign.settings.get("segment")).first()
         loaded = load_segment(campaign.settings, segment)  # one read for the check, the message and the rows
         ready = {**_check_context(campaign, loaded),
@@ -565,11 +572,11 @@ def _live(request, campaign: Campaign, *, ready_step: bool = True, **preview) ->
             ready["check"], ready["message"], campaign.settings,
             Segment.objects.filter(slug=campaign.settings.get("segment")).first(),
         )
-    elif can(request.user, "edit_campaigns") and (
+    elif not removed_at and can(request.user, "edit_campaigns") and (
         life.stage in (COMPLETED, CANCELLED) or (life.stage == DRAFT and services.may_have_sent(campaign))
     ):
         ready["other_segments"], ready["lacking_segments"] = _other_segments(campaign)
-    if life.stage in (COMPLETED, CANCELLED, STOPPED):
+    if life.stage in (COMPLETED, CANCELLED, STOPPED) and not removed_at:
         ready["requeue_items"] = _requeue_items(campaign, request.user)
     active_job = next((j for j in active if j.kind == Job.Kind.SEND), None)
     # With a second approver (plan 06, D3), whoever asked for the test only rejects it.
@@ -619,7 +626,11 @@ def _live(request, campaign: Campaign, *, ready_step: bool = True, **preview) ->
         "can_purge": can(request.user, "delete_campaign_data"),
         "life": life,
         "stage_label": STAGES[life.stage],
-        "stage_template": f"campaigns/stage/_{life.stage}.html",
+        "stage_template": "campaigns/stage/_numbers_removed.html" if removed_at
+        else f"campaigns/stage/_{life.stage}.html",
+        "numbers_removed_line": say(NUMBERS_REMOVED, {
+            "when": jalali(removed_at, "%Y/%m/%d"), "months": SystemSettings.load().retention_months,
+        }) if removed_at else "",
         "next_step": NEXT_STEP["paused_by_window" if life.paused_by_window
                                else "awaiting_other" if own_test else life.stage],
         "steps": _steps(life.step),
@@ -627,7 +638,7 @@ def _live(request, campaign: Campaign, *, ready_step: bool = True, **preview) ->
             (life.send.result or {}).get("stop_reason"), (life.send.result or {}).get("stop_fields"),
         ) if life.send else "",
         "send_summary": send_summary(life.send),
-        "followup_items": _followups(counts),
+        "followup_items": [] if removed_at else _followups(counts),
         "history": [
             {"job": job, "result": result_line(job), "notes": notes(job)} for job in jobs
         ],

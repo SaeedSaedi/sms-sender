@@ -39,14 +39,14 @@ from sms_sender.phone import InvalidPhoneError, normalize
 from sms_sender.sendcheck import check_sends
 from sms_sender.sender import HaltError, SendError
 from sms_sender.shortlink import ShlinkError
-from sms_sender.state import DELIVERY_GROUPS, SENT, UNCHECKED, RecipientFilter, StateStore
+from sms_sender.state import DELIVERY_GROUPS, REMOVED, SENT, UNCHECKED, RecipientFilter, StateStore
 
 from ..accounts.decorators import requires
 from ..audit.record import record
 from ..campaigns.present import say
-from ..campaigns.terms import stop_reason
+from ..campaigns.terms import NUMBERS_REMOVED, stop_reason
 from ..dashboard.terms import CLICK_FILTERS, DELIVERY_FILTERS, DELIVERY_STATUS, STATUS_ORDER
-from ..dashboard.templatetags.fa import fa_number, status_label
+from ..dashboard.templatetags.fa import fa_number, jalali, status_label
 from ..jobs.engine import Engine
 from ..jobs.models import Campaign, Job
 from ..jobs.sandbox import read_outbox
@@ -166,8 +166,15 @@ def report(request, slug: str):
     stored = store.get_meta("settings")
     last_run = store.get_meta("last_run")
     versus = insights.against_preset(campaign)
+    removed_at = store.numbers_removed_at()
     return render(request, "reports/report.html", {
         "slug": slug,
+        # Plan 06, D2: the counts stay, the numbers and what needs them don't.
+        "numbers_removed": bool(removed_at),
+        "numbers_removed_line": say(NUMBERS_REMOVED, {
+            "when": jalali(datetime.fromtimestamp(removed_at, tz=timezone.utc), "%Y/%m/%d"),
+            "months": SystemSettings.load().retention_months,
+        }) if removed_at else "",
         "campaign": campaign,
         "name": campaign.name if campaign else (store.get_meta("campaign") or slug),
         "template": json.loads(stored).get("template") if stored else None,
@@ -231,7 +238,7 @@ def reveal(request, slug: str):
     store, _campaign = _store(slug)
     row = request.POST.get("row", "")
     phone = store.phone_of_row(int(row)) if row.isdigit() else None
-    if phone is None or phone.startswith("INVALID:"):
+    if phone is None or phone.startswith(("INVALID:", REMOVED)):
         raise Http404
     record("phone_revealed", request=request, campaign=slug, phone=phone)
     return render(request, "reports/_phone.html", {"phone": phone})

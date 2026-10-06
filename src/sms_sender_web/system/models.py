@@ -1,8 +1,8 @@
 """Settings for every campaign, that only an admin changes (plan 05): one
 row. The frequency cap (decision 6: built, off until set), notification
 targets, defaults for new campaigns, the hold on all sending, the credit
-warning level, and who gets and approves test SMS (plan 06, D1 and D3); and
-Kavenegar's account as last checked."""
+warning level, who gets and approves test SMS (plan 06, D1 and D3) and how
+long phone numbers are kept (D2); and Kavenegar's account as last checked."""
 from django.conf import settings as django_settings
 from django.db import models
 
@@ -47,6 +47,12 @@ class SystemSettings(models.Model):
     # Someone other than whoever asked for a test SMS approves it (D3). Off
     # while one person runs campaigns; whoever asked can always reject it.
     second_approver = models.BooleanField(default=False)
+    # Phone numbers are kept this many months after a campaign's last send,
+    # then removed, counts kept (D2, retention.py). The worker checks daily;
+    # its last check, and what it removed (counts and short names only).
+    retention_months = models.PositiveSmallIntegerField(default=12)
+    retention_ran_at = models.DateTimeField(null=True, blank=True)
+    retention_result = models.JSONField(default=dict, blank=True)
 
     @classmethod
     def load(cls) -> "SystemSettings":

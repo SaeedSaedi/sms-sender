@@ -267,7 +267,8 @@ def help_page(request):
     start, _sep, end = (SystemSettings.load().default_send_window or DEFAULT_WINDOW).partition("-")
     return render(request, "dashboard/help.html", {
         "steps": guide.steps(),
-        "rules": [fill(rule, {"start": start, "end": end}) for rule in guide.RULES],
+        "rules": [fill(rule, {"start": start, "end": end, "months": SystemSettings.load().retention_months})
+                  for rule in guide.RULES],
         "statuses": guide.statuses(),
         "deliveries": guide.deliveries(),
         "actions": guide.ACTIONS,
