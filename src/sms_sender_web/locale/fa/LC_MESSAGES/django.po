@@ -3451,3 +3451,24 @@ msgstr "{n} نفر پیامک را می‌گیرند"
 
 msgid "Open in the composer"
 msgstr "باز کردن در صفحه هشدار"
+
+msgid "A recipient's number"
+msgstr "شماره یک گیرنده"
+
+msgid "Next recipient"
+msgstr "گیرنده بعدی"
+
+msgid "Previous recipient"
+msgstr "گیرنده قبلی"
+
+msgid "Recipient {n} of {count}"
+msgstr "گیرنده {n} از {count}"
+
+msgid "Show their message"
+msgstr "نمایش پیامک او"
+
+msgid "Write a mobile number, e.g. 09121234567."
+msgstr "یک شماره موبایل بنویسید؛ مثلاً ۰۹۱۲۱۲۳۴۵۶۷."
+
+msgid "{phone} isn't among these segments' recipients."
+msgstr "{phone} جزو گیرندگان این گروه‌های مخاطبان نیست."

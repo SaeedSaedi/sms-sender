@@ -304,3 +304,28 @@ def test_the_campaign_page_leads_to_the_composer_or_to_a_new_preset(client_, pre
     Campaign.objects.create(slug="plain", name="plain", settings=dict(preset.settings))
     html = client_.get("/campaigns/plain/").content.decode()
     assert 'action="/presets/from-campaign/"' in html and 'name="campaign" value="plain"' in html
+
+
+def _message_of(client, **data):
+    base = {"segments": ["vip"], "value_token": "سکه", "value_token2": "۲"}
+    return client.post("/compose/coin-price/preview/?part=message", {**base, **data}).content.decode()
+
+
+def test_the_preview_shows_any_recipients_own_message(client_, preset):
+    html = _message_of(client_)
+    assert "گیرنده ۱ از ۳" in html and "۰۹۱۲*****۰۱" in html
+    html = _message_of(client_, sample="1")
+    assert "گیرنده ۲ از ۳" in html and "۰۹۱۲*****۰۲" in html
+    assert "hx-vals='{\"sample\": \"0\"}'" in html and "hx-vals='{\"sample\": \"2\"}'" in html
+    html = _message_of(client_, sample="3", segments=["vip", "newbies"])  # every list, in order
+    assert "گیرنده ۴ از ۴" in html and "۰۹۱۲*****۰۴" in html
+
+
+def test_a_recipients_message_is_found_by_number_in_a_post(client_, preset):
+    html = _message_of(client_, find="0912 000 0004", segments=["vip", "newbies"])
+    assert "گیرنده ۴ از ۴" in html and "09120000004" not in html  # masked, never in full
+    html = _message_of(client_, find="09120000004")
+    assert "۰۹۱۲*****۰۴ جزو گیرندگان این گروه‌های مخاطبان نیست." in html
+    assert "sms-bubble" not in html
+    html = _message_of(client_, find="not a number")
+    assert "یک شماره موبایل بنویسید" in html and 'aria-invalid="true"' in html

@@ -8,10 +8,31 @@
       <a href="{% url 'template_new' %}">{% translate "Add a template" %}</a></p>
   </div>
 {% else %}
-  <div class="phone"><div class="sms-bubble" dir="auto">{{ message.text }}</div></div>
+  {% if sample_line %}
+    <div class="sample-nav">
+      <button type="button" class="icon-button" hx-post="{{ preview_url }}?part=message" hx-include="#compose-form"
+              hx-target="#compose-preview" hx-vals='{"sample": "{{ sample_prev }}"}' aria-label="{% translate "Previous recipient" %}">{% icon "chevron-right" %}</button>
+      <span class="num" aria-live="polite">{{ sample_line }}{% if message.sample %} · {{ message.sample|fa_digits|ltr }}{% endif %}</span>
+      <button type="button" class="icon-button" hx-post="{{ preview_url }}?part=message" hx-include="#compose-form"
+              hx-target="#compose-preview" hx-vals='{"sample": "{{ sample_next }}"}' aria-label="{% translate "Next recipient" %}">{% icon "chevron-left" %}</button>
+    </div>
+  {% endif %}
+  {% if sample_missing %}
+    <div class="callout">{% icon "info" %}<p>{{ sample_missing }}</p></div>
+  {% else %}
+    <div class="phone"><div class="sms-bubble" dir="auto">{{ message.text }}</div></div>
+  {% endif %}
   <p class="num sms-length">{{ message.length }}</p>
   {% if message_cost %}<p class="hint num">{{ message_cost }}</p>{% endif %}
-  {% if message.sample %}<p class="hint">{% translate "With the values of" %} {{ message.sample|fa_digits|ltr }}</p>{% endif %}
+  {% if message.sample and not sample_line %}<p class="hint">{% translate "With the values of" %} {{ message.sample|fa_digits|ltr }}</p>{% endif %}
+  {% if message.count > 1 %}
+    <form class="field-with-button find-recipient" hx-post="{{ preview_url }}?part=message" hx-include="#compose-form" hx-target="#compose-preview">
+      <label for="id_find" class="visually-hidden">{% translate "A recipient's number" %}</label>
+      <input id="id_find" name="find" type="search" dir="ltr" inputmode="tel" value="{{ find }}" placeholder="{% translate "A recipient's number" %}"{% if find_problem %} aria-invalid="true" aria-describedby="find-error"{% endif %}>
+      <button type="submit" class="small secondary">{% icon "eye" %}{% translate "Show their message" %}</button>
+    </form>
+    {% if find_problem %}<p class="error" id="find-error">{{ find_problem }}</p>{% endif %}
+  {% endif %}
   {% if message.has_link %}<p class="hint">{% translate "The link's code here is an example." %}</p>{% endif %}
   {% for problem in message.problems %}<div class="callout callout-error">{% icon "circle-alert" %}<p>{{ problem }}</p></div>{% endfor %}
   {% for warning in message.warnings %}<div class="callout callout-warning">{% icon "triangle-alert" %}<p>{{ warning }}</p></div>{% endfor %}

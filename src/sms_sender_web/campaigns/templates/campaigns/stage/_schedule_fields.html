@@ -1,0 +1,22 @@
+{% load i18n schedule %}{% schedule_days schedule_date as months %}{% schedule_times schedule_time as times %}{% weekdays as day_names %}
+<fieldset class="calendar"{% if schedule_error %} aria-describedby="id_schedule_error"{% endif %}>
+  <legend>{% translate "Date (Solar Hijri)" %}</legend>
+  {% for month in months %}
+    <p class="calendar-month" aria-hidden="true">{{ month.title }}</p>
+    <div class="calendar-grid" role="presentation">
+      {% for name in day_names %}<span class="calendar-weekday" aria-hidden="true">{{ name }}</span>{% endfor %}
+      {% for week in month.weeks %}{% for cell in week %}
+        {% if cell %}
+          <label class="calendar-day{% if cell.today %} is-today{% endif %}">
+            <input type="radio" name="date" value="{{ cell.value }}" aria-label="{{ cell.label }}"{% if cell.checked %} checked{% endif %}>
+            <span aria-hidden="true">{{ cell.day }}</span>
+          </label>
+        {% else %}<span class="calendar-blank" aria-hidden="true"></span>{% endif %}
+      {% endfor %}{% endfor %}
+    </div>
+  {% endfor %}
+</fieldset>
+<label for="id_time">{% translate "Time (Tehran)" %}</label>
+<select id="id_time" name="time"{% if schedule_error %} aria-describedby="id_schedule_error"{% endif %}{% if schedule_bad_time %} aria-invalid="true"{% endif %}>
+  {% for t in times %}<option value="{{ t.value }}"{% if t.selected %} selected{% endif %}>{{ t.label }}</option>{% endfor %}
+</select>

@@ -37,6 +37,11 @@ class Preview:
     problems: list[str] = field(default_factory=list)   # placeholders nothing fills
     warnings: list[str] = field(default_factory=list)   # tokens the text doesn't use
     cost: int | None = None         # rials per recipient, estimated (price_per_part)
+    # Whose message it is, when each recipient's differs (token columns):
+    # the n-th of `count` valid recipients, or the one number asked for.
+    index: int = 0
+    count: int = 0
+    missing: bool = False           # the number asked for isn't among them
 
 
 def price_per_part() -> float | None:
@@ -68,19 +73,38 @@ def load_segment(settings: dict | None, segment):
         return None
 
 
-def _first_row(settings: dict, segment, loaded=None) -> tuple[dict[str, str], str]:
-    """The first valid recipient's token values (translated), and its phone."""
+@dataclass(frozen=True)
+class _Sample:
+    tokens: dict[str, str] = field(default_factory=dict)
+    phone: str = ""          # masked
+    index: int = 0
+    count: int = 0
+    missing: bool = False
+
+
+def _sample(settings: dict, segment, loaded=None, *, index: int = 0, phone: str | None = None) -> _Sample:
+    """A valid recipient's token values (translated) and masked phone: the
+    `index`-th (wrapping round), or the one with `phone`."""
     columns = settings.get("token_columns") or {}
     if not columns or segment is None or not segment.path.exists():
-        return {}, ""
+        return _Sample()
     loaded = loaded if loaded is not None else load_segment(settings, segment)
     if loaded is None or not loaded.valid:
-        return {}, ""
-    row = loaded.valid[0]
-    return dict(row.tokens), mask_phone(row.phone)
+        return _Sample()
+    rows, count = loaded.valid, len(loaded.valid)
+    if phone is not None:
+        found = next((i for i, row in enumerate(rows) if row.phone == phone), None)
+        if found is None:
+            return _Sample(count=count, missing=True)
+        index = found
+    row = rows[index % count]
+    return _Sample(dict(row.tokens), mask_phone(row.phone), index % count, count)
 
 
-def preview_of(settings: dict | None, segment, loaded=None) -> Preview:
+def preview_of(settings: dict | None, segment, loaded=None, *, index: int = 0,
+               phone: str | None = None) -> Preview:
+    """The message as the `index`-th valid recipient gets it (the first by
+    default), or the recipient with `phone`."""
     settings = settings or {}
     name = (settings.get("template") or "").strip()
     template = MessageTemplate.objects.filter(name=name).first() if name else None
@@ -88,8 +112,8 @@ def preview_of(settings: dict | None, segment, loaded=None) -> Preview:
         return Preview(template=name)
 
     values = dict(settings.get("tokens") or {})
-    row, sample = _first_row(settings, segment, loaded)
-    values.update(row)
+    picked = _sample(settings, segment, loaded, index=index, phone=phone)
+    values.update(picked.tokens)
     links = settings.get("links") or {}
     if links.get("token"):
         url = f"{shlink_base_url().rstrip('/')}/{SAMPLE_CODE}"
@@ -104,7 +128,8 @@ def preview_of(settings: dict | None, segment, loaded=None) -> Preview:
         template=name, known=True, text=text, parts=size.parts,
         cost=math.ceil(size.parts * price) if price else None,
         length=say(LENGTH, {"chars": size.chars, "parts": size.parts}),
-        sample=sample, has_link=bool(links.get("token")),
+        sample=picked.phone, index=picked.index, count=picked.count, missing=picked.missing,
+        has_link=bool(links.get("token")),
         problems=[say(PREVIEW_MISSING, {"token": f"%{t}"}) for t in found.missing],
         warnings=[say(PREVIEW_UNUSED, {"token": t}) for t in found.unused]
         + ([str(PREVIEW_LTR)] if shows_left_to_right(text) else []),

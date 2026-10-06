@@ -314,6 +314,8 @@ COUNTS = {
     "invalid": _("{n} rows aren't valid numbers and are skipped"),
 }
 TEST_HINT = _("It goes to your own number, {phone}. Ctrl+Enter does the same.")
+SAMPLE_LINE = _("Recipient {n} of {count}")
+SAMPLE_MISSING = _("{phone} isn't among these segments' recipients.")
 SERIES = _("{n} alerts")
 SERIES_LAST = _("{n} alerts · the last on {date}")
 LACKS_COLUMNS = _("It lacks the column {columns}")
