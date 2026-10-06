@@ -87,25 +87,31 @@ def time_left(seconds: float | None) -> str:
     return say(TIME_LEFT["hours"], {"h": hours, "m": minutes})
 
 
+def active_send(job: Job, now: datetime | None = None) -> ActiveSend:
+    """How far a send has got, its pace and the time left. The pace is the
+    average since it started, so it's shown only while it runs."""
+    now = now or timezone.now()
+    p = job.progress or {}
+    links = p.get("stage") == "links"
+    total, done = p.get("total") or 0, p.get("processed") or 0
+    elapsed = (now - job.started_at).total_seconds() if job.started_at else 0
+    pace = done / elapsed if done and elapsed > 0 and job.state == Job.State.RUNNING else None
+    if links and p.get("eta_sec") is not None:
+        left = time_left(p["eta_sec"])
+    else:
+        left = time_left((total - done) / pace) if pace and total > done else ""
+    return ActiveSend(
+        job=job, campaign=job.campaign, url=_url(job.campaign), stage="links" if links else "sms",
+        done=done, total=total, per_second=pace, left=left,
+        counts={k: p.get(k, 0) for k in ("sent", "failed_retriable", "failed_permanent", "unknown")},
+    )
+
+
 def active_sends(now: datetime | None = None) -> list[ActiveSend]:
     """Sends running or paused, the newest first, with how far they've got."""
     now = now or timezone.now()
-    out = []
-    for job in Job.objects.filter(kind=Job.Kind.SEND, state__in=ACTIVE).select_related("campaign"):
-        p = job.progress or {}
-        links = p.get("stage") == "links"
-        total, done = p.get("total") or 0, p.get("processed") or 0
-        elapsed = (now - job.started_at).total_seconds() if job.started_at else 0
-        pace = done / elapsed if done and elapsed > 0 and job.state == Job.State.RUNNING else None
-        if links and p.get("eta_sec") is not None:
-            left = time_left(p["eta_sec"])
-        else:
-            left = time_left((total - done) / pace) if pace and total > done else ""
-        out.append(ActiveSend(
-            job=job, campaign=job.campaign, url=_url(job.campaign), stage="links" if links else "sms",
-            done=done, total=total, per_second=pace, left=left,
-            counts={k: p.get(k, 0) for k in ("sent", "failed_retriable", "failed_permanent", "unknown")},
-        ))
+    out = [active_send(job, now) for job in
+           Job.objects.filter(kind=Job.Kind.SEND, state__in=ACTIVE).select_related("campaign")]
     out.sort(key=lambda a: a.job.started_at or now, reverse=True)
     return out
 

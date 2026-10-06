@@ -1,13 +1,17 @@
-{% load i18n roles ui %}{% if not in_drawer %}<a class="brand" href="{% url 'home' %}">{% icon "message-square-text" %}<span>{% translate "SMS campaigns" %}</span></a>{% endif %}
+{% load fa i18n roles ui %}{% if not in_drawer %}<a class="brand" href="{% url 'home' %}">{% icon "message-square-text" %}<span>{% translate "SMS campaigns" %}</span></a>{% endif %}
 {% include "ui/env_badge.html" %}
 {% if user|can:"view_campaigns" %}
+{# Shown by app.js, which runs the palette: no dead button without it. #}
+<button type="button" class="palette-open" data-open-palette aria-haspopup="dialog" hidden>{% icon "search" %}<span>{% translate "Search…" %}</span><kbd dir="ltr" data-palette-key>Ctrl K</kbd></button>
 <p class="nav-group">{% translate "SMS sending" %}</p>
 <ul class="nav-list">
   <li><a href="{% url 'home' %}"{% if nav_section == "control" %} aria-current="true"{% endif %}>{% icon "gauge" %}<span>{% translate "Control room" %}</span></a></li>
+  {% with unseen=notices_unseen %}<li><a href="{% url 'notifications' %}"{% if nav_section == "notifications" %} aria-current="true"{% endif %}>{% icon "bell" %}<span>{% translate "Notifications" %}</span>{% if unseen %}<span class="nav-count" aria-hidden="true">{{ unseen|fa_number }}</span><span class="visually-hidden">({{ unseen|fa_number }} {% translate "unseen" %})</span>{% endif %}</a></li>{% endwith %}
   {% if user|can:"run_campaigns" %}
     <li><a href="{% url 'compose_start' %}"{% if nav_section == "compose" %} aria-current="true"{% endif %}>{% icon "zap" %}<span>{% translate "New alert" %}</span></a></li>
   {% endif %}
   <li><a href="{% url 'campaign_list' %}"{% if nav_section == "campaigns" %} aria-current="true"{% endif %}>{% icon "megaphone" %}<span>{% translate "Campaigns" %}</span></a></li>
+  <li><a href="{% url 'calendar' %}"{% if nav_section == "calendar" %} aria-current="true"{% endif %}>{% icon "calendar" %}<span>{% translate "Calendar" %}</span></a></li>
   <li><a href="{% url 'preset_list' %}"{% if nav_section == "presets" %} aria-current="true"{% endif %}>{% icon "layers" %}<span>{% translate "Presets" %}</span></a></li>
   <li><a href="{% url 'segment_list' %}"{% if nav_section == "segments" %} aria-current="true"{% endif %}>{% icon "users" %}<span>{% translate "Segments" %}</span></a></li>
   <li><a href="{% url 'template_list' %}"{% if nav_section == "templates" %} aria-current="true"{% endif %}>{% icon "file-text" %}<span>{% translate "Templates" %}</span></a></li>

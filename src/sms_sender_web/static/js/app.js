@@ -8,6 +8,7 @@
 // - The menu drawer (phones and tablets), dismissible messages, copy buttons,
 //   and the chosen file's name in Persian file fields.
 // - HTMX: a lost connection or a stale page says so, instead of freezing.
+// - Ctrl+K (Cmd+K on a Mac) goes to any page, campaign, segment or preset.
 (() => {
   "use strict";
 
@@ -397,4 +398,192 @@
     event.preventDefault();
     primary.click();
   });
+
+  // ---------- Go to anything: Ctrl+K (Cmd+K on a Mac) ----------
+  //
+  // The menu's pages are on the page already (only those your role sees);
+  // campaigns, segments and presets come from /palette/ the first time it
+  // opens. Persian and Arabic letters and digits match each other. A phone
+  // number offers the number lookup, posted: a number never goes in a URL.
+
+  const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  const GROUPS = ["campaigns", "presets", "segments", "pages"];
+
+  function fold(text) {
+    return String(text || "").toLowerCase()
+      .replace(/[يى]/g, "ی").replace(/ك/g, "ک")
+      .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x6f0))
+      .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x660))
+      .replace(/[‌‎‏]/g, "")
+      .replace(/\s+/g, " ").trim();
+  }
+
+  function isPhone(text) {
+    return /^(\+?98|0098|0)?9\d{9}$/.test(fold(text).replace(/[\s()-]/g, ""));
+  }
+
+  function setupPalette(dialog) {
+    const input = dialog.querySelector("#palette-input");
+    const list = dialog.querySelector("#palette-list");
+    const empty = dialog.querySelector("[data-palette-empty]");
+    const count = dialog.querySelector("[data-palette-count]");
+    const numberForm = document.querySelector("[data-palette-number]");
+    let items = null; // everything findable, once /palette/ has answered
+    let loading = null;
+    let shown = []; // the options on screen, in order
+    let active = 0;
+
+    function keyed(item) {
+      item.key = fold(item.label + " " + item.hint);
+      return item;
+    }
+
+    function pages() {
+      return Array.from(document.querySelectorAll(".sidebar .nav-list a"), (a) => keyed({
+        group: "pages", label: (a.querySelector("span") || a).textContent.trim(), hint: "", url: a.getAttribute("href"),
+      }));
+    }
+
+    function load() {
+      if (!loading) {
+        loading = fetch(dialog.dataset.source, { headers: { Accept: "application/json" }, credentials: "same-origin" })
+          .then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
+          .then((data) => {
+            items = pages();
+            ["campaigns", "segments", "presets"].forEach((group) => {
+              (data[group] || []).forEach((it) => items.push(keyed({ group, label: it.name, hint: it.hint, url: it.url })));
+            });
+            if (dialog.open) render();
+          })
+          .catch(() => { loading = null; }); // the menu's pages still work; asked again next time
+      }
+      return loading;
+    }
+
+    function select(index) {
+      if (!shown.length) {
+        input.removeAttribute("aria-activedescendant");
+        return;
+      }
+      active = (index + shown.length) % shown.length;
+      shown.forEach((entry, i) => entry.option.setAttribute("aria-selected", String(i === active)));
+      input.setAttribute("aria-activedescendant", shown[active].option.id);
+      shown[active].option.scrollIntoView({ block: "nearest" });
+    }
+
+    function addGroup(title, entries) {
+      if (!entries.length) return;
+      const group = document.createElement("div");
+      const head = document.createElement("div");
+      group.setAttribute("role", "group");
+      head.className = "palette-group";
+      head.id = `palette-group-${list.children.length}`;
+      head.textContent = title;
+      group.setAttribute("aria-labelledby", head.id);
+      group.append(head);
+      entries.forEach((entry) => {
+        const option = document.createElement("div");
+        option.id = `palette-option-${shown.length}`;
+        option.className = "palette-option";
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", "false");
+        const label = document.createElement(entry.number ? "bdi" : "span");
+        label.className = "palette-label";
+        label.textContent = entry.label;
+        if (entry.number) label.dir = "ltr";
+        option.append(label);
+        if (entry.hint && entry.hint !== entry.label) {
+          const hint = document.createElement("bdi");
+          hint.className = "palette-hint";
+          hint.dir = "ltr";
+          hint.textContent = entry.hint;
+          option.append(hint);
+        }
+        const index = shown.length;
+        option.addEventListener("click", () => go(entry));
+        option.addEventListener("mousemove", () => { if (active !== index) select(index); });
+        entry.option = option;
+        shown.push(entry);
+        group.append(option);
+      });
+      list.append(group);
+    }
+
+    function render() {
+      const words = fold(input.value).split(" ").filter(Boolean);
+      const pool = items || pages();
+      const limit = words.length ? 8 : 5;
+      shown = [];
+      list.replaceChildren();
+      if (dialog.dataset.find && numberForm && isPhone(input.value)) {
+        addGroup(dialog.dataset.find, [{ label: input.value.trim(), number: input.value.trim() }]);
+      }
+      GROUPS.forEach((group) => {
+        const found = pool.filter((it) => it.group === group && words.every((w) => it.key.includes(w)));
+        addGroup(dialog.dataset[group], found.slice(0, limit));
+      });
+      empty.hidden = shown.length > 0;
+      input.setAttribute("aria-expanded", String(shown.length > 0));
+      if (words.length) count.textContent = dialog.dataset.results.replace("{n}", shown.length.toLocaleString("fa-IR"));
+      select(0);
+    }
+
+    function go(entry) {
+      dialog.close();
+      if (entry.number) {
+        numberForm.elements.number.value = entry.number;
+        numberForm.requestSubmit();
+      } else {
+        window.location.assign(entry.url);
+      }
+    }
+
+    function open() {
+      if (dialog.open) return;
+      const drawer = document.getElementById("drawer");
+      if (drawer && drawer.open) drawer.close();
+      input.value = "";
+      count.textContent = "";
+      dialog.showModal();
+      render();
+      load();
+      input.focus();
+    }
+
+    input.addEventListener("input", render);
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        select(active + (event.key === "ArrowDown" ? 1 : -1));
+      } else if (event.key === "Enter") {
+        event.preventDefault(); // and so the composer's Ctrl+Enter stays out of it
+        if (shown[active]) go(shown[active]);
+      }
+    });
+    // A click on the backdrop closes it.
+    dialog.addEventListener("click", (event) => {
+      if (event.target !== dialog) return;
+      const box = dialog.getBoundingClientRect();
+      if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) {
+        dialog.close();
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+      // event.code: on a Persian layout the K key types «ن».
+      if (event.code !== "KeyK" && event.key.toLowerCase() !== "k") return;
+      event.preventDefault();
+      if (dialog.open) dialog.close();
+      else open();
+    });
+    document.querySelectorAll("[data-open-palette]").forEach((button) => {
+      const key = button.querySelector("[data-palette-key]");
+      if (key) key.textContent = IS_MAC ? "⌘K" : "Ctrl K";
+      button.hidden = false;
+      button.addEventListener("click", open);
+    });
+  }
+
+  const palette = document.getElementById("palette");
+  if (palette && typeof palette.showModal === "function") setupPalette(palette);
 })();

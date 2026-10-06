@@ -12,6 +12,8 @@ class Profile(models.Model):
     # Set by an admin (a new account, or a reset password): until they choose
     # their own, every page leads to the password change.
     must_change_password = models.BooleanField(default=False)
+    # When they last opened the notifications: newer ones count as new.
+    notifications_seen_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self) -> str:
         return f"profile of {self.user_id}"

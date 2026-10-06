@@ -112,7 +112,10 @@
   </section>
 
   <section class="card" aria-labelledby="week-title" id="this-week">
-    <h2 id="week-title">{% icon "calendar-clock" %}{% translate "This week" %}</h2>
+    <div class="card-header">
+      <h2 id="week-title">{% icon "calendar-clock" %}{% translate "This week" %}</h2>
+      <a href="{% url 'calendar' %}">{% translate "The whole month" %}</a>
+    </div>
     <ol class="week-strip" aria-label="{% translate "Sends each day this week" %}">
       {% for d in this_week.days %}
         <li class="{% if d.today %}is-today{% endif %}{% if d.past %} is-past{% endif %}">

@@ -99,3 +99,14 @@ FIGURES = {
 }
 WEEK_DAY = _("{day}: {sent} sent, {later} set for later")
 PACE = _("{n} per second")
+
+# The notifications (plan 06, L4): what happened in the last 7 days.
+NOTICES = {
+    "test": _("The test SMS of «{name}» is waiting for your approval."),
+    "test_failed": _("The test SMS of «{name}» didn't go out."),
+    "sent": _("«{name}» finished: {n} SMS accepted."),
+    "stopped": _("«{name}» stopped."),
+    "cancelled": _("«{name}» was cancelled."),
+    "credit": _("Kavenegar's credit is under the warning level: {credit} rials."),
+    "backup": _("The daily backup is overdue."),
+}

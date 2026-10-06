@@ -66,6 +66,8 @@ PAGES: dict[str, tuple[str, str | None]] = {
     "login": ("/login/", None),
     "home": ("/", "viewer"),  # the control room
     "campaigns": ("/campaigns/", "viewer"),
+    "notifications": ("/notifications/", "admin"),
+    "calendar": ("/calendar/", "viewer"),
     "segment.list": ("/segments/", "viewer"),
     "segment.detail": ("/segments/vip/", "viewer"),
     "segment.upload": ("/segments/upload/", "operator"),
