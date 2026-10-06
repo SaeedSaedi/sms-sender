@@ -129,6 +129,14 @@ def describe(event) -> str:
         shown = {k: fa_number(v) if isinstance(v, int) else "—" for k, v in floor.items()}
         return format_html(gettext_now("credit warning: from {before} to {after}"),
                            before=shown.get("before", "—"), after=shown.get("after", "—"))
+    if event.action == "system_settings_changed" and (d.get("team_number_added") or d.get("team_number_removed")):
+        added = d.get("team_number_added")
+        line = gettext_now("team number for test SMS added: {phone}") if added \
+            else gettext_now("team number for test SMS removed: {phone}")
+        return format_html(line, phone=_who(fa_digits(added or d["team_number_removed"])))
+    if event.action == "system_settings_changed" and "second_approver" in d:
+        return gettext_now("a second person approves test SMS") if d["second_approver"] \
+            else gettext_now("whoever asks for a test SMS may approve it")
     if event.action == "api_called":
         return format_html("{} · {}", _who(d.get("path", "")), fa_number(d.get("rows", 0)))
     if event.action == "conversions_imported":

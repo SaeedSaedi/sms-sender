@@ -1,5 +1,5 @@
 {% load i18n fa %}
-<p>{% translate "Sent to" %} {{ test.params.test_number|mask_phone|fa_digits|ltr }} · {{ test.finished_at|jalali }}</p>
+<p>{% translate "Sent to" %} {{ test.params.test_number|mask_phone|fa_digits|ltr }}{% if test.result.test_team_sent %} {% translate "and the team's numbers" %} ({{ test.result.test_team_sent|fa_number }}){% endif %}{% if test.requested_by %} · {% translate "Asked for by" %} {{ test.requested_by.get_username|ltr }}{% endif %} · {{ test.finished_at|jalali }}</p>
 <dl class="figures">
   <div><dt>{% translate "Cost of one SMS" %}</dt><dd class="num">{% if test.result.cost_per_sms %}{{ test.result.cost_per_sms|fa_number }} {% translate "rials" %}{% else %}—{% endif %}</dd></div>
   <div><dt>{% translate "Estimated cost" %}</dt><dd class="num">{% if test.result.estimate %}{{ test.result.estimate|fa_number }} {% translate "rials" %}{% else %}—{% endif %}</dd></div>

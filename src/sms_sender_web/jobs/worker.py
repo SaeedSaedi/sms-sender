@@ -161,18 +161,23 @@ def _announce_failure(job: Job, why: str) -> None:
         notify_text(target, f"sms-sender: {job.campaign.slug}: the send stopped before sending anything: {why}")
 
 
-def _announce_test(job: Job) -> None:
+def _announce_test(job: Job, team: int = 0) -> None:
     """A test SMS went out: the targets hear that it waits for someone to
-    approve or reject it (its number masked). Best-effort."""
+    approve or reject it (its number masked, and how many of the team's
+    numbers got it too). Best-effort."""
     from sms_sender.notify import notify_text
 
     from ..privacy import mask_phone
     from ..system.models import SystemSettings
 
+    current = SystemSettings.load()
     phone = mask_phone(str(job.params.get("test_number", "")))
-    for target in SystemSettings.load().notify_targets:
-        notify_text(target, f"sms-sender: {job.campaign.slug}: the test SMS went to {phone}. "
-                            "It waits for someone to approve or reject it on the dashboard.")
+    also = f" and {team} of the team's numbers" if team else ""
+    who = (f"someone other than {job.requested_by.get_username()} to approve it, or anyone to reject it"
+           if current.second_approver and job.requested_by else "someone to approve or reject it")
+    for target in current.notify_targets:
+        notify_text(target, f"sms-sender: {job.campaign.slug}: the test SMS went to {phone}{also}. "
+                            f"It waits for {who} on the dashboard.")
 
 
 class Worker:
@@ -344,6 +349,7 @@ class Worker:
         try:
             if test:
                 runner = self.engine.runner(job.campaign, reporter, test_number=job.params["test_number"],
+                                            team_numbers=job.params.get("team_numbers", ()),
                                             allow_settings_change=allow)
             else:
                 runner = self.engine.runner(
@@ -413,7 +419,7 @@ class Worker:
         if summary.stopped and not test:
             return Job.State.PAUSED, result, "the sending window closed; it continues when the window opens"
         if test and summary.test_message_id is not None:
-            _announce_test(job)
+            _announce_test(job, summary.test_team_sent)
         return Job.State.DONE, result, ""
 
     def _reconcile(self, job: Job):

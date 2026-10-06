@@ -60,12 +60,13 @@ _UNKNOWN_CODE = _("Kavenegar didn't say more.")
 CONFLICTS = {
     "held": _("All sending is held by an admin. It can start again once the hold is lifted."),
     "busy": _("Another process is using this campaign right now. Try again in a moment."),
-    "no_test_number": _("First set your own mobile number on “My account”: test SMS go only there."),
+    "no_test_number": _("First set your own mobile number on “My account”: the test SMS you ask for goes there."),
     "send_active": _("This campaign is sending; a test SMS can't run at the same time."),
     "test_active": _("A test SMS is still running. Wait until it finishes."),
     "not_approved": _("Send a test SMS and approve it first."),
     "settings_changed": _("The settings changed after the test SMS. Send a new test SMS and approve it."),
     "not_decidable": _("This test SMS can't be approved or rejected now."),
+    "own_test": _("Someone else approves this test SMS, since you asked for it. You can still reject it."),
     "not_scheduled": _("This send isn't waiting for a set time any more."),
     "too_late": _("It's too late to undo that: set the send's time again."),
     "send_on_its_way": _("A send is on its way. Change the list after it ends."),
@@ -249,6 +250,8 @@ NEXT_STEP = {
     "ready": _("Check the list, then send a test SMS to yourself."),
     "testing": _("The test SMS is on its way to your number."),
     "awaiting": _("Check the test SMS on your phone, then approve it or reject it."),
+    # With a second approver (plan 06, D3), to whoever asked for the test.
+    "awaiting_other": _("Someone else approves the test SMS, since you asked for it. If something's wrong, you can still reject it."),
     "approved": _("Everything is ready. Start sending when you want."),
     "scheduled": _("Sending starts at the set time."),
     "sending": _("Sending. You can pause or cancel at any time."),
@@ -269,6 +272,9 @@ NOTES = {
     "test_tokens_from": _("The test SMS uses the tokens of {phone}."),
     "test_sending": _("Sending the test SMS to {phone}."),
     "test_sent": _("The test SMS was sent."),
+    "team_test_sending": _("Sending the test SMS to the team's number {phone} too."),
+    "team_test_failed": _("The test SMS to the team's number {phone} didn't go out (error {code})."),
+    "team_not_allowed": _("Restricted sending: {n} of the team's numbers aren't allowed numbers, so they don't get the test SMS."),
     "reconciled": _("Checked {checked} unknown outcomes with Kavenegar: {sent} had been sent, {requeued} had not, {needs_review} need review."),
     "smoke_sending": _("Sending to one recipient first: {phone}."),
     "smoke_passed": _("The first recipient's SMS was accepted; sending to the rest."),
@@ -315,6 +321,7 @@ COUNTS = {
     "invalid": _("{n} rows aren't valid numbers and are skipped"),
 }
 TEST_HINT = _("It goes to your own number, {phone}. Ctrl+Enter does the same.")
+TEST_HINT_TEAM = _("It goes to your own number, {phone}, then to the team's numbers ({n}). Ctrl+Enter does the same.")
 SAMPLE_LINE = _("Recipient {n} of {count}")
 SAMPLE_MISSING = _("{phone} isn't among these segments' recipients.")
 SERIES = _("{n} alerts")

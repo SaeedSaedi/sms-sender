@@ -106,6 +106,8 @@ PACE = _("{n} per second")
 # The notifications (plan 06, L4): what happened in the last 7 days.
 NOTICES = {
     "test": _("The test SMS of «{name}» is waiting for your approval."),
+    # With a second approver, to whoever asked for it (plan 06, D3).
+    "test_other": _("The test SMS of «{name}» is waiting for another person's approval."),
     "test_failed": _("The test SMS of «{name}» didn't go out."),
     "sent": _("«{name}» finished: {n} SMS accepted."),
     "stopped": _("«{name}» stopped."),

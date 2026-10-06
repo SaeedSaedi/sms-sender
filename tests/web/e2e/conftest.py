@@ -136,7 +136,14 @@ def shot(page, name: str) -> None:
 
 
 def axe_violations(page) -> list[dict]:
-    """axe-core's findings on the page as it is now (tests only; never shipped)."""
+    """axe-core's findings on the page as it is now (tests only; never shipped).
+    Transitions finish first: measured halfway, a colour fading in (the
+    palette's highlighted option) fails a contrast check it passes at rest."""
+    page.evaluate(
+        """() => Promise.all(document.getAnimations()
+            .filter(a => a.effect && a.effect.getComputedTiming().iterations !== Infinity)
+            .map(a => a.finished.catch(() => null)))"""
+    )
     page.add_script_tag(path=str(AXE))
     return page.evaluate(
         """async () => (await axe.run(document, {resultTypes: ["violations"]})).violations

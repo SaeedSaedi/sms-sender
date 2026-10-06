@@ -503,9 +503,13 @@ internal, multi-user tool built with Django and HTMX. So far it has:
      asked for.
   3. **Test SMS:** runs the checks, checks the account, makes the test
      SMS's own short link, and sends one SMS to *your own* number (set on
-     «حساب من» / My account). It shows the cost per SMS, the estimate and
-     the credit. You approve it or reject it. The recipients' links are made
-     when sending starts, before any SMS, so the test doesn't wait for them.
+     «حساب من» / My account), then the same SMS to the team's numbers an
+     admin keeps on «تنظیمات سامانه» (up to five, each with its own test
+     link). It shows the cost per SMS, the estimate and the credit. You
+     approve it or reject it; when an admin asks for a second approver,
+     someone else approves it and you can still reject it. The recipients'
+     links are made when sending starts, before any SMS, so the test doesn't
+     wait for them.
   4. **Send:** only after an approved test SMS for the current settings.
      Start now, or schedule it for a Solar Hijri date and a Tehran time (up
      to 30 days ahead). A scheduled send can start at once, or be taken back
@@ -648,7 +652,8 @@ The sandbox has its own users: create them with
 - **Restricted sending:** with `SMS_SENDER_ALLOWED_NUMBERS=09xxxxxxxxx`
   (comma-separated) in `.env`, no SMS goes to any other number, from the
   dashboard or the CLI. A run with anyone else in its queue is refused
-  before anything is sent, and a test SMS goes only to an allowed number.
+  before anything is sent, and a test SMS goes only to an allowed number
+  (team numbers it doesn't allow are skipped).
   Every page shows a banner while it's on. Remove the line and restart to
   lift it.
 - **A proxy for Kavenegar or Shlink** goes in `.env` (`HTTPS_PROXY`): under

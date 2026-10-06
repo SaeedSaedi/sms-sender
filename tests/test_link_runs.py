@@ -200,7 +200,7 @@ def test_a_cancel_during_the_link_stage_is_a_stop_not_a_halt(tmp_path):
 
 
 def test_a_recipient_without_its_link_is_never_claimed(tmp_path, monkeypatch):
-    def partial(self, recipients, test_phone=None):
+    def partial(self, recipients, test_phone=None, team=()):
         return LinkStageResult(needed=1, created=1, extended=0, tokens={A: f"{BASE}/x1"})
     monkeypatch.setattr(LinkStage, "run", partial)
     state, sender = StateStore(tmp_path / "s.db"), FakeSender()

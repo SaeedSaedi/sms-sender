@@ -51,7 +51,7 @@
 {% include "campaigns/stage/_recipients_preview.html" %}
 
 <h3>{% translate "Test SMS" %}</h3>
-<p>{% translate "Before sending, one SMS goes to your own number, so you can see the final text." %}{% if campaign.settings.links.token %} {% translate "It carries a short link of its own; the recipients' links are made when sending starts." %}{% endif %}</p>
+<p>{% if test_team %}{% translate "Before sending, one SMS goes to your own number and to the team's numbers, so you can see the final text." %}{% else %}{% translate "Before sending, one SMS goes to your own number, so you can see the final text." %}{% endif %}{% if campaign.settings.links.token %} {% translate "It carries a short link of its own; the recipients' links are made when sending starts." %}{% endif %}</p>
 {% if user|can:"run_campaigns" %}
   {% if sending_held %}
     {% include "campaigns/stage/_held_note.html" %}
@@ -59,11 +59,11 @@
     <form method="post" action="{% url 'campaign_action' campaign.slug 'test' %}" class="form-actions" id="test-form">
       {% csrf_token %}
       <button type="submit" data-cli="send --approval-test, preview --send">{% icon "send" %}{% if test %}{% translate "Send a new test SMS" %}{% else %}{% translate "Send a test SMS" %}{% endif %}</button>
-      <span class="hint">{% translate "to" %} {{ test_phone|mask_phone|fa_digits|ltr }}</span>
+      <span class="hint">{% translate "to" %} {{ test_phone|mask_phone|fa_digits|ltr }}{% if test_team %} {% translate "and the team's numbers" %} ({{ test_team|fa_number }}){% endif %}</span>
     </form>
   {% else %}
     <div class="callout callout-warning">{% icon "triangle-alert" %}
-      <p>{% translate "First set your own mobile number on “My account”: test SMS go only there." %}
+      <p>{% translate "First set your own mobile number on “My account”: the test SMS you ask for goes there." %}
         <a href="{% url 'my_account' %}">{% translate "My account" %}</a></p>
     </div>
   {% endif %}

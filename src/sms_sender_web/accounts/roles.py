@@ -7,7 +7,9 @@ them a role.
 """
 from __future__ import annotations
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.db.models import Q
 
 VIEWER, OPERATOR, ADMIN = "viewer", "operator", "admin"
 ROLES = (VIEWER, OPERATOR, ADMIN)  # lowest first
@@ -64,6 +66,13 @@ def role_of(user) -> str | None:
 def can(user, capability: str) -> bool:
     role = role_of(user)
     return role is not None and capability in CAPABILITIES[role]
+
+
+def count_who_can(capability: str) -> int:
+    """How many active people have the capability (superusers are admins)."""
+    roles = [role for role in ROLES if capability in CAPABILITIES[role]]
+    return (get_user_model().objects.filter(is_active=True)
+            .filter(Q(is_superuser=True) | Q(groups__name__in=roles)).distinct().count())
 
 
 def needs_two_factor(user) -> bool:

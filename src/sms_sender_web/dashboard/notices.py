@@ -59,7 +59,8 @@ def _tests(since: datetime, user) -> list[Notice]:
         name = {"name": job.campaign.name}
         if job.state == Job.State.DONE and not job.decision \
                 and job.settings_hash == services.settings_hash(job.campaign):
-            out.append(Notice(job.finished_at, "test", "warning", say(NOTICES["test"], name), campaign_url(job.campaign, user)))
+            key = "test_other" if services.needs_another_approver(job, user) else "test"
+            out.append(Notice(job.finished_at, "test", "warning", say(NOTICES[key], name), campaign_url(job.campaign, user)))
         elif job.state == Job.State.FAILED:
             result = job.result or {}
             reason = stop_reason(result.get("stop_reason"), result.get("stop_fields"))

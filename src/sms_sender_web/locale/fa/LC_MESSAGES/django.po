@@ -786,9 +786,6 @@ msgstr "حداکثر {max} کاراکتر مجاز است؛ این مقدار {l
 msgid "Back to the campaign"
 msgstr "بازگشت به کمپین"
 
-msgid "Before a campaign sends, its test SMS goes to this number, and only to it, so you can see the final text."
-msgstr "پیش از ارسال هر کمپین، پیامک آزمایشی آن فقط به این شماره ارسال می‌شود تا متن نهایی را ببینید."
-
 msgid "Campaign created"
 msgstr "ساخت کمپین"
 
@@ -843,9 +840,6 @@ msgstr "مقدار از"
 
 msgid "Finished"
 msgstr "زمان پایان"
-
-msgid "First set your own mobile number on “My account”: test SMS go only there."
-msgstr "ابتدا شماره موبایل خود را در «حساب من» ثبت کنید؛ پیامک آزمایشی فقط به همان شماره ارسال می‌شود."
 
 msgid "Fixed value"
 msgstr "مقدار ثابت"
@@ -2660,9 +2654,6 @@ msgstr "هر وضعیت تحویل چه معنایی دارد؟"
 msgid "The check reads the list as a send would: the valid numbers, the template, the tokens, the short link and the sending window. The preview shows each recipient's final text."
 msgstr "فهرست درست همان‌گونه که در ارسال خوانده می‌شود بررسی می‌شود: شماره‌های معتبر، قالب پیامک، متغیرهای قالب، لینک کوتاه و بازه مجاز ارسال. پیش‌نمایش، متن نهایی هر گیرنده را نشان می‌دهد."
 
-msgid "One SMS to your own number, set on “My account”, with the final text and link. Check it on your phone, then approve it or reject it."
-msgstr "یک پیامک با متن و لینک نهایی به شماره خودتان، که در «حساب من» ثبت کرده‌اید. آن را روی گوشی خود ببینید و سپس تأیید یا رد کنید."
-
 msgid "A send needs a test SMS approved for these exact settings. It starts now or at a set time: the short links are made first, then the SMS go out inside the sending window."
 msgstr "ارسال به پیامک آزمایشی‌ای نیاز دارد که برای همین تنظیمات تأیید شده باشد. ارسال همین حالا یا در زمان تعیین‌شده آغاز می‌شود: نخست لینک‌های کوتاه ساخته می‌شوند، سپس پیامک‌ها در بازه مجاز ارسال فرستاده می‌شوند."
 
@@ -2686,9 +2677,6 @@ msgstr "اگر مدیر سامانه سقف ارسال تعیین کند، هی�
 
 msgid "Every short link is made before the first SMS. If one can't be made, nothing is sent."
 msgstr "همه لینک‌های کوتاه پیش از نخستین پیامک ساخته می‌شوند. اگر حتی یکی ساخته نشود، هیچ پیامکی ارسال نمی‌شود."
-
-msgid "A test SMS goes only to your own number. Settings changed after its approval need a new test."
-msgstr "پیامک آزمایشی فقط به شماره خودتان ارسال می‌شود. اگر تنظیمات پس از تأیید آن تغییر کند، پیامک آزمایشی تازه‌ای لازم است."
 
 msgid "Not sent to Kavenegar yet."
 msgstr "هنوز برای کاوه‌نگار فرستاده نشده است."
@@ -2743,9 +2731,6 @@ msgstr "مخابرات یا کاوه‌نگار ارسال را ناموفق ا�
 
 msgid "The recipient has blocked this kind of SMS."
 msgstr "گیرنده دریافت این نوع پیامک را مسدود کرده است."
-
-msgid "One SMS to the operator's own number before the main send, to see the final text."
-msgstr "یک پیامک به شماره خود اپراتور پیش از ارسال اصلی، برای دیدن متن نهایی."
 
 msgid "No new recipients are sent. Requests already on their way finish and are recorded."
 msgstr "ارسال به گیرندگان تازه متوقف می‌شود؛ درخواست‌های در جریان تکمیل و ثبت می‌شوند."
@@ -3943,3 +3928,103 @@ msgstr "هنوز فعالیتی ثبت نشده است"
 
 msgid "Put it away"
 msgstr "کنار گذاشتن"
+
+#, python-format
+msgid "There are already %(n)s numbers: remove one first."
+msgstr "اکنون %(n)s شماره ثبت شده است؛ ابتدا یکی را حذف کنید."
+
+msgid "Choose a number from the list."
+msgstr "یک شماره از فهرست انتخاب کنید."
+
+msgid "Saved. It applies to the next test SMS."
+msgstr "ذخیره شد. از پیامک آزمایشی بعدی اعمال می‌شود."
+
+msgid "Saved. It applies to test SMS waiting for a decision too."
+msgstr "ذخیره شد. برای پیامک‌های آزمایشی که منتظر تصمیم‌اند هم اعمال می‌شود."
+
+msgid "The team's numbers"
+msgstr "شماره‌های تیم"
+
+msgid "Each test SMS goes to whoever asks for it, then to these numbers, so the team sees the final text too. At most five."
+msgstr "هر پیامک آزمایشی ابتدا به درخواست‌کننده آن و سپس به این شماره‌ها ارسال می‌شود تا تیم هم متن نهایی را ببیند. حداکثر پنج شماره."
+
+msgid "Not sent while sending is restricted"
+msgstr "تا وقتی ارسال محدود است، ارسال نمی‌شود"
+
+msgid "Remove this number? It won't get test SMS any more."
+msgstr "این شماره حذف شود؟ دیگر پیامک آزمایشی دریافت نمی‌کند."
+
+msgid "Add a number"
+msgstr "افزودن شماره"
+
+msgid "That's as many as there can be: remove one to add another."
+msgstr "ظرفیت تکمیل است؛ برای افزودن شماره دیگر، یکی را حذف کنید."
+
+msgid "Who approves it"
+msgstr "چه کسی تأیید می‌کند"
+
+msgid "Only one person can run campaigns now, so nobody could approve their test SMS. Give a colleague the operator role, or turn this off."
+msgstr "اکنون فقط یک نفر می‌تواند کمپین اجرا کند، پس کسی نمی‌تواند پیامک آزمایشی او را تأیید کند. به یکی از همکاران نقش اپراتور بدهید یا این گزینه را خاموش کنید."
+
+msgid "Someone other than whoever asked for the test SMS approves it"
+msgstr "پیامک آزمایشی را کسی جز درخواست‌کننده آن تأیید کند"
+
+msgid "Whoever asked for it can still reject it. Leave it off while one person runs campaigns."
+msgstr "درخواست‌کننده همچنان می‌تواند آن را رد کند. تا وقتی یک نفر کمپین‌ها را اجرا می‌کند، این گزینه را خاموش بگذارید."
+
+msgid "First set your own mobile number on “My account”: the test SMS you ask for goes there."
+msgstr "ابتدا شماره موبایل خود را در «حساب من» ثبت کنید؛ پیامک آزمایشی که درخواست می‌کنید به همان شماره ارسال می‌شود."
+
+msgid "Someone else approves this test SMS, since you asked for it. You can still reject it."
+msgstr "چون این پیامک آزمایشی را شما درخواست کرده‌اید، شخص دیگری آن را تأیید می‌کند. همچنان می‌توانید آن را رد کنید."
+
+msgid "Someone else approves the test SMS, since you asked for it. If something's wrong, you can still reject it."
+msgstr "چون پیامک آزمایشی را شما درخواست کرده‌اید، شخص دیگری آن را تأیید می‌کند. اگر ایرادی دارد، همچنان می‌توانید آن را رد کنید."
+
+msgid "Sending the test SMS to the team's number {phone} too."
+msgstr "پیامک آزمایشی به شماره تیم {phone} هم ارسال می‌شود."
+
+msgid "The test SMS to the team's number {phone} didn't go out (error {code})."
+msgstr "پیامک آزمایشی به شماره تیم {phone} ارسال نشد (خطای {code})."
+
+msgid "Restricted sending: {n} of the team's numbers aren't allowed numbers, so they don't get the test SMS."
+msgstr "ارسال محدود: {n} شماره از شماره‌های تیم جزو شماره‌های مجاز نیستند، پس پیامک آزمایشی برایشان ارسال نمی‌شود."
+
+msgid "It goes to your own number, {phone}, then to the team's numbers ({n}). Ctrl+Enter does the same."
+msgstr "به شماره خودتان، {phone}، و سپس به شماره‌های تیم ({n}) فرستاده می‌شود. Ctrl+Enter هم همین کار را می‌کند."
+
+msgid "and the team's numbers"
+msgstr "و شماره‌های تیم"
+
+msgid "Asked for by"
+msgstr "به درخواست"
+
+msgid "Before sending, one SMS goes to your own number and to the team's numbers, so you can see the final text."
+msgstr "پیش از ارسال اصلی، یک پیامک به شماره خود شما و شماره‌های تیم ارسال می‌شود تا متن نهایی را ببینید."
+
+msgid "Before a campaign sends, the test SMS you ask for goes to this number, so you can see the final text."
+msgstr "پیش از ارسال هر کمپین، پیامک آزمایشی که درخواست می‌کنید به این شماره ارسال می‌شود تا متن نهایی را ببینید."
+
+msgid "The test SMS of «{name}» is waiting for another person's approval."
+msgstr "پیامک آزمایشی «{name}» در انتظار تأیید شخص دیگری است."
+
+msgid "team number for test SMS added: {phone}"
+msgstr "شماره تیم برای پیامک آزمایشی افزوده شد: {phone}"
+
+msgid "team number for test SMS removed: {phone}"
+msgstr "شماره تیم برای پیامک آزمایشی حذف شد: {phone}"
+
+msgid "a second person approves test SMS"
+msgstr "پیامک آزمایشی را شخص دومی تأیید می‌کند"
+
+msgid "whoever asks for a test SMS may approve it"
+msgstr "درخواست‌کننده پیامک آزمایشی می‌تواند خودش آن را تأیید کند"
+
+msgid "One SMS to your own number, set on “My account”, and to the team's numbers a system admin keeps, with the final text and link. Check it on your phone, then approve it or reject it. When a system admin asks for it, someone other than whoever asked for the test approves it."
+msgstr "یک پیامک با متن و لینک نهایی به شماره خودتان، که در «حساب من» ثبت کرده‌اید، و به شماره‌های تیم که مدیر سامانه ثبت می‌کند. آن را روی گوشی خود ببینید و سپس تأیید یا رد کنید. اگر مدیر سامانه بخواهد، کسی جز درخواست‌کننده آن را تأیید می‌کند."
+
+msgid "A test SMS goes only to your own number and to the team's numbers a system admin keeps. Settings changed after its approval need a new test."
+msgstr "پیامک آزمایشی فقط به شماره خودتان و شماره‌های تیم که مدیر سامانه ثبت می‌کند ارسال می‌شود. اگر تنظیمات پس از تأیید آن تغییر کند، پیامک آزمایشی تازه‌ای لازم است."
+
+msgid "One SMS to the operator's own number, and to the team's numbers, before the main send, to see the final text."
+msgstr "یک پیامک به شماره خود اپراتور و شماره‌های تیم پیش از ارسال اصلی، برای دیدن متن نهایی."

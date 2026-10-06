@@ -44,7 +44,7 @@ from .forms import (
     _ASCII_DIGITS, SCHEDULE_ERRORS, TOKENS, DuplicateForm, NewCampaignForm, SettingsForm, combined,
     free_slug, more_segment_choices, parse_when,
 )
-from .lifecycle import CANCELLED, COMPLETED, DRAFT, PAUSED, READY, STOPPED, lifecycle, settings_complete
+from .lifecycle import AWAITING, CANCELLED, COMPLETED, DRAFT, PAUSED, READY, STOPPED, lifecycle, settings_complete
 from .message import placeholders
 from .models import MessageTemplate
 from .present import checklist, notes, result_line, say, send_summary
@@ -572,6 +572,9 @@ def _live(request, campaign: Campaign, *, ready_step: bool = True, **preview) ->
     if life.stage in (COMPLETED, CANCELLED, STOPPED):
         ready["requeue_items"] = _requeue_items(campaign, request.user)
     active_job = next((j for j in active if j.kind == Job.Kind.SEND), None)
+    # With a second approver (plan 06, D3), whoever asked for the test only rejects it.
+    own_test = life.stage == AWAITING and services.needs_another_approver(test, request.user)
+    test_phone = test_phone_of(request.user)
     return {
         **_live_send(campaign, db, active_job, counts),
         **ready,
@@ -606,7 +609,9 @@ def _live(request, campaign: Campaign, *, ready_step: bool = True, **preview) ->
         ),
         "summary": summary,
         "status_order": STATUS_ORDER,
-        "test_phone": test_phone_of(request.user),
+        "test_phone": test_phone,
+        "test_team": len(services.team_numbers(test_phone)),
+        "own_test": own_test,
         "settings_locked": bool(services.settings_locked(campaign, request.user)),
         "can_unlock": life.stage in (PAUSED, STOPPED, COMPLETED, CANCELLED)
         and can(request.user, "change_sent_message") and services.can_unlock(campaign),
@@ -615,7 +620,8 @@ def _live(request, campaign: Campaign, *, ready_step: bool = True, **preview) ->
         "life": life,
         "stage_label": STAGES[life.stage],
         "stage_template": f"campaigns/stage/_{life.stage}.html",
-        "next_step": NEXT_STEP["paused_by_window" if life.paused_by_window else life.stage],
+        "next_step": NEXT_STEP["paused_by_window" if life.paused_by_window
+                               else "awaiting_other" if own_test else life.stage],
         "steps": _steps(life.step),
         "send_reason": stop_reason(
             (life.send.result or {}).get("stop_reason"), (life.send.result or {}).get("stop_fields"),

@@ -15,7 +15,7 @@ from .terms import DELIVERY_STATUS, SUBMISSION_STATUS
 STEP_HELP = (
     _("Choose the segment (or several, for one send), the template and what fills its tokens."),
     _("The check reads the list as a send would: the valid numbers, the template, the tokens, the short link and the sending window. The preview shows each recipient's final text."),
-    _("One SMS to your own number, set on “My account”, with the final text and link. Check it on your phone, then approve it or reject it."),
+    _("One SMS to your own number, set on “My account”, and to the team's numbers a system admin keeps, with the final text and link. Check it on your phone, then approve it or reject it. When a system admin asks for it, someone other than whoever asked for the test approves it."),
     _("A send needs a test SMS approved for these exact settings. It starts now or at a set time: the short links are made first, then the SMS go out inside the sending window."),
     _("What was accepted, delivered and clicked, and what's left to do. Delivery is checked for 48 hours after sending, clicks for 14 days."),
 )
@@ -29,7 +29,7 @@ RULES = (
     _("Numbers on the suppression list get no SMS."),
     _("When a system admin sets a frequency cap, nobody gets more campaign SMS than it allows."),
     _("Every short link is made before the first SMS. If one can't be made, nothing is sent."),
-    _("A test SMS goes only to your own number. Settings changed after its approval need a new test."),
+    _("A test SMS goes only to your own number and to the team's numbers a system admin keeps. Settings changed after its approval need a new test."),
 )
 
 # Submission status (dashboard.terms.SUBMISSION_STATUS) → what it means.
@@ -62,7 +62,7 @@ DELIVERY_HELP = {
 
 # The buttons, under their own labels → what each does.
 ACTIONS = (
-    (_("Test SMS"), _("One SMS to the operator's own number before the main send, to see the final text.")),
+    (_("Test SMS"), _("One SMS to the operator's own number, and to the team's numbers, before the main send, to see the final text.")),
     (_("Pause"), _("No new recipients are sent. Requests already on their way finish and are recorded.")),
     (_("Resume sending"), _("Unknown outcomes are checked with Kavenegar first, then sending continues from where it stopped.")),
     (_("Cancel the campaign"), _("Sending to the remaining recipients is cancelled. SMS Kavenegar has accepted can't be taken back.")),

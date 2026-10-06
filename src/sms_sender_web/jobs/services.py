@@ -33,8 +33,8 @@ APPROVED_SETTINGS = ("segment", "template", "tokens", "token_columns", "value_ma
 class JobConflict(Exception):
     """The action can't be done right now. `code` picks the Persian message:
     busy, no_test_number, send_active, test_active, not_approved,
-    settings_changed, not_decidable, not_scheduled, send_on_its_way, not_needed,
-    requeue_while_sending, held."""
+    settings_changed, not_decidable, own_test, not_scheduled, send_on_its_way,
+    not_needed, requeue_while_sending, held, too_late."""
 
     def __init__(self, code: str, detail: str = ""):
         super().__init__(detail or code)
@@ -243,15 +243,25 @@ def approval(campaign: Campaign) -> Job | None:
     return None
 
 
+def team_numbers(own: str = "") -> list[str]:
+    """The team's numbers that get every test SMS too (system settings, plan
+    06 D1), besides `own`, the number of whoever asks for it."""
+    from ..system.models import SystemSettings
+
+    return [phone for phone in SystemSettings.load().team_test_numbers or [] if phone != own]
+
+
 def request_test(campaign: Campaign, user, *, parts: int | None = None) -> Job:
-    """Queue a test SMS to the user's own number (stages 1–3: validate,
-    links, pre-send checks). A test already waiting or running is returned.
-    `parts`: the message's SMS parts, when the template's text is known, so
-    its cost gives a price per part for estimates."""
+    """Queue a test SMS to the user's own number, then to the team's numbers
+    (stages 1–3: validate, links, pre-send checks). A test already waiting
+    or running is returned. `parts`: the message's SMS parts, when the
+    template's text is known, so its cost gives a price per part for
+    estimates."""
     phone = test_phone_of(user)
     if not phone:
         raise JobConflict("no_test_number")
     _refuse_while_held()
+    team = team_numbers(phone)
     with transaction.atomic():
         if Job.objects.filter(campaign=campaign, kind=Job.Kind.SEND, state__in=ACTIVE).exists():
             raise JobConflict("send_active")
@@ -262,19 +272,35 @@ def request_test(campaign: Campaign, user, *, parts: int | None = None) -> Job:
             return existing
         return Job.objects.create(
             campaign=campaign, kind=Job.Kind.TEST, requested_by=user,
-            params={"test_number": phone, **({"parts": parts} if parts else {}), **_allowance(campaign)},
+            params={"test_number": phone, **({"team_numbers": team} if team else {}),
+                    **({"parts": parts} if parts else {}), **_allowance(campaign)},
             settings_hash=settings_hash(campaign),
         )
+
+
+def needs_another_approver(job: Job | None, user) -> bool:
+    """With a second approver (system settings, plan 06 D3), whoever asked
+    for a test SMS may reject it, but someone else approves it."""
+    from ..system.models import SystemSettings
+
+    return bool(
+        job is not None and job.requested_by_id is not None
+        and job.requested_by_id == getattr(user, "pk", None)
+        and SystemSettings.load().second_approver
+    )
 
 
 def decide_test(job: Job, user, approve: bool) -> Job:
     """The operator received the test SMS: the text is right (approve) or
     not (reject). Only a finished test, once, and an approval only while
-    the campaign's settings are the ones tested."""
+    the campaign's settings are the ones tested and, with a second
+    approver, by someone other than whoever asked for it."""
     if job.kind != Job.Kind.TEST or job.state != Job.State.DONE or job.decision:
         raise JobConflict("not_decidable")
     if approve and job.settings_hash != settings_hash(job.campaign):
         raise JobConflict("settings_changed")
+    if approve and needs_another_approver(job, user):
+        raise JobConflict("own_test")
     decided = Job.objects.filter(pk=job.pk, decision="").update(
         decision=Job.Decision.APPROVED if approve else Job.Decision.REJECTED,
         decided_by=user, decided_at=timezone.now(),
