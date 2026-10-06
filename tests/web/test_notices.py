@@ -89,14 +89,17 @@ def test_sends_that_ended_stopped_or_were_cancelled(campaign, viewer):
     assert cancelled.text == "ارسال «قیمت سکه» لغو شد."
 
 
-def test_an_alert_opens_in_the_composer(viewer):
+def test_an_alert_opens_in_the_composer_for_who_can_send_it(viewer, operator):
     from sms_sender_web.campaigns.models import Preset
 
     preset = Preset.objects.create(slug="price", name="قیمت", settings={"template": "t"})
     alert = Campaign.objects.create(slug="price-1", name="قیمت ۱", preset=preset, settings={"template": "t"})
     _job(alert, Job.Kind.SEND, Job.State.DONE, result={"sent": 3})
-    [notice] = notices.notices(viewer)
+    [notice] = notices.notices(operator)
     assert notice.url == "/compose/c/price-1/"
+    # The composer needs run_campaigns: a viewer goes to the campaign's page.
+    [notice] = notices.notices(viewer)
+    assert notice.url == "/campaigns/price-1/"
 
 
 def test_low_credit_since_it_dropped(viewer):

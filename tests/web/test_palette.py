@@ -48,7 +48,7 @@ def _palette(client) -> dict:
 def test_it_finds_every_campaign_segment_and_preset(things, signed_in):
     data = _palette(signed_in)
     assert data["campaigns"] == [
-        {"name": "قیمت سکه ۱", "hint": "coin-price-1", "url": "/compose/c/coin-price-1/"},  # an alert: its composer
+        {"name": "قیمت سکه ۱", "hint": "coin-price-1", "url": "/campaigns/coin-price-1/"},  # a viewer can't compose
         {"name": "نفت خام", "hint": "oil", "url": "/campaigns/oil/"},
         {"name": "cli-run", "hint": "cli-run", "url": "/reports/cli-run/"},  # the CLI's: its report
     ]
@@ -59,8 +59,11 @@ def test_it_finds_every_campaign_segment_and_preset(things, signed_in):
 
 def test_a_preset_starts_a_new_alert_for_those_who_run_campaigns(things, client, make_user, verified):
     verified(client, make_user("op", "operator"))
-    presets = {p["hint"]: p["url"] for p in _palette(client)["presets"]}
+    data = _palette(client)
+    presets = {p["hint"]: p["url"] for p in data["presets"]}
     assert presets == {"coin-price": "/compose/coin-price/", "old": "/presets/old/"}  # put away: edit only
+    campaigns = {c["hint"]: c["url"] for c in data["campaigns"]}
+    assert campaigns["coin-price-1"] == "/compose/c/coin-price-1/"  # an alert: its composer
 
 
 def test_nothing_personal_goes_in_it(things, signed_in):

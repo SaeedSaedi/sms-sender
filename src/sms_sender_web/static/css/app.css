@@ -1,4 +1,6 @@
-/* The dashboard's design system, v2 (the product review, R3).
+/* The dashboard's design system, v3 (plan 06, L6: the L0 prototype's palette,
+   type and depth, with motion that respects reduced-motion, loading states
+   and focus), on v2 (the product review, R3).
 
    An operations console: calm, dense, status first. Persian and right to
    left (spec 4.11): logical properties only (inline / block, start / end),
@@ -18,46 +20,46 @@
 
 :root {
   color-scheme: light;
-  --bg: #f3f5f9;
+  --bg: #f3f5f8;
   --surface: #ffffff;
   --surface-2: #f7f9fc;
   --surface-3: #edf1f6;
-  --border: #e2e7ef;
+  --border: #e1e6ee;
   --border-strong: #cbd3df;
-  --text: #0f1b2d;
+  --text: #0f172a;
   --text-2: #3a4960;
-  --muted: #5f6d82;
-  --primary: #2357d6;
-  --primary-hover: #1c47b3;
-  --primary-soft: #edf2fd;
-  --primary-soft-2: #d7e3fc;
+  --muted: #5a6577;
+  --primary: #1d4ed8;
+  --primary-hover: #1e40af;
+  --primary-soft: #e7eefd;
+  --primary-soft-2: #d3e0fc;
   --on-primary: #ffffff;
-  --success: #12764a;
-  --success-soft: #e8f6ee;
-  --success-border: #b3dec6;
-  --warning: #935600;
-  --warning-soft: #fdf4e3;
-  --warning-border: #efd09a;
-  --danger: #bf2730;
-  --danger-soft: #fdeeee;
-  --danger-border: #f3c1c3;
+  --success: #0b7350;
+  --success-soft: #e3f3ec;
+  --success-border: #aed9c4;
+  --warning: #9a5408;
+  --warning-soft: #fcefdf;
+  --warning-border: #efcf9f;
+  --danger: #b42318;
+  --danger-soft: #fce9e7;
+  --danger-border: #f2c2bc;
   --on-danger: #ffffff;
-  --focus: #2f6fe0;
+  --focus: #2563eb;
   --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235f6d82' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 
   /* The sidebar: deep navy in both themes, so the frame never moves. */
-  --nav-bg: #0e1a2f;
-  --nav-text: #c9d3e2;
-  --nav-muted: #8494ab;
+  --nav-bg: #0c1626;
+  --nav-text: #c3cedd;
+  --nav-muted: #8090a6;
   --nav-hover: rgb(255 255 255 / .07);
-  --nav-active: rgb(116 160 255 / .18);
+  --nav-active: #1a2a44;
   --nav-active-text: #ffffff;
   --nav-accent: #74a0ff;
   --nav-border: rgb(255 255 255 / .09);
 
   --radius-sm: .375rem;
-  --radius: .5rem;
-  --radius-lg: .75rem;
+  --radius: .625rem;
+  --radius-lg: .875rem;
   --radius-xl: 1rem;
   --radius-full: 999px;
   --shadow-1: 0 1px 2px rgb(15 27 45 / .05), 0 1px 1px rgb(15 27 45 / .03);
@@ -80,6 +82,13 @@
   --fs-lg: 1.125rem;
   --fs-xl: 1.375rem;
   --fs-2xl: 1.625rem;
+  --fs-figure: 1.75rem;   /* the figures' numbers */
+
+  /* Motion: short, and off under prefers-reduced-motion (base). */
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --dur-1: .12s;
+  --dur-2: .2s;
+  --dur-3: .32s;
 
   --sidebar-w: 16.5rem;
   --content-w: 80rem;
@@ -88,37 +97,38 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --bg: #0b1018;
-    --surface: #121a25;
-    --surface-2: #172130;
-    --surface-3: #1e2a3b;
-    --border: #253246;
+    --bg: #0a101c;
+    --surface: #111a29;
+    --surface-2: #152034;
+    --surface-3: #1c283d;
+    --border: #233149;
     --border-strong: #34445c;
-    --text: #e6ecf4;
+    --text: #e6ebf3;
     --text-2: #c2ccd9;
-    --muted: #97a5b8;
-    --primary: #79a6ff;
+    --muted: #9aa6b8;
+    --primary: #7aa2ff;
     --primary-hover: #9bbcff;
-    --primary-soft: #16264a;
+    --primary-soft: #18284a;
     --primary-soft-2: #213765;
-    --on-primary: #0a1222;
-    --success: #52c690;
-    --success-soft: #10281d;
+    --on-primary: #0a101c;
+    --success: #46c38e;
+    --success-soft: #10281e;
     --success-border: #1f5a40;
-    --warning: #f2b65c;
-    --warning-soft: #2a2110;
+    --warning: #f0b35b;
+    --warning-soft: #2d2210;
     --warning-border: #5a4416;
-    --danger: #ff8f88;
-    --danger-soft: #2c1517;
+    --danger: #ff8b80;
+    --danger-soft: #331815;
     --danger-border: #6b2a2d;
     --on-danger: #1a0606;
     --focus: #9bbcff;
     --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2397a5b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-    --nav-bg: #080d15;
+    --nav-bg: #060b14;
     --nav-border: rgb(255 255 255 / .07);
     --shadow-1: 0 1px 2px rgb(0 0 0 / .4);
     --shadow-2: 0 6px 18px rgb(0 0 0 / .45);
     --shadow-3: 0 22px 44px rgb(0 0 0 / .6);
+    --nav-active: #14213a;
   }
 }
 
@@ -147,13 +157,65 @@ a { color: var(--primary); text-underline-offset: .22em; text-decoration-thickne
 a:hover { color: var(--primary-hover); }
 
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.sidebar :focus-visible, .drawer :focus-visible { outline-color: var(--nav-accent); }
 ::selection { background: var(--primary-soft-2); }
 
 code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: .88em; }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;  /* a spinner stands still instead of flickering */
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
+
+/* ---------- motion and loading (v3) ---------- */
+
+/* Things arrive rather than appear: dialogs rise, the drawer slides in from
+   its side, toasts drop in. Short (--dur-*), and none at all under
+   prefers-reduced-motion (above). */
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(.5rem) scale(.985); } }
+@keyframes drop-in { from { opacity: 0; transform: translateY(-.75rem); } }
+@keyframes slide-in { from { transform: translateX(100%); } }  /* the drawer's side is the start: the right */
+
+/* A page that takes a moment to load shows a thin bar at the top (app.js
+   sets is-navigating after 150 ms, so a quick page never shows it). */
+.page-progress {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline: 0;
+  z-index: 90;
+  block-size: 3px;
+  background: var(--primary);
+  transform: scaleX(0);
+  transform-origin: right;
+  opacity: 0;
+  pointer-events: none;
+}
+.is-navigating .page-progress { opacity: 1; animation: page-progress 8s cubic-bezier(.1, .6, .2, 1) forwards; }
+@keyframes page-progress { from { transform: scaleX(.08); } to { transform: scaleX(.92); } }
+
+/* A part of the page that refreshes as you type (data-skeleton) shimmers
+   while it waits; app.js sets aria-busy, so a screen reader knows too. The
+   shimmer starts after a beat, so a quick answer never flickers. */
+[data-skeleton] { position: relative; }
+[data-skeleton][aria-busy="true"] > * { opacity: .55; transition: opacity var(--dur-2) ease; }
+[data-skeleton][aria-busy="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / .45) 50%, transparent 70%) 0 0 / 250% 100%;
+  animation: shimmer 1.2s .15s linear infinite both;
+  pointer-events: none;
+}
+@media (prefers-color-scheme: dark) {
+  [data-skeleton][aria-busy="true"]::after { background-image: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / .06) 50%, transparent 70%); }
+}
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
 
 .icon {
   inline-size: 1.15em;
@@ -329,8 +391,9 @@ body.has-nav .topbar { display: none; }
   color: var(--nav-text);
   box-shadow: var(--shadow-3);
 }
-.drawer[open] { display: flex; flex-direction: column; gap: var(--s-2); }
+.drawer[open] { display: flex; flex-direction: column; gap: var(--s-2); animation: slide-in var(--dur-3) var(--ease); }
 .drawer::backdrop { background: rgb(8 13 21 / .55); }
+.drawer[open]::backdrop { animation: fade-in var(--dur-2) ease; }
 .drawer-head { display: flex; align-items: center; justify-content: space-between; }
 .drawer-head .brand { margin: 0; }
 .drawer .icon-button { color: var(--nav-text); }
@@ -485,8 +548,9 @@ button, .btn, a.button, label.button {
   text-decoration: none;
   cursor: pointer;
   box-shadow: 0 1px 2px rgb(15 27 45 / .12);
-  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s;
+  transition: background-color var(--dur-1), border-color var(--dur-1), color var(--dur-1), box-shadow var(--dur-1), transform var(--dur-1);
 }
+button:active:not([disabled]), a.button:active, label.button:active { transform: translateY(1px); }
 button:hover, .btn:hover, a.button:hover, label.button:hover { background: var(--primary-hover); border-color: var(--primary-hover); color: var(--on-primary); }
 
 button.secondary, a.button.secondary, label.button.secondary, .btn-secondary {
@@ -704,13 +768,15 @@ input[type="file"]:not(.file-input) { font: inherit; max-inline-size: 100%; }
 /* Never narrower than its number: a long one moves the figure to a row of its own instead of breaking. */
 .figures > div { flex: 1 1 8rem; min-inline-size: min-content; padding: var(--s-4) var(--s-5); background: var(--surface); }
 .figures dt { color: var(--muted); font-size: var(--fs-xs); font-weight: 600; }
-.figures dd { margin: var(--s-1) 0 0; font-size: 1.45rem; font-weight: 760; line-height: 1.3; font-variant-numeric: tabular-nums; overflow-wrap: break-word; }
+.figures dd { margin: var(--s-1) 0 0; font-size: var(--fs-figure); font-weight: 800; line-height: 1.25; letter-spacing: -.01em; font-variant-numeric: tabular-nums; overflow-wrap: break-word; }
 .figures dd .hint { font-size: var(--fs-xs); font-weight: 500; }
 .card .figures { box-shadow: none; }
+/* Inside a card (a side panel, a step) the numbers are a size down, so they fit a narrow column. */
+.card .figures dd, .card .figure-value { font-size: var(--fs-xl); }
 ul.figures { padding: 0; list-style: none; }
 .figures > li { flex: 1 1 8rem; min-inline-size: 0; background: var(--surface); }
 .figure-label { display: block; color: var(--muted); font-size: var(--fs-xs); font-weight: 600; }
-.figure-value { display: block; margin-block-start: var(--s-1); font-size: 1.45rem; font-weight: 760; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.figure-value { display: block; margin-block-start: var(--s-1); font-size: var(--fs-figure); font-weight: 800; line-height: 1.25; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
 .figures > li > a.figure-link { display: block; block-size: 100%; margin: 0; padding: var(--s-4) var(--s-5); }
 .figures a.figure-link { display: block; margin: calc(-1 * var(--s-4)) calc(-1 * var(--s-5)); padding: var(--s-4) var(--s-5); color: inherit; text-decoration: none; }
 .figures a.figure-link:hover { background: var(--surface-2); }
@@ -900,7 +966,7 @@ details.card > summary, .summary-card > summary { cursor: pointer; font-weight: 
   margin: 0 auto;
   pointer-events: none;
 }
-.toasts > .callout { pointer-events: auto; box-shadow: var(--shadow-3); background: var(--surface); }
+.toasts > .callout { pointer-events: auto; box-shadow: var(--shadow-3); background: var(--surface); animation: drop-in var(--dur-3) var(--ease); }
 .toasts > .callout.callout-success { background: var(--surface); }
 .toasts > .callout.is-leaving { opacity: 0; transform: translateY(-.5rem); transition: opacity .3s, transform .3s; }
 
@@ -1100,6 +1166,8 @@ progress::-moz-progress-bar { background: var(--primary); border-radius: var(--r
   box-shadow: var(--shadow-3);
 }
 .dialog::backdrop { background: rgb(8 13 21 / .55); backdrop-filter: blur(2px); }
+.dialog[open] { animation: rise-in var(--dur-2) var(--ease); }
+.dialog[open]::backdrop { animation: fade-in var(--dur-2) ease; }
 .dialog-body { padding: var(--s-6); }
 .dialog-title { margin-block-end: var(--s-2); font-size: var(--fs-lg); }
 .dialog-actions { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-block-start: var(--s-6); }
@@ -1236,8 +1304,8 @@ button.block { inline-size: 100%; }
 .attention-list li:last-child { padding-block-end: 0; border-block-end: 0; }
 .attention-list li > .attention-name { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); font-weight: 700; }
 .attention-list li > p { grid-column: 1 / -1; margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
-.attention-list li > a, .attention-list .attention-name > a { color: var(--text); text-decoration: none; font-weight: 700; }
-.attention-list li > a:hover, .attention-list .attention-name > a:hover { color: var(--primary); text-decoration: underline; }
+.attention-list li > a:not(.button), .attention-list .attention-name > a { color: var(--text); text-decoration: none; font-weight: 700; }
+.attention-list li > a:not(.button):hover, .attention-list .attention-name > a:hover { color: var(--primary); text-decoration: underline; }
 .cell-sub { display: block; color: var(--muted); font-size: var(--fs-xs); font-weight: 400; }
 /* A row that needs someone's eye, e.g. a number sent twice. */
 tr.is-danger > * { background: var(--danger-soft); }
@@ -1537,7 +1605,7 @@ details.schedule .field-grid { max-inline-size: 24rem; }
 .send-progress { block-size: .9rem; }
 .send-figures { margin: var(--s-2) 0 0; color: var(--text-2); }
 .send-figures strong { color: var(--text); font-size: var(--fs-lg); }
-.credit-value { margin: 0; font-size: 1.6rem; font-weight: 780; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.credit-value { margin: 0; font-size: var(--fs-figure); font-weight: 800; line-height: 1.25; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
 .credit-value span { color: var(--muted); font-size: var(--fs-sm); font-weight: 600; }
 .credit-card.is-low { border-color: var(--warning-border); background: var(--warning-soft); }
 .week-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--s-1); margin: var(--s-3) 0; padding: 0; list-style: none; }
@@ -1770,3 +1838,18 @@ kbd {
 .overlap-form .choices { grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); margin-block-end: var(--s-3); }
 .overlap-table th[scope="row"], .overlap-table thead th { white-space: nowrap; }
 .overlap-table td.is-same { color: var(--muted); text-align: center; }
+
+/* ---------- the control room, v3 (plan 06, L6) ---------- */
+
+/* The most pressing item stands out, with what to do about it. */
+.attention-list li.is-first {
+  margin-block-end: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.attention-list li.is-first.tone-warning { border-color: var(--warning-border); background: var(--warning-soft); }
+.attention-list li.is-first.tone-danger { border-color: var(--danger-border); background: var(--danger-soft); }
+.attention-list li.is-first > .button { grid-column: 1 / -1; justify-self: start; margin-block-start: var(--s-2); }
+.figure-sub.trend { font-weight: 650; }

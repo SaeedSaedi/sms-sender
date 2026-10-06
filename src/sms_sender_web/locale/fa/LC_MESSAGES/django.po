@@ -3895,3 +3895,33 @@ msgstr "هنوز هیچ‌یک از هشدارهای آن فرستاده نشد�
 
 msgid "Only hours with at least {n} people sent a link of their own are compared, and the sending window limits which hours have been tried. Clicks are counted by the hour, give or take half an hour."
 msgstr "فقط ساعت‌هایی مقایسه می‌شوند که دست‌کم برای {n} نفر لینک شخصی ارسال شده است، و بازه مجاز ارسال تعیین می‌کند کدام ساعت‌ها امتحان شده‌اند. کلیک‌ها با حدود نیم ساعت تقریب در ساعت‌ها شمرده می‌شوند."
+
+msgid "About the same as the 30-day average"
+msgstr "تقریباً هم‌اندازه میانگین ۳۰ روز"
+
+msgid "Review and approve"
+msgstr "بررسی و تأیید"
+
+msgid "just now"
+msgstr "همین حالا"
+
+msgid "million rials"
+msgstr "میلیون ریال"
+
+msgid "today {time}"
+msgstr "امروز {time}"
+
+msgid "yesterday {time}"
+msgstr "دیروز {time}"
+
+msgid "{change} than the 30-day average"
+msgstr "{change} از میانگین ۳۰ روز"
+
+msgid "{n} hours ago"
+msgstr "{n} ساعت پیش"
+
+msgid "{n} minutes ago"
+msgstr "{n} دقیقه پیش"
+
+msgid "{n} rials per SMS"
+msgstr "هر پیامک {n} ریال"

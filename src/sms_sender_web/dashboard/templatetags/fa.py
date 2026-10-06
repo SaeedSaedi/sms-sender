@@ -17,7 +17,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 
 from ...privacy import mask_phone as _mask_phone
-from ..terms import DELIVERY_STATUS, STATUS_TONE, SUBMISSION_STATUS
+from ..terms import DELIVERY_STATUS, STATUS_TONE, SUBMISSION_STATUS, WHEN
 
 register = template.Library()
 
@@ -75,6 +75,53 @@ def jalali(value, fmt: str = "%Y/%m/%d %H:%M") -> str:
         # Beyond the Solar Hijri calendar (e.g. a year-9999 "never" date):
         # the Gregorian date, rather than a page that fails.
         return value.strftime("%Y-%m-%d")
+
+
+def _moment(value) -> datetime | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(value, tz=dt_timezone.utc)
+    return value
+
+
+@register.filter
+def jalali_when(value, now: datetime | None = None) -> str:
+    """A moment in a few words, Tehran time (plan 06, L6): «امروز ۱۳:۰۲»,
+    «دیروز ۱۰:۴۵», the weekday within the last week («دوشنبه ۰۹:۱۵»), else
+    the date and time."""
+    moment = _moment(value)
+    if moment is None:
+        return ""
+    local = timezone.localtime(moment) if timezone.is_aware(moment) else moment
+    today = timezone.localtime(now or timezone.now()).date()
+    days = (today - local.date()).days
+    time = jalali(local, "%H:%M")
+    if days == 0:
+        return str(WHEN["today"]).format(time=time)
+    if days == 1:
+        return str(WHEN["yesterday"]).format(time=time)
+    if 1 < days < 7:
+        day = jdatetime.date.fromgregorian(date=local.date())
+        return f"{day.j_weekdays_fa[day.weekday()]} {time}"
+    return jalali(local)
+
+
+@register.filter
+def ago(value, now: datetime | None = None) -> str:
+    """How long ago, in a few words (plan 06, L6): «همین حالا», «۵ دقیقه
+    پیش», «۳ ساعت پیش»; longer than a day, as jalali_when."""
+    moment = _moment(value)
+    if moment is None:
+        return ""
+    seconds = ((now or timezone.now()) - moment).total_seconds()
+    if seconds < 60:
+        return str(WHEN["just_now"])
+    if seconds < 3600:
+        return str(WHEN["minutes_ago"]).format(n=fa_digits(int(seconds // 60)))
+    if seconds < 86400:
+        return str(WHEN["hours_ago"]).format(n=fa_digits(int(seconds // 3600)))
+    return jalali_when(moment, now)
 
 
 @register.filter

@@ -3,7 +3,7 @@
 {% block content %}
 <header class="page-header">
   <h1 id="activity-heading">{% translate "Activity log" %}</h1>
-  <div class="page-actions"><a class="button secondary" href="{% url 'audit_csv' %}{% if filter_query %}?{{ filter_query }}{% endif %}">{% icon "download" %}{% translate "Download these (CSV)" %}</a></div>
+  <div class="page-actions"><a class="button secondary" href="{% url 'audit_csv' %}{% if filter_query %}?{{ filter_query }}{% endif %}" download>{% icon "download" %}{% translate "Download these (CSV)" %}</a></div>
 </header>
 <form method="get" class="filters" id="audit-filters">
   <div class="filter"><label for="id_action">{% translate "Action" %}</label>

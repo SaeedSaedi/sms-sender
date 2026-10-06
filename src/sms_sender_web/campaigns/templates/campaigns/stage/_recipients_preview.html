@@ -1,5 +1,5 @@
 {% load i18n fa ui %}
-<section class="recipients-preview" id="recipients-preview" aria-labelledby="preview-heading">
+<section class="recipients-preview" id="recipients-preview" data-skeleton aria-labelledby="preview-heading">
   <h3 id="preview-heading">{% translate "Message preview" %}</h3>
   {% if message.known %}
     <div class="sms-bubble" dir="auto">{{ message.text }}</div>

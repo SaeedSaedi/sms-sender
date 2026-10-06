@@ -196,7 +196,7 @@
   </div>
 </form>
 
-<aside class="card split-side preview-panel" id="preview" aria-live="polite"
+<aside class="card split-side preview-panel" id="preview" data-skeleton aria-live="polite"
        hx-post="{{ preview_url }}" hx-include="#settings-form"
        hx-trigger="input delay:600ms from:#settings-form, change from:#settings-form" hx-swap="innerHTML">
   {% include "campaigns/_preview.html" %}

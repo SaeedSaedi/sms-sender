@@ -96,6 +96,9 @@ FIGURES = {
     "no_reports": _("No delivery report yet"),
     "clicked": _("{n} of {of} clicked their own link"),
     "no_links": _("No links of their own yet"),
+    "vs_month": _("{change} than the 30-day average"),
+    "same_as_month": _("About the same as the 30-day average"),
+    "per_sms": _("{n} rials per SMS"),
 }
 WEEK_DAY = _("{day}: {sent} sent, {later} set for later")
 PACE = _("{n} per second")
@@ -110,3 +113,16 @@ NOTICES = {
     "credit": _("Kavenegar's credit is under the warning level: {credit} rials."),
     "backup": _("The daily backup is overdue."),
 }
+
+# Moments and amounts in a few words (plan 06, L6: templatetags/fa.py).
+WHEN = {
+    "today": _("today {time}"),
+    "yesterday": _("yesterday {time}"),
+    "just_now": _("just now"),
+    "minutes_ago": _("{n} minutes ago"),
+    "hours_ago": _("{n} hours ago"),
+}
+# The credit as people say it: «۲۶۴٫۷» «میلیون ریال».
+RIAL_UNITS = {"million": _("million rials"), "rials": _("rials")}
+# What the control room's most pressing item asks of you (plan 06, L6).
+ATTENTION_ACTIONS = {"awaiting": _("Review and approve"), "open": _("Open")}

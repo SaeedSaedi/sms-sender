@@ -71,7 +71,7 @@
     {% else %}
       <p class="muted">{% translate "No segment is ready yet." %} <a href="{% url 'segment_upload' %}">{% translate "Upload a segment" %}</a></p>
     {% endif %}
-    <div id="compose-counts" aria-live="polite"
+    <div id="compose-counts" data-skeleton aria-live="polite"
          hx-post="{{ preview_url }}?part=counts" hx-include="#compose-form" hx-trigger="change from:.segment-choices" hx-swap="innerHTML">
       {% include "campaigns/compose/_counts.html" %}
     </div>
@@ -85,7 +85,7 @@
 </form>
 
 <aside class="compose-side" aria-label="{% translate "Preview and sending" %}">
-  <section class="card compose-preview" id="compose-preview" aria-labelledby="preview-title"
+  <section class="card compose-preview" id="compose-preview" data-skeleton aria-labelledby="preview-title"
            hx-post="{{ preview_url }}?part=message" hx-include="#compose-form"
            hx-trigger="input delay:500ms from:.value-input" hx-swap="innerHTML">
     {% include "campaigns/compose/_message.html" %}

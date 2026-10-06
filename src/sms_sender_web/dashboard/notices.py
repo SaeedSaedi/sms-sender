@@ -27,9 +27,10 @@ from ..accounts.roles import can
 from ..campaigns.present import say
 from ..campaigns.terms import stop_reason
 from ..jobs import services
-from ..jobs.models import Campaign, Job
+from ..jobs.models import Job
 from ..system import operations
 from ..system.models import ProviderCheck, SystemSettings
+from .control import campaign_url
 from .terms import NOTICES
 
 WINDOW = timedelta(days=7)
@@ -44,12 +45,7 @@ class Notice:
     url: str
 
 
-def _url(campaign: Campaign) -> str:
-    """An alert opens in the composer; any other campaign on its page."""
-    return reverse("compose_campaign" if campaign.preset_id else "campaign_detail", args=[campaign.slug])
-
-
-def _tests(since: datetime) -> list[Notice]:
+def _tests(since: datetime, user) -> list[Notice]:
     """Each campaign's latest test SMS, if it's waiting for a decision for
     the settings it still has, or didn't go out."""
     latest: dict[int, Job] = {}
@@ -63,17 +59,17 @@ def _tests(since: datetime) -> list[Notice]:
         name = {"name": job.campaign.name}
         if job.state == Job.State.DONE and not job.decision \
                 and job.settings_hash == services.settings_hash(job.campaign):
-            out.append(Notice(job.finished_at, "test", "warning", say(NOTICES["test"], name), _url(job.campaign)))
+            out.append(Notice(job.finished_at, "test", "warning", say(NOTICES["test"], name), campaign_url(job.campaign, user)))
         elif job.state == Job.State.FAILED:
             result = job.result or {}
             reason = stop_reason(result.get("stop_reason"), result.get("stop_fields"))
             out.append(Notice(job.finished_at, "test_failed", "danger",
                               " ".join(filter(None, [say(NOTICES["test_failed"], name), reason])),
-                              _url(job.campaign)))
+                              campaign_url(job.campaign, user)))
     return out
 
 
-def _sends(since: datetime) -> list[Notice]:
+def _sends(since: datetime, user) -> list[Notice]:
     out = []
     for job in Job.objects.filter(
         kind=Job.Kind.SEND, finished_at__gte=since,
@@ -83,17 +79,17 @@ def _sends(since: datetime) -> list[Notice]:
         name = job.campaign.name
         if job.state == Job.State.DONE:
             out.append(Notice(job.finished_at, "sent", "success",
-                              say(NOTICES["sent"], {"name": name, "n": result.get("sent", 0)}), _url(job.campaign)))
+                              say(NOTICES["sent"], {"name": name, "n": result.get("sent", 0)}), campaign_url(job.campaign, user)))
         elif job.state == Job.State.FAILED:
             reason = stop_reason(result.get("stop_reason"), result.get("stop_fields"))
             out.append(Notice(job.finished_at, "stopped", "danger",
                               " ".join(filter(None, [say(NOTICES["stopped"], {"name": name}), reason])),
-                              _url(job.campaign)))
+                              campaign_url(job.campaign, user)))
         # Withdrawn (unscheduled, not approved) and superseded sends sent
         # nothing and nobody cancelled them.
         elif not (result.get("withdrawn") or result.get("superseded")):
             out.append(Notice(job.finished_at, "cancelled", "neutral", say(NOTICES["cancelled"], {"name": name}),
-                              _url(job.campaign)))
+                              campaign_url(job.campaign, user)))
     return out
 
 
@@ -101,9 +97,9 @@ def notices(user, now: datetime | None = None) -> list[Notice]:
     """What this person should hear about, the newest first."""
     now = now or timezone.now()
     since = now - WINDOW
-    out = _sends(since)
+    out = _sends(since, user)
     if can(user, "run_campaigns"):
-        out += _tests(since)
+        out += _tests(since, user)
     check = ProviderCheck.load()
     if check.below_since and check.below_since >= since:
         out.append(Notice(check.below_since, "credit", "warning",

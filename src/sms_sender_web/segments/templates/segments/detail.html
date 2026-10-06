@@ -15,7 +15,7 @@
   {% if not draft %}
   <div class="page-actions">
     {% if user|can:"edit_campaigns" %}<a class="button" href="{% url 'campaign_new' %}?segment={{ segment.slug|urlencode }}">{% icon "plus" %}{% translate "New campaign with this segment" %}</a>{% endif %}
-    {% if user|can:"export_people" %}<a class="button secondary" href="{% url 'segment_download' segment.slug %}">{% icon "download" %}{% translate "Download (CSV)" %}</a>{% endif %}
+    {% if user|can:"export_people" %}<a class="button secondary" href="{% url 'segment_download' segment.slug %}" download>{% icon "download" %}{% translate "Download (CSV)" %}</a>{% endif %}
   </div>
   {% endif %}
 </header>
