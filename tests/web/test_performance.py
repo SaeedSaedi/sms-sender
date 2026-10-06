@@ -1,5 +1,6 @@
 """Plan 05, P6: a 100,000-recipient campaign stays quick. The report, its
-filters and search, the downloads, analytics and the campaign's ready step
+filters and search, the downloads, analytics (with its series and
+audience) and the campaign's ready step
 each answer within BUDGET seconds (they took 0.1-0.8 s on the development
 machine). Opt-in: pytest -m perf."""
 from __future__ import annotations
@@ -64,6 +65,24 @@ def admin_client(make_user, verified):
     return client
 
 
+def _in_series(client, path):
+    """The big campaign as an alert of its preset (plan 06, L5), so the
+    series pages and the report's comparison read 100,000 recipients."""
+    Campaign.objects.filter(slug="big").update(preset=Preset.objects.get(slug="bigp"))
+    return client.get(path)
+
+
+def _audience(client, phones):
+    """Two big segments to overlap, read cold every time (no cache)."""
+    from sms_sender_web.reports import insights
+
+    if not Segment.objects.filter(slug="half").exists():
+        half = Segment.objects.create(slug="half", name="half", status=Segment.Status.READY, summary={"valid": N // 2})
+        half.path.write_text("phone\n" + "".join(f"{p}\n" for p in phones[N // 4: N * 3 // 4]), encoding="utf-8")
+    insights._CACHE.clear()
+    return client.get("/analytics/audience/", {"s": ["big", "half"]})
+
+
 @pytest.mark.parametrize("label, call", [
     ("control room", lambda c, p: c.get("/")),
     ("campaign list", lambda c, p: c.get("/campaigns/")),
@@ -84,6 +103,11 @@ def admin_client(make_user, verified):
     ("composer: who gets it", lambda c, p: c.post("/compose/bigp/preview/?part=counts",
                                                   {"segments": ["big"], "value_token": "y"})),
     ("an alert's page", lambda c, p: c.get("/compose/c/fresh/")),
+    # Insights (plan 06, L5).
+    ("series", lambda c, p: _in_series(c, "/analytics/series/")),
+    ("a series", lambda c, p: _in_series(c, "/analytics/series/bigp/")),
+    ("report of an alert", lambda c, p: _in_series(c, "/reports/big/")),
+    ("audience", _audience),
 ])
 def test_a_hundred_thousand_recipients_stay_quick(big, admin_client, label, call):
     """The best of three: a slow CI machine only ever adds time, and the

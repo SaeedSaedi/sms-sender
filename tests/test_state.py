@@ -334,3 +334,23 @@ def test_the_dashboards_recipient_list(tmp_path):
     assert [r["phone"] for r in store.recipients_page(limit=5, phone="09120000002")] == ["09120000002"]
     assert store.phone_of_row(rows[1]["id"]) == "09120000002"
     assert store.phone_of_row(999) is None
+
+
+def test_each_segments_totals_and_how_fast_it_was_delivered(tmp_path):
+    """Plan 06, L5: per segment, the sent, delivered, reported and cost; and
+    of the sent, how many were seen delivered within each mark."""
+    store = StateStore(tmp_path / "s.db")
+    store.upsert_pending([("09120000001", "a"), ("09120000002", "b")], segment="vip")
+    store.upsert_pending([("09120000003", "c"), ("09120000004", "d")], segment="new")
+    conn = store._conn()
+    # (phone, delivery status, seconds from sending to the check that saw it, cost)
+    for phone, status, after, cost in (("09120000001", 10, 600, 3020), ("09120000002", 11, 600, 3020),
+                                       ("09120000003", 10, 5 * 3600, 3020), ("09120000004", None, None, 3020)):
+        conn.execute("UPDATE recipients SET status='sent', sent_at=1000, cost=?, delivery_status=?, "
+                     "delivery_checked_at=? WHERE phone=?",
+                     (cost, status, None if after is None else 1000 + after, phone))
+    conn.commit()
+    totals = store.segment_totals()
+    assert {k: tuple(v) for k, v in totals.items()} == {"vip": ("vip", 2, 1, 2, 6040), "new": ("new", 2, 1, 1, 6040)}
+    sent, within = store.delivery_speed([3600, 4 * 3600, 8 * 3600])
+    assert (sent, within) == (4, [1, 1, 2])  # the undelivered and the unchecked never count

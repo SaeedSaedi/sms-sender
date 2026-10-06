@@ -1,0 +1,93 @@
+{% extends "base.html" %}{% load i18n fa roles ui %}
+{% block title %}{{ preset.name }} · {% translate "Series" %} · {% translate "SMS campaigns" %}{% endblock %}
+{% block breadcrumbs %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="{% url 'analytics' %}">{% translate "Analytics" %}</a></li>
+    <li><a href="{% url 'series_list' %}">{% translate "Series" %}</a></li>
+    <li><span aria-current="page"><bdi>{{ preset.name }}</bdi></span></li>
+  </ol>
+</nav>
+{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1><bdi>{{ preset.name }}</bdi></h1>
+    <p class="page-meta">{% if alerts %}{{ count_line }} · <span class="num">{{ first|jalali:"%Y/%m/%d" }}</span> – <span class="num">{{ last|jalali:"%Y/%m/%d" }}</span>{% else %}{% translate "None of its alerts has sent yet." %}{% endif %}</p>
+  </div>
+  <div class="page-actions">
+    {% if user|can:"run_campaigns" and not preset.archived_at %}<a class="button" href="{% url 'compose' preset.slug %}">{% icon "zap" %}{% translate "New alert" %}</a>{% endif %}
+    {% if user|can:"edit_campaigns" %}<a class="button secondary" href="{% url 'preset_edit' preset.slug %}">{% icon "settings" %}{% translate "Preset settings" %}</a>{% endif %}
+  </div>
+</header>
+
+{% if alerts %}
+<dl class="figures">
+  <div><dt>{% translate "Accepted" %}</dt><dd class="num">{{ figures.accepted|fa_number }}</dd></div>
+  <div><dt>{% translate "Delivered" %}</dt><dd class="num">{{ figures.delivered }}</dd></div>
+  <div><dt>{% translate "Click rate" %}</dt><dd class="num">{{ figures.click_rate }}</dd></div>
+  <div><dt>{% translate "Cost per click" %}</dt><dd class="num">{{ figures.per_click }}</dd></div>
+  <div><dt>{% translate "Cost" %}</dt><dd class="num">{{ figures.cost|fa_number }} {% translate "rials" %}</dd></div>
+</dl>
+
+<section class="card step" aria-labelledby="trend-heading" id="trend">
+  <h2 id="trend-heading">{% icon "activity" %}{% translate "Which way it's going" %}</h2>
+  {% if trends %}
+    <ul class="plain trend-list">
+      {% for t in trends %}<li><span class="month-dot tone-{{ t.tone }}" aria-hidden="true"></span>{{ t.text }}</li>{% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">{% translate "With 4 alerts or more, this says which way each figure is going: the latest 3 against the ones before them." %}</p>
+  {% endif %}
+</section>
+
+{% if chart %}
+<section class="card step" aria-labelledby="series-chart-heading" id="series-chart">
+  <h2 id="series-chart-heading">{% icon "chart-column" %}{{ chart_label }} · {% translate "each alert" %}</h2>
+  <svg class="chart" viewBox="0 0 600 160" preserveAspectRatio="none" role="img" aria-labelledby="series-chart-heading series-chart-hint">
+    {% for bar in chart.bars %}<rect x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.w }}" height="{{ bar.h }}"><title>{{ bar.label }}</title></rect>{% endfor %}
+  </svg>
+  <p class="hint" id="series-chart-hint">{% translate "One bar per alert; the earliest is on the right. The table below has the numbers." %}</p>
+</section>
+{% endif %}
+
+<section class="card card-flush">
+  <div class="card-header"><h2 id="alerts-heading">{% icon "megaphone" %}{% translate "Its alerts" %}</h2></div>
+  <div class="table-wrap" tabindex="0" role="region" aria-labelledby="alerts-heading">
+    <table class="table-stack">
+      <thead>
+        <tr>
+          <th scope="col">{% translate "Alert" %}</th>
+          <th scope="col" class="num">{% translate "Sent" %}</th>
+          <th scope="col" class="num">{% translate "Accepted" %}</th>
+          <th scope="col" class="num">{% translate "Delivered" %}</th>
+          <th scope="col" class="num">{% translate "Click rate" %}</th>
+          <th scope="col" class="num">{% translate "Cost per click" %}</th>
+          <th scope="col" class="num">{% translate "Cost" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in alerts %}
+        <tr>
+          <th scope="row"><a href="{{ row.alert.url }}"><bdi>{{ row.alert.campaign.name }}</bdi></a></th>
+          <td data-label="{% translate "Sent" %}" class="num">{{ row.alert.when|jalali }}</td>
+          <td data-label="{% translate "Accepted" %}" class="num">{{ row.figures.accepted|fa_number }}</td>
+          <td data-label="{% translate "Delivered" %}" class="num">{{ row.figures.delivered }}</td>
+          <td data-label="{% translate "Click rate" %}" class="num">{{ row.figures.click_rate }}</td>
+          <td data-label="{% translate "Cost per click" %}" class="num">{{ row.figures.per_click }}</td>
+          <td data-label="{% translate "Cost" %}" class="num">{{ row.figures.cost|fa_number }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">{% translate "Delivered: of those with a delivery report. Click rate: of those sent a link of their own. Costs in rials, test SMS included." %}</p>
+</section>
+{% else %}
+<div class="empty-state">
+  {% icon "layers" %}
+  <h2>{% translate "Nothing sent yet" %}</h2>
+  <p>{% translate "Once an alert from this preset sends, its numbers appear here, beside the others'." %}</p>
+</div>
+{% endif %}
+{% endblock %}

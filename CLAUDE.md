@@ -443,6 +443,17 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
     - clicks over time: SVG bars, per hour up to `HOURLY_UP_TO` (72), else per day (Tehran). Time runs right to left. Coordinates are formatted in Python, so no locale's decimal mark reaches an SVG attribute. A table holds the same numbers.
 
     `/analytics/` puts every campaign DB side by side (the CLI's too): accepted, delivered, clicked, clicks, cost, cost per click.
+  - **Insights** (`reports/insights.py`, plan 06 L5; read only, numbers only, campaign DBs read `query_only` or through the report's store, never created):
+    - **On a report:**
+      - each segment's accepted, delivered, click rate, clicks, cost and cost per click, when it went to several (`by_segment`, from `StateStore.segment_totals` and the report's own `click_report`);
+      - how fast it was delivered (`delivery_speed`): the share seen delivered within 1, 2, 4, 8, 24 and 48 hours. `delivery_checked_at` keeps the moment a check first saw a final status, as final ones aren't asked again (`StateStore.delivery_speed`). The checks run every 15 minutes, so that's the precision;
+      - for an alert, each figure against the other alerts of its preset, pooled (`against_preset`): rates in percentage points, costs in percent, with a tone for better or worse.
+    - **Series** (`/analytics/series/`, `/analytics/series/<preset>/`, `insight_views`): a preset's alerts that sent, oldest first by their first accepted SMS (`alerts_of`). `trends` compares the latest `RECENT` (3) alerts with the ones before them, from 4 alerts on. The chart is a bar per alert (`charts.rate_chart`): click rate where people had links of their own, else delivered share.
+    - **Audience** (`/analytics/audience/`):
+      - SMS per person in 7 and 30 days, and who's at the frequency cap now (`fatigue`, from `state.folder_sends_since`, as the cap counts);
+      - the best hour to send (`send_hours`): per Tehran hour, people sent a link of their own and the share who clicked, compared only from `MIN_SENT` (100) people. Clicks per hour come from `click_hours`, which are UTC hours: in Tehran each runs from half past, and is put under the hour it starts in, like the clicks chart;
+      - how far chosen segments overlap (`overlap`, `?s=` slugs, at most `MAX_CHOSEN` 6): numbers read from the prepared files and normalized, the last few kept in memory by version, mtime and size (`phones_of`).
+    - `Totals` (`dashboard/activity.py`) carries `cost_per_sms` (test SMS aside: `test_cost`) and `cost_per_click`; `all_time(path)` reads one DB and never creates it.
   - **Audiences** (`segments/audience.make_audience`, operators): a new ready segment from the recipients the list's filters match.
     - Ready-made filters: clicked, didn't click, delivered but didn't click, not delivered, rejected. Only those with anyone in them are offered.
     - Numbers and user IDs come from the campaign DB.
@@ -586,7 +597,8 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
     - Empty lists get an `.empty-state`: icon, title, a sentence and the main action. The header hides its own copy of that action while the list is empty.
   - **Tables:**
     - List tables are `table.table-stack`, with a `data-label` (the column's name) on every `td`, so phones get cards.
-    - A wide table that must scroll gets `.table-wrap` with `tabindex="0" role="region"` and a name.
+    - A wide table that must scroll gets `.table-wrap` with `tabindex="0" role="region"` and a name. Don't also name its section by the same heading: axe counts two landmarks with one name (`landmark-unique`).
+    - Numbers go in `td.num` (tabular digits, aligned to the end); give their column's header `th.num` too, so the two line up.
   - **Forms:**
     - `data-confirm="…"` opens `#confirm-dialog`. Its title and confirm button are the submit button's text, and a `danger` button makes it red.
     - A submitted form shows a busy button and ignores a second submit.

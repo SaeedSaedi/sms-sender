@@ -48,6 +48,7 @@ _SECTIONS = {
     "compose_start": "compose", "compose": "compose", "compose_campaign": "compose",
     "preset_list": "presets", "preset_new": "presets", "preset_edit": "presets",
     "notifications": "notifications", "calendar": "calendar",
+    "series_list": "analytics", "series_detail": "analytics", "analytics_audience": "analytics",
 }
 
 

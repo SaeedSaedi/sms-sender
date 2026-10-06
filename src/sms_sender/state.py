@@ -15,7 +15,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Iterable, Iterator, Sequence
 
 from .redact import redact_secrets
 
@@ -1206,6 +1206,38 @@ class StateStore:
             "FROM recipients WHERE phone NOT LIKE 'INVALID:%' GROUP BY segment ORDER BY MIN(rowid)",
             (SENT, PENDING, IN_FLIGHT, FAILED_RETRIABLE),
         ).fetchall()
+
+    def segment_totals(self) -> dict[str, sqlite3.Row]:
+        """Per segment, over sent recipients: how many, how many were
+        delivered, how many have a delivery report at all, and what they
+        cost (rials)."""
+        delivered = DELIVERY_GROUPS["delivered"]
+        rows = self._conn().execute(
+            "SELECT COALESCE(segment, '') AS segment, COUNT(*) AS sent, "
+            f"SUM(delivery_status IN ({','.join('?' * len(delivered))})) AS delivered, "
+            "SUM(delivery_status IS NOT NULL) AS delivery_known, COALESCE(SUM(cost), 0) AS cost "
+            "FROM recipients WHERE status=? GROUP BY segment",
+            (*delivered, SENT),
+        ).fetchall()
+        return {r["segment"]: r for r in rows}
+
+    def delivery_speed(self, marks: Sequence[float]) -> tuple[int, list[int]]:
+        """How fast SMS were delivered: the sent rows, and for each mark
+        (seconds after sending) how many had been seen delivered by then.
+        "Seen" is when a delivery check first found it delivered: a final
+        status isn't asked about again, so `delivery_checked_at` keeps that
+        moment."""
+        delivered = DELIVERY_GROUPS["delivered"]
+        within = ", ".join(
+            "SUM(CASE WHEN delivery_status IN ({}) AND delivery_checked_at - sent_at <= ? THEN 1 ELSE 0 END)"
+            .format(",".join("?" * len(delivered))) for _ in marks
+        )
+        args = [arg for mark in marks for arg in (*delivered, mark)]
+        row = self._conn().execute(
+            f"SELECT COUNT(*), {within} FROM recipients WHERE status=? AND sent_at IS NOT NULL",
+            (*args, SENT),
+        ).fetchone()
+        return row[0], [n or 0 for n in row[1:]]
 
     def total_cost(self) -> int:
         """What this campaign paid for its accepted SMS, in rials."""

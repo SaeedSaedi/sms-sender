@@ -17,7 +17,7 @@
     <li class="card preset-card">
       <h2><bdi>{{ p.name }}</bdi></h2>
       <p class="muted"><bdi dir="ltr">{{ p.settings.template }}</bdi></p>
-      <p class="muted">{{ p.series }}</p>
+      <p class="muted">{% if p.alerts %}<a href="{% url 'series_detail' p.slug %}">{{ p.series }}</a>{% else %}{{ p.series }}{% endif %}</p>
       <div class="actions">
         {% if user|can:"run_campaigns" %}<a class="button" href="{% url 'compose' p.slug %}">{% icon "zap" %}{% translate "New alert" %}</a>{% endif %}
         {% if user|can:"edit_campaigns" %}<a class="button secondary" href="{% url 'preset_edit' p.slug %}">{% icon "settings" %}{% translate "Edit" %}</a>{% endif %}
@@ -53,7 +53,7 @@
   <h2 id="archived-title">{% translate "Put away" %}</h2>
   <ul class="plain">
     {% for p in archived %}
-      <li><bdi>{{ p.name }}</bdi> <span class="muted">· {{ p.series }}</span>
+      <li><bdi>{{ p.name }}</bdi> <span class="muted">· {% if p.alerts %}<a href="{% url 'series_detail' p.slug %}">{{ p.series }}</a>{% else %}{{ p.series }}{% endif %}</span>
         {% if user|can:"edit_campaigns" %}
           <form method="post" action="{% url 'preset_archive' p.slug %}" class="inline">{% csrf_token %}<button type="submit" class="small secondary">{% translate "Bring it back" %}</button></form>
         {% endif %}

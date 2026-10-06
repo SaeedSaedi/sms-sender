@@ -3682,3 +3682,216 @@ msgstr "این ماه ارسالی نیست."
 
 msgid "The whole month"
 msgstr "کل ماه"
+
+msgid "1 SMS"
+msgstr "۱ پیامک"
+
+msgid "2 SMS"
+msgstr "۲ پیامک"
+
+msgid "3 SMS"
+msgstr "۳ پیامک"
+
+msgid "4 SMS"
+msgstr "۴ پیامک"
+
+msgid "5 SMS or more"
+msgstr "۵ پیامک یا بیشتر"
+
+msgid "Against its series"
+msgstr "در مقایسه با سری خود"
+
+msgid "Against the other {n} alerts of «{preset}» that sent, all their SMS together."
+msgstr "در مقایسه با {n} هشدار دیگر «{preset}» که ارسال شده‌اند، با همه پیامک‌هایشان روی هم."
+
+msgid "Alert"
+msgstr "هشدار"
+
+msgid "Alerts"
+msgstr "هشدارها"
+
+msgid "Alerts made from a preset form its series. Once one sends, the series shows here."
+msgstr "هشدارهایی که از یک پیش‌تنظیم ساخته می‌شوند سری آن را می‌سازند. وقتی یکی ارسال شود، سری اینجا نشان داده می‌شود."
+
+msgid "Audience"
+msgstr "مخاطبان"
+
+msgid "Best"
+msgstr "بهترین"
+
+msgid "Choose 2 to {n} segments"
+msgstr "۲ تا {n} گروه مخاطبان را انتخاب کنید"
+
+msgid "Choose at most {n} segments: the first {n} are compared."
+msgstr "حداکثر {n} گروه مخاطبان انتخاب کنید؛ {n} گروه اول مقایسه شدند."
+
+msgid "Clicked it"
+msgstr "روی آن کلیک کردند"
+
+msgid "Clicks in that hour"
+msgstr "کلیک‌های آن ساعت"
+
+msgid "Compare"
+msgstr "مقایسه"
+
+msgid "Cost per SMS"
+msgstr "هزینه هر پیامک"
+
+msgid "Counted once, they hold {once} numbers; {several} are in more than one of them."
+msgstr "اگر هر شماره یک بار شمرده شود، {once} شماره دارند؛ {several} شماره در بیش از یکی از آن‌ها هست."
+
+msgid "Delivered: of those with a delivery report. Click rate: of those sent a link of their own. Costs in rials, test SMS included."
+msgstr "تحویل‌شده: از میان آن‌هایی که گزارش تحویل دارند. نرخ کلیک: از میان کسانی که لینک شخصی گرفتند. هزینه‌ها به ریال است و پیامک آزمایشی را هم دارد."
+
+msgid "Delivered: of those with a delivery report. Click rate: of those sent, where people had links of their own. Costs in rials."
+msgstr "تحویل‌شده: از میان آن‌هایی که گزارش تحویل دارند. نرخ کلیک: از میان ارسال‌شده‌ها، جایی که افراد لینک شخصی داشتند. هزینه‌ها به ریال است."
+
+msgid "Difference"
+msgstr "تفاوت"
+
+msgid "Each cell: the numbers the row's segment shares with the column's, and that as a share of the row's segment. A send to several segments counts each number once."
+msgstr "هر خانه: شماره‌هایی که گروه مخاطبان این ردیف با گروه آن ستون مشترک دارد، و درصد آن از گروه این ردیف. ارسال به چند گروه هر شماره را یک بار می‌شمارد."
+
+msgid "Each preset's alerts together: how they do, and which way they're going."
+msgstr "هشدارهای هر پیش‌تنظیم کنار هم: چطور عمل می‌کنند و به کدام سو می‌روند."
+
+msgid "Every SMS counts once: a series' rates are over all its alerts together. “Lately” compares the latest 3 alerts with the ones before them."
+msgstr "هر پیامک یک بار شمرده می‌شود: نرخ‌های هر سری روی همه هشدارهایش با هم است. «اخیراً» ۳ هشدار آخر را با هشدارهای پیش از آن‌ها مقایسه می‌کند."
+
+msgid "Figure"
+msgstr "شاخص"
+
+msgid "Frequency cap: at most {sms} SMS in {days} days. {n} people are at it now, so a send today would hold them back."
+msgstr "سقف ارسال: حداکثر {sms} پیامک در {days} روز. اکنون {n} نفر به آن رسیده‌اند، پس ارسال امروز به آن‌ها نمی‌رسد."
+
+msgid "How far segments overlap"
+msgstr "هم‌پوشانی گروه‌های مخاطبان"
+
+msgid "How fast it was delivered"
+msgstr "سرعت تحویل"
+
+msgid "How often people get an SMS"
+msgstr "هر نفر چند بار پیامک می‌گیرد"
+
+msgid "In the last 30 days"
+msgstr "در ۳۰ روز گذشته"
+
+msgid "In the last 7 days"
+msgstr "در ۷ روز گذشته"
+
+msgid "In the last 7 days {p7} people got {s7} SMS; in the last 30 days, {p30} people got {s30}."
+msgstr "در ۷ روز گذشته {p7} نفر {s7} پیامک گرفتند؛ در ۳۰ روز گذشته {p30} نفر {s30} پیامک."
+
+msgid "Its alerts"
+msgstr "هشدارهای آن"
+
+msgid "Lately"
+msgstr "اخیراً"
+
+msgid "Latest"
+msgstr "آخرین"
+
+msgid "No frequency cap is set, so nobody is held back however many SMS they got."
+msgstr "سقف ارسال تعیین نشده است، پس هیچ‌کس هر چند پیامک هم گرفته باشد کنار گذاشته نمی‌شود."
+
+msgid "No series yet"
+msgstr "هنوز سری‌ای نیست"
+
+msgid "Numbers each pair shares"
+msgstr "شماره‌های مشترک هر دو گروه"
+
+msgid "Once an alert from this preset sends, its numbers appear here, beside the others'."
+msgstr "وقتی هشداری از این پیش‌تنظیم ارسال شود، اعدادش اینجا کنار بقیه نشان داده می‌شود."
+
+msgid "Once people are sent links of their own and click them, this shows which hour of the day works best."
+msgstr "وقتی برای افراد لینک شخصی ارسال شود و روی آن کلیک کنند، اینجا نشان می‌دهد کدام ساعت روز بهتر جواب می‌دهد."
+
+msgid "One bar per alert; the earliest is on the right. The table below has the numbers."
+msgstr "هر ستون یک هشدار است و قدیمی‌ترین در سمت راست است. اعداد در جدول پایین آمده است."
+
+msgid "People click the most at {hour}: {n} clicks over every campaign."
+msgstr "بیشترین کلیک در ساعت {hour} است: {n} کلیک در همه کمپین‌ها."
+
+msgid "Preset settings"
+msgstr "تنظیمات پیش‌تنظیم"
+
+msgid "SMS per person"
+msgstr "پیامک برای هر نفر"
+
+msgid "SMS sent at {hour} were clicked the most: {rate} of {n} people."
+msgstr "پیامک‌هایی که ساعت {hour} ارسال شدند بیشترین کلیک را گرفتند: {rate} از {n} نفر."
+
+msgid "Sent a link of their own"
+msgstr "لینک شخصی گرفتند"
+
+msgid "Series"
+msgstr "سری‌ها"
+
+msgid "Set one in the system settings"
+msgstr "در تنظیمات سامانه تعیین کنید"
+
+msgid "Shares are of the accepted SMS, as the delivery checks first saw them delivered. They ask every 15 minutes, for 48 hours."
+msgstr "درصدها از پیامک‌های پذیرفته‌شده است، از لحظه‌ای که بررسی تحویل نخستین بار آن‌ها را تحویل‌شده دید. این بررسی هر ۱۵ دقیقه و تا ۴۸ ساعت انجام می‌شود."
+
+msgid "The best hour to send"
+msgstr "بهترین ساعت ارسال"
+
+msgid "The others' average"
+msgstr "میانگین بقیه"
+
+msgid "The whole series"
+msgstr "کل سری"
+
+msgid "This alert"
+msgstr "این هشدار"
+
+msgid "Too few alerts to tell"
+msgstr "هشدارها برای قضاوت کم است"
+
+msgid "Which way it's going"
+msgstr "به کدام سو می‌رود"
+
+msgid "Who you send to: how often each person gets an SMS, when they click, and how far your segments overlap."
+msgstr "برای چه کسانی می‌فرستید: هر نفر چند بار پیامک می‌گیرد، کی کلیک می‌کند و گروه‌های مخاطبان چقدر هم‌پوشانی دارند."
+
+msgid "With 4 alerts or more, this says which way each figure is going: the latest 3 against the ones before them."
+msgstr "با ۴ هشدار یا بیشتر، اینجا نشان می‌دهد هر شاخص به کدام سو می‌رود: ۳ هشدار آخر در برابر هشدارهای پیش از آن‌ها."
+
+msgid "With two ready segments or more, this shows how many numbers they share."
+msgstr "با دو گروه مخاطبان آماده یا بیشتر، اینجا نشان می‌دهد چند شماره مشترک دارند."
+
+msgid "Within {h} hours"
+msgstr "تا {h} ساعت"
+
+msgid "about the same"
+msgstr "تقریباً برابر"
+
+msgid "each alert"
+msgstr "هر هشدار"
+
+msgid "too few to tell"
+msgstr "برای قضاوت کم است"
+
+msgid "{n} percentage points higher"
+msgstr "{n} واحد درصد بیشتر"
+
+msgid "{n} percentage points lower"
+msgstr "{n} واحد درصد کمتر"
+
+msgid "{n}% cheaper"
+msgstr "{n}٪ ارزان‌تر"
+
+msgid "{n}% dearer"
+msgstr "{n}٪ گران‌تر"
+
+msgid "{what}: the latest {n} alerts {now}, the ones before them {before} ({change})."
+msgstr "{what}: {n} هشدار آخر {now}، هشدارهای پیش از آن‌ها {before} ({change})."
+
+msgid "Nobody was sent an SMS in the last 30 days."
+msgstr "در ۳۰ روز گذشته برای کسی پیامکی فرستاده نشده است."
+
+msgid "None of its alerts has sent yet."
+msgstr "هنوز هیچ‌یک از هشدارهای آن فرستاده نشده است."
+
+msgid "Only hours with at least {n} people sent a link of their own are compared, and the sending window limits which hours have been tried. Clicks are counted by the hour, give or take half an hour."
+msgstr "فقط ساعت‌هایی مقایسه می‌شوند که دست‌کم برای {n} نفر لینک شخصی ارسال شده است، و بازه مجاز ارسال تعیین می‌کند کدام ساعت‌ها امتحان شده‌اند. کلیک‌ها با حدود نیم ساعت تقریب در ساعت‌ها شمرده می‌شوند."

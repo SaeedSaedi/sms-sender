@@ -31,6 +31,7 @@ class Totals:
     clicked: int = 0           # of those, who clicked it
     clicks: int = 0            # visits to the campaign's links (click_hours)
     cost: int = 0              # rials: accepted SMS and test SMS
+    test_cost: int = 0         # rials: of that, the test SMS
 
     def __iadd__(self, other: "Totals") -> "Totals":
         for f in fields(self):
@@ -44,6 +45,17 @@ class Totals:
     @property
     def click_rate(self) -> float | None:
         return self.clicked / self.own_links if self.own_links else None
+
+    @property
+    def cost_per_sms(self) -> float | None:
+        """Rials per accepted SMS, test SMS aside: a small send's test SMS
+        would make it look dearer than its price."""
+        paid = self.cost - self.test_cost
+        return paid / self.accepted if self.accepted and paid else None
+
+    @property
+    def cost_per_click(self) -> float | None:
+        return self.cost / self.clicks if self.clicks and self.cost else None
 
 
 def starts(now: datetime | None = None) -> dict[str, float]:
@@ -102,6 +114,7 @@ def _read(path: Path, since: dict[str, float]) -> dict[str, Totals]:
                     "AND started_at >= ?", (since[w],),
                 ).fetchone()
                 totals[w].cost += cost
+                totals[w].test_cost = cost
         if "click_hours" in tables:
             for w in WINDOWS:
                 (clicks,) = conn.execute(
@@ -124,6 +137,18 @@ def folder_activity(folder: Path | str | None = None, now: datetime | None = Non
         except sqlite3.Error as e:
             logger.warning("campaign_db_unreadable", extra={"path": str(path), "detail": str(e)})
     return out
+
+
+def all_time(path: Path) -> Totals | None:
+    """One campaign DB's totals over all time; None if there's none or it
+    can't be read. Never creates one (sqlite3.connect would)."""
+    if not Path(path).is_file():
+        return None
+    try:
+        return _read(Path(path), dict.fromkeys(WINDOWS, 0.0))["all"]
+    except sqlite3.Error as e:
+        logger.warning("campaign_db_unreadable", extra={"path": str(path), "detail": str(e)})
+        return None
 
 
 def overall(activity: dict[str, dict[str, Totals]]) -> dict[str, Totals]:
