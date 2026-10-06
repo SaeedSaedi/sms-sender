@@ -7,9 +7,13 @@
 - Every page of the test world (tests/web/world.py), as the person it's
   for, answers within COMMON_BUDGET (300 ms).
 
+The budgets are the Mac's, where the panel runs (plan 06, L6). GitHub's
+runners take about 2.5 times as long, so CI multiplies them by PERF_SCALE.
+
 Opt-in: pytest -m perf."""
 from __future__ import annotations
 
+import os
 import time
 
 import pytest
@@ -26,8 +30,9 @@ from sms_sender_web.segments.models import Segment  # noqa: E402
 pytestmark = [pytest.mark.perf, pytest.mark.django_db]
 
 N = 100_000
-BUDGET = 1.0  # seconds a 100,000-recipient page may take
-COMMON_BUDGET = 0.3  # seconds any other page may take (plan 06, L6)
+SCALE = float(os.environ.get("PERF_SCALE") or 1)  # CI: 2.5 (.github/workflows/tests.yml)
+BUDGET = 1.0 * SCALE  # seconds a 100,000-recipient page may take
+COMMON_BUDGET = 0.3 * SCALE  # seconds any other page may take (plan 06, L6)
 
 
 @pytest.fixture

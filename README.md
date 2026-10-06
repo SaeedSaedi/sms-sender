@@ -840,7 +840,9 @@ nothing is sent:
 `tests/web/e2e/baseline.json` lists known problems. It's empty, so any new
 one fails.
 
-`pytest -m perf` keeps every page under 2 seconds with 100,000 recipients.
+`pytest -m perf` keeps every page with 100,000 recipients under a second, and
+every other page under 300 ms, on the Mac. CI's runners are slower, so it
+sets `PERF_SCALE=2.5`, which multiplies both.
 
 GitHub Actions runs the suite on Python 3.10 and 3.14, and the browser tests,
 for every push to `main` and every pull request (`.github/workflows/tests.yml`).

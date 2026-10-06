@@ -53,7 +53,7 @@ pytest -k "claim or in_flight"           # by name pattern
 pytest -m e2e                            # browser tests: pip install -e ".[dev,web,e2e]" + Google Chrome
 E2E_SHOTS=/tmp/shots pytest -m e2e       # + a screenshot of every page at every width
 E2E_UPDATE_BASELINE=1 pytest -m e2e tests/web/e2e/test_pages.py   # rewrite baseline.json
-pytest -m perf                           # 100,000-recipient pages under 1 s; every test-world page under 300 ms
+pytest -m perf                           # 100,000-recipient pages under 1 s; every test-world page under 300 ms (PERF_SCALE multiplies both; CI: 2.5)
 ```
 
 CI (`.github/workflows/tests.yml`) runs `pytest` and `pytest -m perf` on Python 3.10 (the `requires-python` floor) and 3.14, and `pytest -m e2e`, for pushes to `main` and every PR. Code must keep working on 3.10.
