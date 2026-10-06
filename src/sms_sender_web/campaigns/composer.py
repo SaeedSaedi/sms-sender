@@ -27,6 +27,7 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from sms_sender.phone import InvalidPhoneError, normalize
 from sms_sender.sender import TOKEN_MAX_SPACES, token_issue
 from sms_sender.window import DEFAULT_WINDOW, TEHRAN, now_tehran, parse_window
 
@@ -44,7 +45,10 @@ from .lifecycle import DRAFT, READY
 from .models import Preset
 from .present import say
 from .preview import load_segment, preview_of
-from .terms import CHECK_PROBLEMS, CONFLICTS, COST_EACH, COUNTS, LACKS_COLUMNS, TEST_HINT, TOKEN_ISSUES, fill
+from .terms import (
+    CHECK_PROBLEMS, CONFLICTS, COST_EACH, COUNTS, LACKS_COLUMNS, SAMPLE_LINE, SAMPLE_MISSING, TEST_HINT,
+    TOKEN_ISSUES, fill,
+)
 from .views import STOP_POLLING, _live
 
 TOKENS = tuple(TOKEN_MAX_SPACES)
@@ -181,15 +185,25 @@ def _window(settings: dict) -> dict:
     return {"window": window, "open": window is None or window.contains(now_tehran())}
 
 
-def _message(settings: dict, loaded=None) -> dict:
-    """The SMS as the first recipient of the first segment gets it. Without
-    the lists already read, only the first is read, so it keeps up with
-    typing."""
+def _message(settings: dict, loaded=None, *, index: int = 0, phone: str | None = None) -> dict:
+    """The SMS as one recipient gets it: the first of the first segment, the
+    `index`-th of them all, or the one with `phone`. For the first, without
+    the lists already read, only the first list is read, so it keeps up
+    with typing."""
     segment = Segment.objects.filter(slug=settings.get("segment")).first()
-    if loaded is None:
+    browsing = bool(index or phone)
+    if loaded is None and not browsing:
         settings = {k: v for k, v in settings.items() if k != "more_segments"}
-    message = preview_of(settings, segment, loaded)
-    return {"message": message, "message_cost": say(COST_EACH, {"cost": message.cost}) if message.cost else ""}
+    message = preview_of(settings, segment, loaded, index=index, phone=phone)
+    context = {"message": message, "message_cost": say(COST_EACH, {"cost": message.cost}) if message.cost else ""}
+    if message.count > 1:
+        context.update(
+            sample_prev=(message.index - 1) % message.count, sample_next=(message.index + 1) % message.count,
+            sample_line=say(SAMPLE_LINE, {"n": message.index + 1, "count": message.count}),
+        )
+    if message.missing:
+        context["sample_missing"] = say(SAMPLE_MISSING, {"phone": phone})
+    return context
 
 
 def _counts(settings: dict, campaign: Campaign | None = None, loaded=None) -> dict:
@@ -397,10 +411,26 @@ def _preview(request, preset: Preset, base: dict, campaign: Campaign | None):
     options = segment_options(base)
     draft = read_draft(request.POST, base, options)
     settings = draft_settings(base, draft)
-    context = {"preset": preset, "draft": draft, "fields": _fields(settings, preset, draft), "oob": True}
+    context = {
+        "preset": preset, "draft": draft, "fields": _fields(settings, preset, draft), "oob": True,
+        "preview_url": reverse("compose_campaign_preview", args=[campaign.slug]) if campaign
+        else reverse("compose_preview", args=[preset.slug]),
+    }
     if request.GET.get("part") == "counts":
         return render(request, "campaigns/compose/_counts.html", {**context, **_counts(settings, campaign)})
-    return render(request, "campaigns/compose/_message.html", {**context, **_message(settings)})
+    # Another recipient's message: by its place, or a number looked for (in
+    # the POST, so it never reaches a URL or an access log).
+    sample = request.POST.get("sample", "")
+    index = int(sample) if sample.isdigit() else 0
+    phone, find = None, request.POST.get("find", "").strip()
+    if find:
+        try:
+            phone = normalize(find)
+        except InvalidPhoneError:
+            context["find_problem"] = _("Write a mobile number, e.g. 09121234567.")
+    context["find"] = find
+    return render(request, "campaigns/compose/_message.html",
+                  {**context, **_message(settings, index=index, phone=phone)})
 
 
 @requires("run_campaigns")

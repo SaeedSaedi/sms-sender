@@ -114,8 +114,9 @@ def test_a_wrong_date_comes_back_with_what_was_typed(world, verified):
     assert response.status_code == 200 and send_job("approved") is None
     assert "میلادی" in html  # the reason, under the fields
     assert '<details class="subsection schedule" open>' in html
-    assert 'value="2026/10/20" aria-describedby="id_schedule_error" aria-invalid="true"' in html
-    assert 'value="09:30" aria-describedby="id_schedule_error">' in html  # the time was fine
+    assert '<fieldset class="calendar" aria-describedby="id_schedule_error">' in html
+    assert 'name="date" value="2026/10/20"' not in html  # a Gregorian date is no day of the calendar
+    assert '<option value="09:30" selected>' in html  # the time was fine, and stays chosen
     assert 'name="smoke_test" checked' in html
 
 
@@ -202,7 +203,10 @@ def test_the_send_step_says_what_happens(world, verified):
     # All six wait in the world's approved campaign.
     assert 'data-confirm="۶ گیرنده این پیامک را دریافت می‌کنند.' in html
     assert "ساخت ۶ لینک تا حدود ۱ دقیقه طول می‌کشد" in html
-    assert 'name="when" value="later"' in html and 'placeholder="۱۴' in html  # today, Solar Hijri
+    assert 'name="when" value="later"' in html
+    # The next 30 days as a Solar Hijri calendar, today marked, and the time of day.
+    assert html.count('type="radio" name="date"') == 31 and 'class="calendar-day is-today"' in html
+    assert 'aria-label="' in html and 'name="time"' in html
 
 
 # ---------- the ready step: each recipient's message ----------
@@ -312,3 +316,27 @@ def test_the_cost_is_estimated_from_the_latest_test_sms(world, verified):
     # Before any test whose parts are known, there's no guess.
     Job.objects.filter(kind=Job.Kind.TEST).delete()
     assert "ریال برای هر گیرنده" not in client.get("/campaigns/fresh/").content.decode()
+
+
+def test_the_calendar_offers_the_next_30_days_from_today():
+    from datetime import datetime
+
+    from sms_sender.window import TEHRAN
+    from sms_sender_web.dashboard.templatetags.schedule import schedule_days, schedule_times
+
+    now = datetime(2026, 10, 6, 22, 40, tzinfo=TEHRAN)  # Tuesday 14 Mehr 1405
+    months = schedule_days("", now=now)
+    assert [m["title"] for m in months] == ["مهر ۱۴۰۵", "آبان ۱۴۰۵"]
+    first_week = months[0]["weeks"][0]
+    # Weeks start on Saturday; today is a Tuesday, after three blank days.
+    assert first_week[:3] == [None, None, None] and first_week[3]["today"]
+    cells = [c for m in months for w in m["weeks"] for c in w if c]
+    assert len(cells) == 31 and cells[0]["today"] and cells[0]["value"] == "1405/07/14"
+    assert cells[0]["label"] == "سه\u200cشنبه ۱۴ مهر ۱۴۰۵"
+    assert [c["value"] for c in cells if c["checked"]] == ["1405/07/14"]  # 23:00 is still today
+    times = schedule_times("", now=now)
+    assert [t["value"] for t in times if t["selected"]] == ["23:00"] and len(times) == 48
+    assert [t["value"] for t in schedule_times("13:15", now=now) if t["selected"]] == ["13:15"]
+    picked = schedule_days("۱۴۰۵/۸/۲", now=now)
+    assert [c["value"] for m in picked for w in m["weeks"] for c in w if c and c["checked"]] == ["1405/08/02"]
+

@@ -18,12 +18,7 @@
       {% if schedule_error %}
         <div class="field-errors" id="id_schedule_error" role="alert" tabindex="-1" data-autofocus><p class="error">{{ schedule_error }}</p></div>
       {% endif %}
-      <div class="field-grid">
-        <div><label for="id_date">{% translate "Date (Solar Hijri)" %}</label>
-          <input id="id_date" name="date" type="text" dir="ltr" inputmode="numeric" maxlength="10" placeholder="{{ today_jalali }}" value="{{ schedule_date }}"{% if schedule_error %} aria-describedby="id_schedule_error"{% endif %}{% if schedule_bad_date %} aria-invalid="true"{% endif %}></div>
-        <div><label for="id_time">{% translate "Time (Tehran)" %}</label>
-          <input id="id_time" name="time" type="text" dir="ltr" inputmode="numeric" maxlength="5" placeholder="09:00" value="{{ schedule_time }}"{% if schedule_error %} aria-describedby="id_schedule_error"{% endif %}{% if schedule_bad_time %} aria-invalid="true"{% endif %}></div>
-      </div>
+      {% include "campaigns/stage/_schedule_fields.html" %}
       <p class="hint">{% translate "Outside the sending window, it starts when the window opens." %}</p>
       <button type="submit" name="when" value="later" class="secondary">{% icon "calendar-clock" %}{% translate "Schedule" %}</button>
     </details>
