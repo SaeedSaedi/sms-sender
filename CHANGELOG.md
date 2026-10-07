@@ -77,6 +77,7 @@ The CLI became a whole campaign tool, and a Persian dashboard runs it on a Mac o
 - Timing budgets on CI (#57).
 - Telegram targets with a real bot token (#61).
 - Clicks per Tehran hour (#61).
+- A copy of the repo other than the panel's (a worktree, a test's folder) could stop the panel and remove its login agent; the agent now belongs to its folder, and no test reaches the Mac's launchd (#63).
 
 ## 0.1.0 (2026-07-27)
 

@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -40,3 +41,33 @@ def _never_the_real_env(monkeypatch, tmp_path):
     monkeypatch.setenv(ENV_SEND_WINDOW, "off")
     # Never the real logs/: a CLI run in a test would rotate real history away.
     monkeypatch.setenv(LOG_FILE_ENV, str(tmp_path / "logs" / "sms-sender.log"))
+
+
+class FakeLaunchd:
+    """macOS's launchctl, for tests: it records each call, and says the
+    agent is loaded only when a test sets `loaded`."""
+
+    def __init__(self):
+        self.calls: list[tuple[str, ...]] = []
+        self.loaded = False
+
+    def __call__(self, *args: str) -> subprocess.CompletedProcess:
+        self.calls.append(args)
+        return subprocess.CompletedProcess(["launchctl", *args], 0, "", "")
+
+
+@pytest.fixture(autouse=True)
+def launchd(monkeypatch, tmp_path):
+    """No test reaches the Mac's own launchd or its LaunchAgents folder. The
+    launcher's agent has one label for every copy, so on 2026-10-07 a test's
+    `retire` unloaded the real panel's agent, which stopped the panel."""
+    fake = FakeLaunchd()
+    try:
+        from sms_sender_web import local
+    except ImportError:
+        yield fake
+        return
+    monkeypatch.setattr(local, "_launchctl", fake)
+    monkeypatch.setattr(local, "agent_loaded", lambda place: fake.loaded)
+    monkeypatch.setattr(local, "agent_path", lambda place: tmp_path / "LaunchAgents" / f"{place.label}.plist")
+    yield fake

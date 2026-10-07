@@ -579,13 +579,44 @@ def agent_loaded(place: Place) -> bool:
     return _launchctl("print", f"gui/{os.getuid()}/{place.label}").returncode == 0
 
 
+def agent_owner(place: Place) -> Path | None:
+    """The folder whose dashboard the login agent starts (its file's
+    WorkingDirectory), or None when there's no file or it can't be read."""
+    try:
+        with agent_path(place).open("rb") as f:
+            root = plistlib.load(f).get("WorkingDirectory")
+    except (OSError, ValueError, plistlib.InvalidFileException):
+        return None
+    return Path(root) if isinstance(root, str) and root else None
+
+
+def our_agent(place: Place) -> bool:
+    """The login agent is this copy's. Its label is the same for every copy
+    on the Mac (a worktree, a test's folder), so only the copy whose folder
+    it starts may kick, stop, remove or replace it."""
+    owner = agent_owner(place)
+    return owner is not None and owner.resolve() == place.root.resolve()
+
+
+def _not_anothers_agent(place: Place) -> None:
+    if our_agent(place):
+        return
+    owner = agent_owner(place)
+    if owner is not None:
+        raise Refused(f"The login agent starts the dashboard in {owner}, not this copy. "
+                      f"Run sms-dashboard remove-agent there first.")
+    if agent_loaded(place):
+        raise Refused(f"A login agent ({place.label}) is loaded but its file is gone, so whose it is can't be "
+                      f"told. Remove it by hand: launchctl bootout gui/{os.getuid()}/{place.label}")
+
+
 def start(place: Place, port: int, *, browser: bool) -> int:
     place.check_mode()
     place.check_moved()
     info = running(place)
     if info is None:
         proc = None
-        if agent_loaded(place):
+        if our_agent(place) and agent_loaded(place):
             _launchctl("kickstart", f"gui/{os.getuid()}/{place.label}")
         else:
             argv = [sys.executable, "-m", "sms_sender_web.local", "run", "--port", str(port)]
@@ -639,7 +670,7 @@ def stop(place: Place) -> int:
 
 def status(place: Place) -> int:
     info = running(place)
-    agent = "on" if agent_path(place).exists() else "off"
+    agent = "on" if our_agent(place) else "off"
     if info is None:
         print(f"Stopped ({place.mode}). Data: {place.data_dir}. Start at login: {agent}.")
         return 3
@@ -685,7 +716,7 @@ def upgrade(place: Place, port: int) -> int:
     commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=place.root, capture_output=True,
                             text=True).stdout.strip()
     print(f"Installed{f' {commit}' if commit else ''}.")
-    return start(place, port, browser=False) if was_running or agent_loaded(place) else 0
+    return start(place, port, browser=False) if was_running or (our_agent(place) and agent_loaded(place)) else 0
 
 
 def agent_plist(place: Place) -> dict:
@@ -713,6 +744,7 @@ def install_agent(place: Place) -> int:
     if sys.platform != "darwin":
         raise Refused("Starting at login uses launchd, which only macOS has.")
     place.check_mode()
+    _not_anothers_agent(place)
     if running(place) is not None and not agent_loaded(place):
         stop(place)  # launchd starts it again, as its own
     path = agent_path(place)
@@ -742,7 +774,7 @@ def retire(place: Place) -> int:
     place.check_moved()
     if running(place) is not None and stop(place) != 0:
         return 1
-    if agent_path(place).exists():
+    if our_agent(place):  # another copy's agent (a worktree's, a test's folder's) isn't this one's to remove
         remove_agent(place)
     result = make_backup(place.data_dir, place.backup_dir, keep=None)
     problems = verify(result.path)
@@ -765,6 +797,7 @@ Next, on the server (docs/deploy.md, "Moving from the Mac"):
 
 
 def remove_agent(place: Place) -> int:
+    _not_anothers_agent(place)
     path = agent_path(place)
     if agent_loaded(place):
         # Stops it too: launchd sends SIGTERM, so a send stops as with `stop`.
