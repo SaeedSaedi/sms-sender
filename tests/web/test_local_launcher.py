@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import plistlib
 import socket
 import stat
 import subprocess
@@ -370,6 +371,42 @@ def test_the_command_line_will_not_send_from_a_retired_copy(tmp_path, capsys):
         cli._refuse_while_held(tmp_path)
     assert stopped.value.code == 2
     assert "moved to the server" in capsys.readouterr().err
+
+
+def _agent_file(place: Place, root: Path) -> Path:
+    path = local.agent_path(place)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("wb") as f:
+        plistlib.dump({**local.agent_plist(place), "WorkingDirectory": str(root)}, f)
+    return path
+
+
+def test_another_copys_login_agent_is_never_touched(tmp_path, launchd, capsys):
+    """The agent's label is the same for every copy on the Mac: a worktree
+    or a test's folder never stops, removes or replaces the real panel's."""
+    place = _place(tmp_path)
+    _with_data(place)
+    path = _agent_file(place, tmp_path / "the-real-panel")
+    launchd.loaded = True
+    with pytest.raises(Refused, match="the-real-panel"):
+        local.remove_agent(place)
+    with pytest.raises(Refused, match="the-real-panel" if sys.platform == "darwin" else "launchd"):
+        local.install_agent(place)
+    local.status(place)
+    assert "Start at login: off" in capsys.readouterr().out
+    assert local.retire(place) == 0  # this copy retires; the other's agent stays
+    assert path.exists()
+    assert not [call for call in launchd.calls if call[0] in ("bootout", "bootstrap", "kickstart")]
+
+
+def test_this_copys_own_agent_goes_when_it_retires(tmp_path, launchd):
+    place = _place(tmp_path)
+    _with_data(place)
+    path = _agent_file(place, place.root)
+    launchd.loaded = True
+    assert local.retire(place) == 0
+    assert not path.exists()
+    assert ("bootout", f"gui/{os.getuid()}/{place.label}") in launchd.calls
 
 
 def test_the_sandbox_has_nothing_to_retire(tmp_path):
