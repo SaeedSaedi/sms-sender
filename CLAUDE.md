@@ -39,9 +39,9 @@ sms-sender clicks --campaign coin-price-7     # click counts from Shlink, per se
 sms-sender export-attribution --campaign coin-price-7   # ref → user ID for the backend, no phones
 sms-sender export-clickers --campaign coin-price-7      # who clicked, with phones
 sms-sender purge -y          # delete state DB (no undo)
-python manage.py remove_old_numbers [--dry-run]   # the worker's daily retention run (plan 06, D2)
+python manage.py remove_old_numbers [--dry-run]   # the worker's daily retention run
 
-# The dashboard on a Mac, natively (plan 06, L1): gunicorn + the worker under one supervisor
+# The dashboard on a Mac, natively: gunicorn + the worker under one supervisor
 ./sms-dashboard start [--sandbox]   # real: 127.0.0.1:8000 on data/; sandbox: :8001 on data/sandbox/
 ./sms-dashboard stop | status | logs [-f] | upgrade | install-agent | remove-agent
 ./sms-dashboard retire              # moving to the server: a final verified backup; this copy never sends again
@@ -129,11 +129,11 @@ Before fan-out, three best-effort checks run in order. Any `PreflightError` abor
 
 - **Sending window** ([window.py](src/sms_sender/window.py)) — checked first. Default 08:00–21:00 Tehran (`--send-window`, env `SMS_SENDER_SEND_WINDOW`, `off`). Outside it `_preflight_checks` raises `PreflightError` (exit 2) before anything is sent; mid-run, `_send_one` stops claiming once it closes, and the run ends `stopped` (resumable). Independent of `Runner.preflight`. `Runner(clock=…)` makes it testable, and `tests/conftest.py` switches the window off so the suite doesn't depend on the time of day.
 
-- **Test-only runs** (the dashboard's test step): `Runner(test_only=True)` needs `approval_test_number`. It runs everything up to the approval test and the credit check, then stops. Its link stage makes only the test SMS's link (`test:<phone>`); the recipients' are made when the send starts (plan 05 decision 4). It never prompts, runs no smoke test, sends to no recipient, and doesn't write `last_run`. A later send is given `cost_per_sms=` (the test's cost) for the credit estimate. `RunSummary` carries `credit`, `cost_per_sms`, `estimate` and `test_message_id`.
+- **Test-only runs** (the dashboard's test step): `Runner(test_only=True)` needs `approval_test_number`. It runs everything up to the approval test and the credit check, then stops. Its link stage makes only the test SMS's link (`test:<phone>`); the recipients' are made when the send starts. It never prompts, runs no smoke test, sends to no recipient, and doesn't write `last_run`. A later send is given `cost_per_sms=` (the test's cost) for the credit estimate. `RunSummary` carries `credit`, `cost_per_sms`, `estimate` and `test_message_id`.
 
-- **The team's numbers** (`approval_test_team`, plan 06 D1; only with an `approval_test_number`): `Runner._team_test` sends each the same message right after the operator's own (the same tokens; its own `test:<phone>` link, made in the link stage). They're `test` calls, so `check-sends` never counts them for a recipient. One Kavenegar refuses is a note (`team_test_failed`) and the run goes on; a `HaltError` stops it (`test_refused`). The operator's own number and repeats go once. `RunSummary.test_team_sent` counts them. The CLI doesn't use it.
+- **The team's numbers** (`approval_test_team`; only with an `approval_test_number`): `Runner._team_test` sends each the same message right after the operator's own (the same tokens; its own `test:<phone>` link, made in the link stage). They're `test` calls, so `check-sends` never counts them for a recipient. One Kavenegar refuses is a note (`team_test_failed`) and the run goes on; a `HaltError` stops it (`test_refused`). The operator's own number and repeats go once. `RunSummary.test_team_sent` counts them. The CLI doesn't use it.
 
-- **Restricted sending** ([allowlist.py](src/sms_sender/allowlist.py), plan 06 D7): while `SMS_SENDER_ALLOWED_NUMBERS` is set, an SMS goes only to those numbers.
+- **Restricted sending** ([allowlist.py](src/sms_sender/allowlist.py)): while `SMS_SENDER_ALLOWED_NUMBERS` is set, an SMS goes only to those numbers.
   - The real `Sender` reads it in `__init__` (`Sender.allowlist`; `allowed=` overrides) and raises `HaltError` before any call for another number, so the row ends `failed_retriable`.
   - `Runner._check_allowlist` runs first in `_preflight_checks`, before the window, the account check and the link stage: `test_number_not_allowed`, `recipients_not_allowed` (with `count`; a test-only run checks just the test number), `allowlist_invalid` (a value that isn't a phone number allows nothing). Team numbers it doesn't allow are skipped with a note (`team_not_allowed`), never refused.
   - `preview --send` refuses another number (exit 2). The sandbox's sender has no `allowlist`, so the sandbox isn't bound.
@@ -145,7 +145,7 @@ The approval test runs *before* the smoke test on purpose: the operator gets a c
 
 Statuses: `pending`, `in_flight`, `sent` (= accepted by Kavenegar), `failed_permanent`, `failed_retriable` (= definitely not sent), `unknown` (= may have been sent), `needs_review` (= reconciliation couldn't decide), `suppressed` (= on the opt-out list), `invalid` (= the input says don't send: two user IDs for one phone; only an explicit `reset --status invalid` undoes it), `capped` (= over the frequency cap this run; counted afresh next run). `CLAIMABLE = (pending, failed_retriable)`.
 
-**Frequency cap** (`frequency.py`, `--frequency-cap N/DAYS`, plan 05 decision 6: off unless set):
+**Frequency cap** (`frequency.py`, `--frequency-cap N/DAYS`: off unless set):
 - at most N accepted SMS to a number in DAYS days, counted by `state.folder_sends_since` across every campaign DB in the folder, query_only;
 - what counts: accepted `send` calls and `reconciled_sent` decisions; test SMS don't;
 - `Runner._apply_frequency_cap` runs with the exclusions in `_prepare`: `uncap()` first (the window moves), then `cap()` the claimable rows at or over N.
@@ -163,7 +163,7 @@ Capped people got nothing from this campaign, so freeing them again can't send a
 - **The hold on all sending (`sharing.HOLD`).** While an admin holds all sending on the dashboard, `db/.sending-held.json` is in the folder, and `send`, `retry-failed` and `preview --send` exit 2 (`cli._refuse_while_held`, on any kernel). A marker that can't be read still holds.
 - **One process per DB (`locking.RunLock`).** `Runner.run` and the commands that change rows (`retry-failed`, `reset`, `purge`) hold `fcntl.flock` on `<db>.lock`. A second process exits with code 2 instead of treating the first one's `in_flight` rows as crash leftovers and sending them again. The OS drops the lock when the holder dies (even `kill -9`), so crash recovery still works. `status` / `export-failed` only read and don't lock.
 - **Invalid inputs are persisted with synthetic key `INVALID:<raw>`.** This keeps the `phone` PK constraint while letting `export-failed` surface them.
-- **Numbers kept for a limited time (plan 06, D2).** `StateStore.remove_numbers()` puts a placeholder (`state.REMOVED` + a number, `removed:000001`) in place of every phone in the DB, one per number: recipients (an invalid row stays `INVALID:` + its placeholder, its raw cell emptied), calls, link keys (`test:` ones too) and conversions. So every count, cost, delivery, click, conversion and the double-send check join as before. `scrub_numbers` masks numbers in free text (errors, call details). It runs with `secure_delete`, then `VACUUM` and a WAL truncate, so no number is left in the file. The DB records `numbers_removed_at` and never sends again: `bind_campaign` and `upsert_pending` raise `NumbersRemovedError` (a `CampaignMismatchError`, so the CLI exits 2), and reconciliation asks nothing. It no longer knows who it sent to, so another send would reach them twice. `status` prints the date. Take the run lock first.
+- **Numbers kept for a limited time.** `StateStore.remove_numbers()` puts a placeholder (`state.REMOVED` + a number, `removed:000001`) in place of every phone in the DB, one per number: recipients (an invalid row stays `INVALID:` + its placeholder, its raw cell emptied), calls, link keys (`test:` ones too) and conversions. So every count, cost, delivery, click, conversion and the double-send check join as before. `scrub_numbers` masks numbers in free text (errors, call details). It runs with `secure_delete`, then `VACUUM` and a WAL truncate, so no number is left in the file. The DB records `numbers_removed_at` and never sends again: `bind_campaign` and `upsert_pending` raise `NumbersRemovedError` (a `CampaignMismatchError`, so the CLI exits 2), and reconciliation asks nothing. It no longer knows who it sent to, so another send would reach them twice. `status` prints the date. Take the run lock first.
 - **Schema versions.** `PRAGMA user_version` + append-only steps in `state._MIGRATIONS`. Opening a DB upgrades it in place, in one transaction; a DB written by a newer sms-sender is refused (`StateSchemaError`). Never edit a step that has shipped — existing DBs already applied it; add a new one.
 
 ### Reconciliation ([reconcile.py](src/sms_sender/reconcile.py))
@@ -278,7 +278,7 @@ Canonical form is `09XXXXXXXXX`. The normalizer accepts `+98…`, `0098…`, `98
 | 1 | run finished with some `failed_permanent`, `failed_retriable`, `unknown` or `needs_review`; or it stopped early (`RunSummary.stopped`: Ctrl-C / SIGTERM / `Runner.cancel()`, or the sending window closed) |
 | 2 | `HaltError`, preflight failure (incl. a link that couldn't be made, or Shlink refusing the key), or declined approval-test aborted the run; another process holds the state DB; or the DB belongs to another campaign / was sent with other settings / had its numbers removed |
 
-### Dashboard (`sms_sender_web`, Phase 3, in progress)
+### Dashboard (`sms_sender_web`)
 
 The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI doesn't depend on it. `pip install -e ".[dev,web]"` installs it and its tests (pytest-django). Without the extra, the Django tests in `tests/web/` skip themselves. Fixtures (`tests/web/conftest.py`):
 - `make_user(name, role)`;
@@ -286,11 +286,11 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 - `signed_in` (a viewer, so it needs no second step);
 - `verified(client, user)`: signed in and through the second step, with a linked app. It returns the TOTP device; get codes with `django_otp.oath.totp`.
 
-- **On a Mac (`local.py`, `./sms-dashboard`, plan 06 L1):** a supervisor runs gunicorn (gthread, 127.0.0.1 only, `--no-control-socket` on gunicorn 26) and `python -m django run_worker`, with `.env` loaded for them (the shell wins), `SMS_SENDER_ENVIRONMENT=local` and `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES`.
+- **On a Mac (`local.py`, `./sms-dashboard`):** a supervisor runs gunicorn (gthread, 127.0.0.1 only, `--no-control-socket` on gunicorn 26) and `python -m django run_worker`, with `.env` loaded for them (the shell wins), `SMS_SENDER_ENVIRONMENT=local` and `OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES`.
   - `Place` names the files: `<data>/run/dashboard.json` (pid, URL, children) and its flock `dashboard.lock` (the lock, not the file, says it's running), `logs/dashboard.log` (rotated; the children's output goes through it). The sandbox has its own of each, port 8001 and `data/sandbox/`, so both can run at once; its cookies are named apart (`sandbox_sessionid`), since cookies ignore ports.
   - Before starting it refuses (exit 2) while a Docker container has the data folder (or one inside or around it) mounted (`docker_containers_using`, via `docker inspect`), or another kernel's heartbeat is fresh. It stops processes a killed supervisor left (`leftovers`), backs up when `migrate --check` says the app DB needs migrating, migrates and collects the static files.
   - A child that ends is started again; five times in five minutes, or the worker's exit 2 (another worker), and everything stops (exit 1). Stop is SIGTERM to both: the worker gets 95 s, gunicorn 30 s, then they're killed.
-  - `.env` asking for the sandbox (`SMS_SENDER_SANDBOX`) without `--sandbox` is refused, never overridden. `install-agent` writes a launchd agent (`KeepAlive: SuccessfulExit=false`: a clean stop stays stopped). `upgrade`: stop, a backup (`keep=None`), `pip install -e .[web]`, start. `retire` (plan 06 L7, moving to the server): stop, remove the agent, a final backup (`keep=None`) that must verify, then `data/MOVED.json` (start, run, upgrade and install-agent refuse: `Place.check_moved`) and the folder's hold with `reason: "moved"` (`sharing.MOVED`; the CLI refuses to send and says the data moved). Neither file is in a backup.
+  - `.env` asking for the sandbox (`SMS_SENDER_SANDBOX`) without `--sandbox` is refused, never overridden. `install-agent` writes a launchd agent (`KeepAlive: SuccessfulExit=false`: a clean stop stays stopped). `upgrade`: stop, a backup (`keep=None`), `pip install -e .[web]`, start. `retire` (moving to the server): stop, remove the agent, a final backup (`keep=None`) that must verify, then `data/MOVED.json` (start, run, upgrade and install-agent refuse: `Place.check_moved`) and the folder's hold with `reason: "moved"` (`sharing.MOVED`; the CLI refuses to send and says the data moved). Neither file is in a backup.
   - `settings.LOCAL` (`SMS_SENDER_ENVIRONMENT=local`): the badge «محلی · واقعی» / «محلی · شبیه‌سازی» (`ui/env_badge.html`) and D5: `accounts.views.SignIn` offers "keep me signed in on this Mac" only when `can_remember` (LOCAL and `REMOTE_ADDR` loopback), and then `set_expiry(30 days)`; the login event gets `remembered: True`.
 - **One worker per data folder:** `run_worker` waits up to `FRESH_SEC + 10` s while `worker.other_worker()` names one (a fresh heartbeat from another kernel; a fresh `WorkerBeat` from another host or container; one on this host whose process is alive), then exits 2. A clean stop signs off (`Worker.sign_off`: its `WorkerBeat` row and its heartbeat file go), so the next one starts at once.
 - **The worker's daily backup:** `SystemSettings.backup_hour` (Tehran, null = off, default 9) and `backup_keep` (14), set on the backups page (recorded as `system_settings_changed`, `backups`). `Worker.back_up_if_due` starts `make_backup(keep=…)` in a thread of its own (it never touches the app DB) once the newest backup is older than the latest due moment (`operations.backup_due`; a missed one runs when the worker is back). A failure is retried after an hour and announced to the targets once until one succeeds. `operations.backup_overdue` (two hours past due) shows on the backups and status pages. With `SMS_SENDER_BACKUP_DIR` set, the sandbox backs up into its `sandbox/` subfolder.
@@ -324,7 +324,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - Sign-in, sign-out and failed sign-in are recorded from Django's signals (`audit/apps.py`). The username tried is recorded, never the password.
   - `ip` is `REMOTE_ADDR`, and no proxy header is trusted. Behind Docker Desktop it is Docker's gateway, not the person's own IP.
   - Events are append-only. `/activity/` (`view_audit_log`) shows them, 100 to a page. It filters by action, person, campaign and period, and `/activity/export.csv` downloads what's filtered (recorded as `audit_exported`). Phone numbers are masked there too.
-- **Persian (spec 4.11):**
+- **Persian:**
   - Templates use `{% translate "English id" %}`, with the Persian in `locale/fa/LC_MESSAGES/django.po`. After any change to the `.po`, recompile with `msgfmt -o django.mo django.po`.
   - `tests/web/test_catalog.py` fails on:
     - missing, empty, fuzzy or stale entries;
@@ -361,7 +361,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - Purge (`campaign_purge`, `delete_campaign_data`, the CLI's `purge`): the typed short name, refused while any of the campaign's jobs is on its way, a backup first, then the DB files deleted under the run lock, and the `Campaign` with them.
   - Adopt (`campaign_adopt`, operators, from the home page): a `Campaign` for a DB the CLI made, its settings from the DB's bound ones. With no segment it's a draft. As it has sent, its message is fixed, so the draft offers the next segment like another round.
   - The status page shows the version, the queue and the last backup.
-  - **Hold all sending** (`system/views.sending_hold`, the status page, `manage_settings`; review R5), the emergency stop:
+  - **Hold all sending** (`system/views.sending_hold`, the status page, `manage_settings`), the emergency stop:
     - `services.hold_sending` sets `SystemSettings.sending_held_at` / `_by`, cancels test SMS on their way and writes the folder's marker for the CLI. An `OSError` there is reported, and the dashboard's hold still stands.
     - The worker claims no send or test while held (`worker.SENDING`). A running one stops at its next heartbeat with the reason `held`: a send ends `PAUSED` with `result.held`, a test is cancelled. An operator's pause outranks the hold.
     - `request_test`, `start_send`, `start_now` and `resume` raise `JobConflict("held")`.
@@ -371,10 +371,10 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - The frequency cap: `Engine.runner` passes it to every run, and `checks.check_campaign` counts it (`capped`, `cap`).
   - Notification targets (the CLI's `--notify`): `worker._announce` sends each one the run report with `heading=<slug>` when a send ends or stops (not for tests, not on a shutdown requeue). A send that stops before its run (busy, settings mismatch, a list it can't read, a crash) has no report: `_announce_failure` sends a line instead. A test SMS that went out is announced too (`_announce_test`, its number masked), as it waits for someone to approve or reject it. They're secrets: pages and the log only show `notify.redact_target`. There's a "send a test" button (`notify.notify_text`).
   - Defaults for new campaigns: the window and the rate.
-  - **Test SMS** (plan 06):
+  - **Test SMS**:
     - D1, `team_test_numbers`: up to `TEAM_TEST_MAX` (5) canonical numbers, added and removed one at a time, shown and recorded masked. `services.team_numbers(own)` gives them without the requester's own; `request_test` puts them in `params.team_numbers`, and the worker passes them to `Engine.runner(team_numbers=)`. The page marks the ones restricted sending skips.
     - D3, `second_approver` (off by default): `services.decide_test` refuses an approval by whoever asked for the test (`JobConflict("own_test")`); they can still reject it. `services.needs_another_approver(job, user)` drives the awaiting step (`own_test`: no approve button), the next step (`awaiting_other`), the notices (`test_other`) and the overview's attention. The page warns while fewer than two people can run campaigns (`roles.count_who_can`).
-  - **Credit warning** (`credit_floor`, rials; `system/credit.py`, review R5):
+  - **Credit warning** (`credit_floor`, rials; `system/credit.py`):
     - `ProviderCheck` (one row) keeps Kavenegar's account as last asked. `Worker.schedule` asks every 15 minutes (`credit.due`), and the status page records its live answer too.
     - Under the floor, the campaign list warns, and the targets hear it once per drop (`below_since`). A refused account check is an error callout of its own.
     - A send still checks its own estimate against the credit before anything goes out.
@@ -385,9 +385,9 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - A number is searched with a POST (`action=find`), never in a URL.
 - **Phone numbers on pages** are masked with `privacy.mask_phone` (filter `mask_phone`): the first four and last two digits are shown, the rest become `*`. Values with fewer than ten digits are hidden entirely. Use `*`, never `•`, because next to Persian digits a dot reads as «۰». In a sentence (`campaigns/present.say`), a masked number is isolated left to right (LRI … PDI), as `|ltr` does on a page: after Persian words, its groups would show in reverse order.
 - **`accounts.decorators.forbidden(request)`** renders the Persian 403. Use it for checks inside a view, such as an action only admins may take.
-- **Campaign pages (`campaigns/`, spec 3):**
+- **Campaign pages (`campaigns/`):**
   - Settings are stored in `Campaign.settings` in the CLI's terms: `segment`, `input`, `user_id_column`, `template`, `tokens`, `token_columns`, `value_maps`, `links` (LinkSettings fields), `send_window`, `rate`, `workers`. The engine (`jobs/engine.Engine.runner`) turns them into the CLI's runner.
-  - **Presets and the composer** (plan 06, L3; `campaigns/presets.py`, `campaigns/composer.py`):
+  - **Presets and the composer** (`campaigns/presets.py`, `campaigns/composer.py`):
     - `campaigns.Preset`:
       - `slug` (at most 40 characters; `new`, `from-campaign` and `c` are reserved), `name` and `name_pattern` (`{name}`, `{date}`);
       - `settings` in `Campaign.settings`' terms, with the default segments;
@@ -400,7 +400,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
     - `/compose/c/<slug>/` is an alert's page. Its right side is the campaign's own step: `_live(ready_step=False)` and the stage templates, whose action forms carry `next_url` (`stage/_next.html`). `campaign_action` returns only to that campaign's own `/compose/c/<slug>/`.
       - Values and segments change until `settings_locked`; a change invalidates the approval through the settings hash, as anywhere.
     - HTMX: `?part=message` reads only the first list, so it keeps up with typing, and swaps the field errors in out of band; `?part=counts` reads every list (`count_lines`). Ctrl+Enter presses `[data-primary]`: only the test button has it, and sending stays a click and a confirmation.
-  - **More segments** (`more_segments`, review G1): ready segments sent after the campaign's own, in name order, in one send with one test SMS.
+  - **More segments** (`more_segments`): ready segments sent after the campaign's own, in name order, in one send with one test SMS.
     - `segments.models.campaign_slugs` gives a campaign's segments in order (`ready_segments` the ready ones); `Segment.part()` is one as the runner's `InputPart`, and `engine.more_inputs` builds the rest (one that isn't ready raises `InputError`, which the worker records as `input_unreadable` before anything is read).
     - The form keeps only segments with every column the tokens use, and never the campaign's own segment again (`app.js` hides it too).
     - The check (`checks.check_campaign`) and the preview (`preview.load_segment`) read every list as a send would; `CheckResult.segments` counts what each one adds, and `more_segment_missing` stops the check.
@@ -434,7 +434,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
     - `StateStore.reset_status` never queues an `INVALID:<raw>` row.
   - **Reconcile options:** the CLI's `--min-age` (in minutes) and `--review-not-found` go in the reconcile job's `params` (`min_age_sec`, `requeue_not_found`). The worker passes them to `reconcile_unknown`.
   - **Duplicate** (`campaign_duplicate`, the dashboard's presets: the CLI's `--config` / `--profile`): a new campaign with a deep copy of the settings, and a suggested short name from `forms.free_slug` (coin-price-7 → coin-price-8; CLI DBs count as taken). No tests, approvals or sends are copied.
-  - **Importing the CLI's profiles** (`campaign_import`, `/campaigns/import/`, `manage_settings`; review G4): an admin uploads `sms-sender.toml`, sees a preview, and imports the ticked profiles as draft campaigns.
+  - **Importing the CLI's profiles** (`campaign_import`, `/campaigns/import/`, `manage_settings`): an admin uploads `sms-sender.toml`, sees a preview, and imports the ticked profiles as draft campaigns.
     - `campaigns/profiles.read` merges each named profile over `[profile.default]` as the CLI does; `draft` maps it to settings: the template, fixed tokens, token columns, value maps and link, then the window, rate, workers and advanced settings.
     - A profile that would send something else isn't imported (`terms.IMPORT_PROBLEMS`: a template name Kavenegar refuses, a token that breaks its rules, a malformed column or translation, an unusable link). A run setting the dashboard can't take (`off` window, a rate it can't read, out-of-range numbers) falls back to the default and is listed.
     - Paths stay with the CLI: `input` picks a ready segment only by name (slug or uploaded file name) and only with every token column; `state` and `log_file` are left out. A profile whose CLI DB has records (`operations.adoptable`) is left unticked, with a pointer to bringing that campaign over instead.
@@ -454,7 +454,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
     - clicks over time: SVG bars, per hour up to `HOURLY_UP_TO` (72), else per day (Tehran). Time runs right to left. Coordinates are formatted in Python, so no locale's decimal mark reaches an SVG attribute. A table holds the same numbers.
 
     `/analytics/` puts every campaign DB side by side (the CLI's too): accepted, delivered, clicked, clicks, cost, cost per click.
-  - **Insights** (`reports/insights.py`, plan 06 L5; read only, numbers only, campaign DBs read `query_only` or through the report's store, never created):
+  - **Insights** (`reports/insights.py`; read only, numbers only, campaign DBs read `query_only` or through the report's store, never created):
     - **On a report:**
       - each segment's accepted, delivered, click rate, clicks, cost and cost per click, when it went to several (`by_segment`, from `StateStore.segment_totals` and the report's own `click_report`);
       - how fast it was delivered (`delivery_speed`): the share seen delivered within 1, 2, 4, 8, 24 and 48 hours. `delivery_checked_at` keeps the moment a check first saw a final status, as final ones aren't asked again (`StateStore.delivery_speed`). The checks run every 15 minutes, so that's the precision;
@@ -489,14 +489,14 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 
     Each download records `report_downloaded`, with the filters (never a number).
   - `/status/` asks Kavenegar (`account_info` / `account_config`) and Shlink (`health`) live, on every view.
-  - **Find a number** (`/numbers/`, `reports/numbers.py`, `reveal_phone`; review R5): `state.number_history` reads every campaign DB in the folder, the CLI's too, `query_only` and without upgrading old ones. For each campaign that knows the number:
+  - **Find a number** (`/numbers/`, `reports/numbers.py`, `reveal_phone`): `state.number_history` reads every campaign DB in the folder, the CLI's too, `query_only` and without upgrading old ones. For each campaign that knows the number:
     - its status, segment, sent time, delivery and its own link's clicks;
     - accepted SMS: send calls and reconciled ones, or 1 for a sent row from before calls were recorded;
     - calls still undecided, and test SMS apart.
 
     The page adds the suppression list and the frequency cap's count, and calls out a campaign that sent it twice. The number goes in a POST, and `number_looked_up` is recorded with it, shown masked.
   - Worker liveness is `jobs.WorkerBeat`: written every idle loop and with each job heartbeat. `worker_alive()` means seen within 60 s.
-- **The attribution API (`api/`, plan 05 decision 8):**
+- **The attribution API (`api/`):**
   - Read only: `GET /api/v1/campaigns/` and `/api/v1/campaigns/<slug>/attribution/?page=N`. The rows are `clicks.attribution_rows`, 1,000 a page, never a phone number.
   - `api_view` makes a view `@login_not_required`, CSRF-exempt, never cached and GET only. It checks `Authorization: Bearer <token>` on every call: 401 with `WWW-Authenticate`, else the view.
   - Tokens (`api.tokens`): `smsk_` + 43 random characters, shown once. Only the SHA-256 is stored (`ApiToken.digest`), with its first 10 characters as `prefix`. They're revoked, never deleted.
@@ -516,13 +516,13 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 - **Link-stage progress:**
   - `LinkStage(progress=…)` reports `(done, total)`. The runner passes `reporter.links` when the reporter has one; the CLI's doesn't.
   - `JobReporter.links` stores `{"stage": "links", "total", "processed", "eta_sec"}` on `Job.progress`. The campaign page shows a bar and the time left, since Shlink is capped at 10 links a second (about 18 minutes for 11,000).
-- **Engine messages in Persian (spec 4.11):**
+- **Engine messages in Persian:**
   - The engine writes English for the CLI and the logs. The dashboard renders keys, so engine English never appears on a page.
   - `PreflightError(message, key, **fields)` → `RunSummary.stop_reason` / `stop_fields`. That includes `provider_halt` with Kavenegar's code, and `window_closed`. The worker adds `busy`, `settings_mismatch`, `input_unreadable`, `crashed` and `given_up` in `Job.result`.
   - `sender.token_issue`, `links.destination_issue` and `InvalidRow.key` are the keyed forms of the CLI's messages. `token_problem` / `destination_problem` word them in English.
   - `campaigns/terms.py` holds the Persian for every key. Add a key there, and in the catalog, whenever the engine gains one.
   - Notes too: `Reporter.note(text, key, **fields)`. The English text is for the CLI and logs. `JobReporter` stores `key` and `data` on a `JobEvent`, and the history shows `terms.NOTES[key]` (`campaigns/present.notes`). A note without a key is never shown.
-- **Campaign lifecycle ([lifecycle.py](src/sms_sender_web/campaigns/lifecycle.py), plan 05 P2):**
+- **Campaign lifecycle ([lifecycle.py](src/sms_sender_web/campaigns/lifecycle.py)):**
   - One derived stage, never stored, from the settings and the latest test and send jobs:
     - `draft` → `ready` → `testing` → `awaiting` → `approved`;
     - then `scheduled` / `sending` / `paused` / `stopped` → `completed` / `cancelled`.
@@ -531,7 +531,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - The campaign page includes `campaigns/stage/_<stage>.html` as its current step. `present.py` turns jobs into Persian: `result_line`, `notes`, `top_errors`, `send_summary`.
   - The campaign list (`dashboard/views.campaign_list`, `/campaigns/`) counts stages into tiles and lists what needs attention: tests to approve, stopped sends with their reason, and leftovers after a send (`campaign_rows`, shared with the control room).
   - **Sending window:** a send the window stops (`stop_reason` `window_closed` or `outside_window`) is `paused`, and `Worker.resume_when_window_opens` (every loop) queues it again once the window is open. An operator's pause is never resumed for them.
-- **Settings page, templates, preview (plan 05 P2):**
+- **Settings page, templates, preview:**
   - The page's split controls (window from/until, rate number + unit, link-format choice + pattern, translation rows `vm_column`/`vm_source`/`vm_target`) are turned back into the form's combined fields by `forms.combined()` before validation. The CLI-shaped fields still work, so the validation is unchanged.
   - Persian digits are accepted.
   - UTM values go into `links` (part of the approved settings).
@@ -541,7 +541,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - `campaigns/message.py` fills `%token…` placeholders (longest first), counts length like the networks (GSM-7 160/153, UCS-2 70/67) and finds placeholders nothing fills or tokens the text doesn't use. `shows_left_to_right` flags Persian text whose first letter is Latin: phones take the first strong character, so it would show left to right. `preview.py` fills them with the first valid row (after translations) and a sample link (`SAMPLE_CODE`).
   - The settings page previews live: HTMX posts the unsaved form to `settings/preview/`, which saves nothing.
   - `{% translate %}` doubles a `%` before the lookup, so a template string with `%` always shows in English. `test_catalog` refuses one; put such text in Python, or reword it.
-- **Jobs and the worker** (`jobs/`, spec 4.6 / 4.8). `Campaign` holds a campaign's send settings, in the CLI's terms; its `slug` names `data/db/<slug>.db`. `Job` kinds: send, reconcile, delivery, clicks. `JobEvent` holds the engine's notes.
+- **Jobs and the worker** (`jobs/`). `Campaign` holds a campaign's send settings, in the CLI's terms; its `slug` names `data/db/<slug>.db`. `Job` kinds: send, reconcile, delivery, clicks. `JobEvent` holds the engine's notes.
   - **Claiming:** `Worker.claim(kinds)` takes the oldest queued job of those kinds, or a running one whose lease expired, with an atomic UPDATE. A heartbeat thread renews the lease every 10 s and reads `Job.control`.
   - **Two lanes** (`run_forever`, `LANES`): one thread runs sends, one at a time, which the frequency cap and Kavenegar's rate count on. Another runs `SHORT_KINDS` (test, reconcile, delivery, clicks) beside it, so an urgent test SMS never waits behind an hour-long send. The main thread keeps the heartbeat, the schedule and the window's resumes.
   - A job that holds its campaign's run lock (`LOCKING`: send, test, reconcile) isn't claimed while another one of that campaign holds it with a live lease. Delivery and clicks may run beside a send. `run_once(kinds=None)` (tests, `run_worker --once`) claims any kind.
@@ -552,7 +552,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - **Scheduler:** `Worker.schedule` queues delivery updates while sent rows are under 48 h old, and click updates for 14 days.
   - **Awake:** while a send or a test SMS runs, the worker holds macOS's `caffeinate -i` (`jobs/awake.py`; nothing elsewhere), so an idle Mac doesn't sleep mid-send. A closed lid still sleeps a laptop.
   - **One worker process only** (with its two lanes). Test DBs are files, not shared-memory SQLite (`settings_test`), because the heartbeat and lane threads write concurrently.
-- **Design system v3 ([app.css](src/sms_sender_web/static/css/app.css), plan 06 L6), on v2 and v1:**
+- **Design system v3 ([app.css](src/sms_sender_web/static/css/app.css)), on v2 and v1:**
   - **Tokens** follow the L0 prototype: primary `#1d4ed8`, its success, warning and danger colours, navy `#0c1626`, and its dark theme. Corners are 10 px for controls (`--radius`) and 14 px for cards (`--radius-lg`). Figures use `--fs-figure`.
   - **Motion:** `--ease`, `--dur-1..3`. Dialogs rise in, the drawer slides in from the start side, toasts drop in, and buttons move a pixel when pressed. Under `prefers-reduced-motion` every animation and transition is cut to nothing and runs once, so spinners stand still.
   - **Loading:**
@@ -577,7 +577,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
     - the credit in millions (`credit()["amount"]`, `["unit"]`), checked `|ago`;
     - dates `|jalali_when` («امروز ۱۳:۰۲», «دیروز», a weekday within the week);
     - the most pressing item stands out with its action (`ATTENTION_ACTIONS`).
-- **Design system v2 ([app.css](src/sms_sender_web/static/css/app.css), the review's R3):** an operations console, calm and status-first. It's built on v1 (P1, below), and v1's class names still work.
+- **Design system v2 ([app.css](src/sms_sender_web/static/css/app.css)):** an operations console, calm and status-first. It's built on v1, and v1's class names still work.
   - **Shell:** a deep-navy full-height sidebar (`--nav-*` tokens). Its groups are: SMS sending; reports and monitoring; administration. Help sits by the user. The active item is `[aria-current]`, any value.
   - **`.figures`** is a stat strip: one panel whose items share the width (`flex: 1 1 8rem`), so a short row never leaves a lonely box. Clickable figures are `ul.figures > li > a.figure-link` with `.figure-label` / `.figure-value`, never links inside a `<dl>`.
   - **Status at a glance:**
@@ -591,7 +591,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - **Messages** (`ui/messages.html`): errors and warnings stay on the page (`.messages`). Success and information are `.toasts` that leave after 8 s, held while pointed at or focused.
   - **Forms:** `.form-section` for a form in sections (title and help beside the fields). Fieldset legends read as titles inside the box.
   - **Other parts:** `.tabs` / `.segmented-tabs`, `.timeline`, `.health-grid` / `.health-state` (status page), `.auth-card` (sign-in), `.chip` (meta).
-  - **The control room** (`/`, `dashboard/views.home`, plan 06 L4):
+  - **The control room** (`/`, `dashboard/views.home`):
     - Figures for today and the last 7 days: accepted, delivered, clicks, click rate and spend.
     - The sends on their way (`control.active_sends`, polled at `/home/sends/`, 286 when none), each with its pace and time left.
     - The credit (`ProviderCheck`), with its runway (`control.credit`): sends like the recent ones (their average cost) and days at the last 30 days' spending.
@@ -600,7 +600,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 
     The numbers come from `dashboard/activity.folder_activity`: one pass per campaign DB, `query_only` (never `mode=ro`, which can't open a WAL DB whose `-shm` is gone), for today (Tehran midnight), 7, 30 days and all time. Test SMS costs are included; clicks come from `click_hours`.
   - **The campaign list** (`/campaigns/`, `campaign_list`): tabs (all, in progress, needs attention, ended), stage tiles that filter (`?stage=`), a search by name, short name or template (`?q=`, nothing personal), 50 to a page, at most 5 attention items with "show all". The breadcrumbs' «کمپین‌ها» lead here.
-  - **Notifications** (`/notifications/`, `dashboard/notices.py`, plan 06 L4), derived from the last 7 days, never stored:
+  - **Notifications** (`/notifications/`, `dashboard/notices.py`), derived from the last 7 days, never stored:
     - each campaign's latest test SMS waiting for a decision on its current settings, or one that failed (for `run_campaigns`);
     - sends done, stopped (with the reason) or cancelled (not withdrawn or superseded);
     - the credit under the warning level (`ProviderCheck.below_since`);
@@ -616,7 +616,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - **The calendar** (`/calendar/?month=1405-07`, `dashboard/calendar.py`): a Solar Hijri month, Saturday first, Tehran time. A send is on the day it started; a queued one on the day it's set for (a hollow dot); withdrawn sends never started, so they aren't on it. Below 48 rem the grid gives way to a list of the days with sends.
   - **A send as it goes** (the campaign page): its pace and time left (`control.active_send`), a bar per segment when there are several (`StateStore.segment_progress`), and afterwards the delivery bar (`StateStore.delivery_groups`).
   - **Settings:** when the template's text is in the library, only the tokens it uses show (`campaigns/_token_row.html`). The rest fold under "the tokens the text doesn't use"; a filled one stays in view.
-- **Design system v1 ([app.css](src/sms_sender_web/static/css/app.css), plan 05 P1):**
+- **Design system v1 ([app.css](src/sms_sender_web/static/css/app.css)):**
   - **Basics:**
     - Plain CSS, no build step. Logical properties only, so the layout mirrors for RTL.
     - Tokens are custom properties, with a dark mode under `prefers-color-scheme`.
@@ -647,12 +647,12 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
     - A failed request shows `#connection`.
     - For HTMX requests, `accounts.middleware.LoginRequired` and `TwoFactorMiddleware` answer an ended session with `HX-Redirect`, so the whole page moves; a plain redirect would swap the login page into the fragment.
   - **Checks:** the browser scan (`tests/web/e2e/test_pages.py`) must stay at zero. `baseline.json` is empty, in light mode at 360–1366 px and in dark mode on desktop.
-- **Help (`/help/`, [dashboard/help.py](src/sms_sender_web/dashboard/help.py), plan 05 P6):** one short page in the glossary's words: the five steps, the rules every send keeps, and what each status, delivery status, button, stop and role means.
+- **Help (`/help/`, [dashboard/help.py](src/sms_sender_web/dashboard/help.py)):** one short page in the glossary's words: the five steps, the rules every send keeps, and what each status, delivery status, button, stop and role means.
   - Each item is shown under the label the other pages use (`SUBMISSION_STATUS`, `DELIVERY_STATUS`, `ROLE_LABELS`, the buttons' own msgids), so the help never names a thing twice.
   - `tests/web/test_help.py` fails when a status or a delivery status has no explanation: a new status needs its line here.
   - The rule about the sending window names the default new campaigns get (`SystemSettings.default_send_window`, else 08:00–21:00).
   - The report and the campaign page link to `/help/#statuses` and `#delivery`.
-- **Parity with the CLI ([parity.py](src/sms_sender_web/parity.py), plan 05):**
+- **Parity with the CLI ([parity.py](src/sms_sender_web/parity.py)):**
   - Every `sms-sender` command and option, and this app's management commands, has an entry. Each entry is one or more of:
     - `Control(page, role)`;
     - `Implied(how)`;
@@ -677,7 +677,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - `world.py` builds the made-up dashboard (users, segments, a campaign in every state) for these tests and the parity test.
 - **Packaging:** the image installs the package, not the source tree, so each app's `templates/` must be listed in `[tool.setuptools.package-data]`. Its packages come from `requirements/server.lock` (`pip install --require-hashes`), then the package itself `--no-deps`. `requirements/server.in` is pyproject's dependencies plus the `web` extra without the tests' `pytest-django`; `tests/web/test_packaging.py` keeps the two in step and checks every one is pinned. Relock with the `uv pip compile` command at the top of `server.in` (Linux, Python 3.13, hashes).
 - **Docker:** `Dockerfile` + `compose.yaml` (service `web`, gunicorn with threaded workers (`gthread`: sync workers stall on browsers' idle connections and answer "Internal Server Error" when killed), `/healthz`; service `worker`, health check `manage.py worker_status`). The port is published on `${BIND_ADDR:-127.0.0.1}:${WEB_PORT:-8000}`, so it's shared over NetBird only on purpose. Images are `sms-sender-dashboard:${IMAGE_TAG:-latest}`. Both services' logs are capped (json-file, 10 MB × 5), since they hold phone numbers. `DJANGO_TRUST_PROXY_SSL=1` sets `SECURE_PROXY_SSL_HEADER`, only for a TLS proxy that overwrites `X-Forwarded-Proto`. The DevOps handover is [docs/deploy.md](docs/deploy.md); keep it in step with these files.
-- **Keeping phone numbers ([retention.py](src/sms_sender_web/retention.py), plan 06 D2):** `SystemSettings.retention_months` (6, 12, 18, 24 or 36; default 12) on the system settings page. `Worker.remove_old_numbers_if_due` runs `retention.run_and_record` once a day, in a thread of its own (retried after an hour on an error); `manage.py remove_old_numbers [--dry-run]` runs it by hand.
+- **Keeping phone numbers ([retention.py](src/sms_sender_web/retention.py)):** `SystemSettings.retention_months` (6, 12, 18, 24 or 36; default 12) on the system settings page. `Worker.remove_old_numbers_if_due` runs `retention.run_and_record` once a day, in a thread of its own (retried after an hour on an error); `manage.py remove_old_numbers [--dry-run]` runs it by hand.
   - A campaign DB (the CLI's too) whose `last_activity()` (a number added, a send, any call) is older than the cutoff gets `remove_numbers()` under its run lock. One with a job queued, running or **paused**, or whose lock the CLI holds, is kept for the next day (`Removed.kept`, listed on the page).
   - A segment's files go when it, and its file's mtime (a replacement), are older and no campaign wants it: none made or with a job since the cutoff, none with a job on its way, and no campaign DB that added or sent to it since (`segments_active_since`). It becomes `Segment.Status.REMOVED` with `numbers_removed_at`, its counts kept.
   - `exports/` files and backups older than the cutoff are deleted (a backup holds every number of its day).
@@ -698,5 +698,6 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 - **Recipient phone lists and state DBs are PII.** Keep state DBs in `data/db/` and segment / user-id lists in `data/segments/`; `data/` is gitignored as a whole, and so are root-level `*.csv` / `*.txt` / `*.xls*` (which catches `export-failed`'s default `./failed.csv`) and `*-numbers.*` / `*_numbers.*` anywhere. Never commit one — stage files by name, not with `git add -A` / `git add .`. When moving a DB, update every `state = …` in `sms-sender.toml` too: a path that no longer exists silently opens a fresh, empty DB, and that run re-sends to everyone already sent.
 - Logs go to `logs/sms-sender.log` (rotating, 5 MB × 5) and are formatted as `key=value` pairs by `KeyValueFormatter`. Pass structured fields via `logger.info("event_name", extra={...})`, not f-strings, so they stay greppable. The formatter scrubs secrets from the whole line, tracebacks included (`redact.redact_secrets`: the Kavenegar key in its URLs, Telegram bot tokens, Slack webhook paths). An `extra` key must not be a `LogRecord` attribute (`created`, `name`, `msg`, `args`, `module`, …): logging raises `KeyError` mid-run. `tests/test_logging_fields.py` checks every call.
 - **Data and logs are the owner's only.** The CLI and the launcher set `umask 077`, and `./sms-dashboard start` / `run` / `upgrade` tighten `data/` and `logs/` to 0700 / 0600 (`Place.make_private`): they hold phone numbers.
+- **Each PR adds its line to `CHANGELOG.md`**, under the unreleased version, with its number. Operators' docs are the README's daily-use part and `docs/runbook.md` (the Mac); the server's are `docs/deploy.md`.
 - Adding a new Kavenegar status code: extend the relevant frozenset in `classifier.py`. Don't add per-code branching elsewhere.
 - **A `ResourceWarning` fails the test** (`filterwarnings` in pyproject.toml): close what you open (`contextlib.closing` for `sqlite3`; its own `with` only commits). A thread of your own that touches Django closes `django.db.connection` when it ends: Django opens one per thread and closes none of theirs. The engine's threads report through `JobReporter`, which does it for them.
