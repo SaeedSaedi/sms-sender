@@ -14,6 +14,7 @@ from django.utils.translation import gettext_lazy as _
 
 from sms_sender.input_loader import SLUG_RE
 from sms_sender.links import STRATEGIES, allowed_domains, destination_issue, format_problem
+from sms_sender.phone import ASCII_DIGITS
 from sms_sender.rate import parse_rate
 from sms_sender.sender import TOKEN_MAX_SPACES, token_issue
 from sms_sender.shortlink import shlink_base_url
@@ -32,7 +33,6 @@ SOURCES = [
     ("column", _("A column of the segment")),
     ("link", _("The short link")),
 ]
-_ASCII_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
 # The template's name at Kavenegar, as typed in its panel.
 TEMPLATE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 
@@ -223,7 +223,7 @@ class SettingsForm(forms.Form):
 
     def clean_rate(self) -> str:
         # Typed on a Persian keyboard, "۱۰/s" works; it's stored as "10/s".
-        value = self.cleaned_data["rate"].strip().translate(_ASCII_DIGITS)
+        value = self.cleaned_data["rate"].strip().translate(ASCII_DIGITS)
         if value:
             try:
                 parse_rate(value)
@@ -232,7 +232,7 @@ class SettingsForm(forms.Form):
         return value
 
     def clean_link_rate(self) -> str:
-        value = self.cleaned_data["link_rate"].strip().translate(_ASCII_DIGITS)
+        value = self.cleaned_data["link_rate"].strip().translate(ASCII_DIGITS)
         if value:
             try:
                 parse_rate(value)
@@ -380,7 +380,7 @@ class SettingsForm(forms.Form):
 def _clock(text: str) -> str:
     """One time box: "8", "21", "24" or "۸" is that hour sharp; anything
     else ("8:30") goes to the window's own check as it is."""
-    text = text.strip().translate(_ASCII_DIGITS)
+    text = text.strip().translate(ASCII_DIGITS)
     return f"{int(text):02d}:00" if text.isdigit() and len(text) <= 2 else text
 
 
@@ -393,7 +393,7 @@ def combined(data):
     if "window_start" in data or "window_end" in data:
         data["send_window"] = f"{_clock(data.get('window_start', ''))}-{_clock(data.get('window_end', ''))}"
     if "rate_value" in data:
-        value = data.get("rate_value", "").strip().translate(_ASCII_DIGITS)
+        value = data.get("rate_value", "").strip().translate(ASCII_DIGITS)
         data["rate"] = f"{value}/{data.get('rate_unit') or 's'}" if value else ""
     if "link_format_kind" in data:
         kind = data.get("link_format_kind")
@@ -424,7 +424,7 @@ def parse_when(date_text: str, time_text: str, now: datetime | None = None):
     """(an aware datetime, None) for a Solar Hijri date and a time in Tehran
     time, or (None, error key). Persian or Latin digits; "/", "-" or "."
     between the date's parts."""
-    parts = re.split(r"[/\-.]", (date_text or "").strip().translate(_ASCII_DIGITS))
+    parts = re.split(r"[/\-.]", (date_text or "").strip().translate(ASCII_DIGITS))
     try:
         year, month, day = (int(p) for p in parts)
     except ValueError:
@@ -435,7 +435,7 @@ def parse_when(date_text: str, time_text: str, now: datetime | None = None):
         day_g = jdatetime.date(year, month, day).togregorian()
     except ValueError:
         return None, "bad_date"
-    match = re.fullmatch(r"(\d{1,2}):(\d{2})", (time_text or "").strip().translate(_ASCII_DIGITS))
+    match = re.fullmatch(r"(\d{1,2}):(\d{2})", (time_text or "").strip().translate(ASCII_DIGITS))
     try:
         at_time = dtime(int(match.group(1)), int(match.group(2))) if match else None
     except ValueError:

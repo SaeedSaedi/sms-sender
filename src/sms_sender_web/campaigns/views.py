@@ -18,6 +18,7 @@ from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods, require_POST
 
 from sms_sender.links import DEFAULT_RATE as DEFAULT_LINK_RATE
+from sms_sender.phone import ASCII_DIGITS
 from sms_sender.state import FAILED_PERMANENT, SENT, StateStore
 from sms_sender.rate import parse_rate
 from sms_sender.sender import TOKEN_MAX_SPACES
@@ -40,7 +41,7 @@ from ..system import operations
 from ..system.models import SystemSettings
 from .checks import check_campaign
 from .forms import (
-    _ASCII_DIGITS, SCHEDULE_ERRORS, TOKENS, DuplicateForm, NewCampaignForm, SettingsForm, combined,
+    SCHEDULE_ERRORS, TOKENS, DuplicateForm, NewCampaignForm, SettingsForm, combined,
     free_slug, more_segment_choices, parse_when,
 )
 from .lifecycle import AWAITING, CANCELLED, COMPLETED, DRAFT, PAUSED, READY, STOPPED, lifecycle, settings_complete
@@ -53,7 +54,7 @@ from .profiles import ProfileFileError, drafts as profile_drafts, read as read_p
 from .terms import (
     CHECK_PROBLEMS, CHECK_STATES, CONFLICTS, COST_EACH, COST_TOTAL, FOLLOWUPS, IMPORT_FILE_ERRORS,
     IMPORT_PROBLEMS, INVALID_ROWS, LINKS_AT_SEND, NEXT_STEP, NUMBERS_REMOVED, REQUEUE_CONFIRM, REQUEUED,
-    STAGES, STEPS, stop_reason,
+    SEND_AGAIN, STAGES, STEPS, stop_reason,
 )
 
 logger = logging.getLogger(__name__)
@@ -513,7 +514,7 @@ def _requeue_items(campaign: Campaign, user) -> list[dict]:
 
 def _reconcile_params(data) -> dict:
     """The CLI's reconcile --min-age (in minutes here) and --review-not-found."""
-    minutes = data.get("min_age_minutes", "").strip().translate(_ASCII_DIGITS)
+    minutes = data.get("min_age_minutes", "").strip().translate(ASCII_DIGITS)
     params = {"requeue_not_found": data.get("review_not_found") != "on"}
     if minutes.isdigit():
         params["min_age_sec"] = min(int(minutes), 7 * 24 * 60) * 60.0
@@ -627,9 +628,9 @@ def _live(request, campaign: Campaign, *, ready_step: bool = True, **preview) ->
         "stage_label": STAGES[life.stage],
         "stage_template": "campaigns/stage/_numbers_removed.html" if removed_at
         else f"campaigns/stage/_{life.stage}.html",
-        "numbers_removed_line": say(NUMBERS_REMOVED, {
+        "numbers_removed_line": " ".join((say(NUMBERS_REMOVED, {
             "when": jalali(removed_at, "%Y/%m/%d"), "months": SystemSettings.load().retention_months,
-        }) if removed_at else "",
+        }), str(SEND_AGAIN))) if removed_at else "",
         "next_step": NEXT_STEP["paused_by_window" if life.paused_by_window
                                else "awaiting_other" if own_test else life.stage],
         "steps": _steps(life.step),

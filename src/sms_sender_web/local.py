@@ -182,6 +182,18 @@ class Place:
     def log_file(self) -> Path:
         return self.root / "logs" / ("dashboard-sandbox.log" if self.sandbox else "dashboard.log")
 
+    def make_private(self) -> None:
+        """The data and the logs readable by their owner only (files made
+        before the umask was set included). Missing ones are skipped."""
+        for folder in (self.data_dir, self.data_dir / "db", self.data_dir / "segments",
+                       self.data_dir / "exports", self.data_dir / "backups", self.root / "logs"):
+            if not folder.is_dir():
+                continue
+            folder.chmod(0o700)
+            for path in folder.iterdir():
+                if path.is_file():
+                    path.chmod(0o600)
+
     @property
     def label(self) -> str:
         return f"{LABEL}.sandbox" if self.sandbox else LABEL
@@ -787,8 +799,13 @@ def main(argv: list[str] | None = None) -> int:
         if name == "logs":
             command.add_argument("-f", "--follow", action="store_true", help="Keep showing new lines.")
     args = parser.parse_args(argv)
+    # Every file this makes (the DBs, the log, a backup) is its owner's only:
+    # they hold phone numbers.
+    os.umask(0o077)
     try:
         place = Place.find(args.sandbox)
+        if args.command in ("start", "run", "upgrade"):
+            place.make_private()
         port = getattr(args, "port", None) or PORTS[args.sandbox]
         if args.command == "run":
             place.check_moved()

@@ -47,6 +47,7 @@ from sms_sender.sharing import clear_heartbeat, foreign_worker, write_heartbeat
 from sms_sender.state import CampaignMismatchError, NumbersRemovedError
 from sms_sender.window import DEFAULT_WINDOW, now_tehran, parse_window
 
+from .awake import awake
 from .engine import Engine, campaign_db
 from .models import Campaign, Job, JobEvent, WorkerBeat
 from .reporter import JobReporter
@@ -378,7 +379,8 @@ class Worker:
         heartbeat = _Heartbeat(self, job.pk, on_stop, sends=True)
         heartbeat.start()
         try:
-            summary = runner.run()
+            with awake():  # a Mac doesn't sleep while SMS go out
+                summary = runner.run()
         except RunLockError as e:
             why = f"another sms-sender process is sending this campaign: {e}"
             if not test:

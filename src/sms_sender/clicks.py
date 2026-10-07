@@ -22,6 +22,7 @@ from typing import Callable, Iterable, Iterator, Protocol
 from .delivery import STATUS_NAMES
 from .shortlink import LinkVisits, ShlinkError
 from .state import StateStore
+from .window import TEHRAN
 
 logger = logging.getLogger(__name__)
 
@@ -63,17 +64,23 @@ def sync_clicks(
                      hours=_sync_hours(state, source, tag))
 
 
+def tehran_hour(when: datetime) -> int:
+    """The start of the Tehran hour `when` falls in, in unix seconds. Tehran
+    is UTC+03:30, so its hours start at half past in UTC."""
+    return int(when.astimezone(TEHRAN).replace(minute=0, second=0, microsecond=0).timestamp())
+
+
 def _sync_hours(state: StateStore, source: VisitSource, tag: str) -> int:
-    """Clicks per hour, for clicks over time. Visits are read again from the
-    start of the latest stored hour, and every hour from there is counted
-    afresh, so a repeated sync never counts a visit twice. If Shlink can't
-    say when (an old version, a blip), the counts above still stand."""
+    """Clicks per Tehran hour, for clicks over time. Visits are read again
+    from the start of the latest stored hour, and every hour from there is
+    counted afresh, so a repeated sync never counts a visit twice. If Shlink
+    can't say when (an old version, a blip), the counts above still stand."""
     start = state.latest_click_hour()
     since = datetime.fromtimestamp(start, tz=timezone.utc) if start is not None else None
     hours: Counter[int] = Counter()
     try:
         for when in source.visit_times(tag, since=since):
-            hours[int(when.timestamp()) // 3600 * 3600] += 1
+            hours[tehran_hour(when)] += 1
     except ShlinkError as e:
         logger.warning("click_hours_unavailable", extra={"tag": tag, "detail": str(e)})
         return 0

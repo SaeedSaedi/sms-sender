@@ -1,4 +1,5 @@
-"""Scrub Kavenegar API keys out of arbitrary strings.
+"""Scrub secrets out of arbitrary strings: Kavenegar API keys, Telegram bot
+tokens and Slack webhook paths.
 
 A `requests.ConnectionError` text (or anything constructed from `str(e)`)
 typically embeds the full request URL, including the API key in the path
@@ -25,11 +26,20 @@ _KAVENEGAR_KEY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# A Telegram bot token is `<bot id>:<secret>`, in its API's path
+# (`/bot<token>/sendMessage`) and in a notification target
+# (`telegram:<token>:<chat id>`). A Slack webhook's path is its secret.
+_TELEGRAM_TOKEN_RE = re.compile(r"(/bot|telegram:)\d+:[A-Za-z0-9_-]+")
+_SLACK_HOOK_RE = re.compile(r"(hooks\.slack\.com/services/)[A-Za-z0-9/_-]+")
+
 REDACTED = "***"
 
 
 def redact_secrets(text: str) -> str:
-    """Return `text` with any Kavenegar API key in URL form replaced by `***`."""
+    """Return `text` with every Kavenegar API key in URL form, Telegram bot
+    token and Slack webhook path replaced by `***`."""
     if not text:
         return text
-    return _KAVENEGAR_KEY_RE.sub(rf"\1{REDACTED}\2", text)
+    text = _KAVENEGAR_KEY_RE.sub(rf"\1{REDACTED}\2", text)
+    text = _TELEGRAM_TOKEN_RE.sub(rf"\1{REDACTED}", text)
+    return _SLACK_HOOK_RE.sub(rf"\1{REDACTED}", text)

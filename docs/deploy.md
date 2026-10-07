@@ -45,6 +45,14 @@ tests and a sandbox rehearsal. The packages come from PyPI; behind a proxy,
 pass it in:
 `--build-arg HTTPS_PROXY=http://host.docker.internal:8118 --build-arg HTTP_PROXY=…`.
 
+The image also builds its own SQLite, from sqlite.org's source (its version
+and hash are pinned in the `Dockerfile`). Debian's (3.46.1) has the
+WAL-reset bug: a write and a checkpoint at the same instant, on two
+connections, can corrupt a database, and the web, the worker and a send's
+threads write at once. It's fixed from SQLite 3.51.3. The build stops if
+Python doesn't load the new one, and a send logs `sqlite_wal_reset_bug` if
+it ever runs on an affected SQLite.
+
 The image holds no secrets, recipient data or local state (`.dockerignore`).
 
 ## Configuration

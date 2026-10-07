@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import socket
+import stat
 import subprocess
 import sys
 import threading
@@ -374,3 +375,25 @@ def test_the_command_line_will_not_send_from_a_retired_copy(tmp_path, capsys):
 def test_the_sandbox_has_nothing_to_retire(tmp_path):
     with pytest.raises(Refused, match="nothing to retire"):
         local.retire(Place.find(True, _root(tmp_path)))
+
+
+def test_the_data_and_the_logs_are_their_owners_only(tmp_path):
+    """They hold phone numbers. Folders and files made before (with the old
+    0755 / 0644) are tightened at start."""
+    place = _place(tmp_path)
+    for folder in ("db", "segments", "exports", "backups"):
+        (place.data_dir / folder).mkdir(parents=True, exist_ok=True)
+    (place.root / "logs").mkdir(exist_ok=True)
+    made = [place.data_dir / "app.db", place.data_dir / "db" / "coin-7.db",
+            place.data_dir / "segments" / "vip.csv", place.data_dir / "exports" / "coin-7-clickers.csv",
+            place.root / "logs" / "dashboard.log"]
+    for path in made:
+        path.write_text("x", encoding="utf-8")
+        path.chmod(0o644)
+    place.data_dir.chmod(0o755)
+    place.make_private()
+    for folder in (place.data_dir, place.data_dir / "db", place.data_dir / "segments", place.data_dir / "exports",
+                   place.root / "logs"):
+        assert stat.S_IMODE(folder.stat().st_mode) == 0o700, folder
+    for path in made:
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600, path

@@ -12,6 +12,8 @@ from django.http import HttpResponse
 from django.shortcuts import render
 from django.utils import timezone
 
+from sms_sender import csvsafe
+
 from ..accounts.decorators import requires
 from ..privacy import mask_phone
 from .models import AuditEvent
@@ -68,6 +70,8 @@ def audit_csv(request):
     writer = csv.writer(response)
     writer.writerow(["at", "username", "action", "campaign", "ip", "detail"])
     for e in events.iterator():
-        writer.writerow([e.at.astimezone(dt_timezone.utc).isoformat(timespec="seconds"), e.username, e.action,
-                         e.campaign, e.ip or "", json.dumps(_masked(e.detail), ensure_ascii=False, sort_keys=True)])
+        writer.writerow(csvsafe.row([
+            e.at.astimezone(dt_timezone.utc).isoformat(timespec="seconds"), e.username, e.action,
+            e.campaign, e.ip or "", json.dumps(_masked(e.detail), ensure_ascii=False, sort_keys=True),
+        ]))
     return response

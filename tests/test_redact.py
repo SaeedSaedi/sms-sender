@@ -59,3 +59,40 @@ def test_redact_handles_uppercase_host():
     text = f"API.KAVENEGAR.COM/v1/{KEY}/verify/lookup.json"
     out = redact_secrets(text)
     assert KEY not in out
+
+
+TOKEN = "123456789:AAF-secret_token"
+
+
+@pytest.mark.parametrize("text, kept", [
+    (f"HTTPSConnectionPool(host='api.telegram.org', port=443): url: /bot{TOKEN}/sendMessage", "/bot***/sendMessage"),
+    (f"target telegram:{TOKEN}:-100123", "telegram:***:-100123"),
+    ("POST https://hooks.slack.com/services/T000/B000/XXXXSECRET failed", "hooks.slack.com/services/***"),
+])
+def test_bot_tokens_and_webhook_paths_are_scrubbed_too(text, kept):
+    out = redact_secrets(text)
+    assert "AAF-secret_token" not in out and "XXXXSECRET" not in out
+    assert kept in out
+
+
+def test_a_logged_traceback_never_shows_the_key():
+    """`requests` errors carry their URL, and the sender chains them (`from
+    e`): a logged traceback would print the key, so the formatter scrubs the
+    whole line."""
+    import logging
+
+    from sms_sender.logging_config import KeyValueFormatter
+
+    try:
+        try:
+            raise ConnectionError(f"Max retries exceeded with url: /v1/{KEY}/verify/lookup.json")
+        except ConnectionError as cause:
+            raise RuntimeError("the call failed") from cause
+    except RuntimeError:
+        import sys
+
+        record = logging.LogRecord("x", logging.ERROR, __file__, 1, "send_failed", None, sys.exc_info())
+    record.detail = f"telegram:{TOKEN}:42"
+    line = KeyValueFormatter().format(record)
+    assert KEY not in line and "AAF-secret_token" not in line
+    assert "/v1/***/verify" in line

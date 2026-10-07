@@ -81,6 +81,64 @@ def test_legacy_db_is_upgraded_in_place(tmp_path):
     assert len(s.attempts_for("09120000002")) == 1
 
 
+@pytest.mark.parametrize("version", range(1, SCHEMA_VERSION))
+def test_a_db_from_each_released_schema_is_upgraded(tmp_path, version):
+    """A DB as each earlier sms-sender left it opens, upgrades in place, and
+    sends: the steps after its version apply in order, once."""
+    from sms_sender.state import _MIGRATIONS
+
+    db = tmp_path / "old.db"
+    conn = sqlite3.connect(db)
+    for step in _MIGRATIONS[:version]:
+        for statement in step:
+            conn.execute(statement)
+    conn.execute("INSERT INTO recipients (phone, raw, status, first_seen_at) "
+                 "VALUES ('09120000001', '09120000001', 'pending', 1.0)")
+    conn.execute(f"PRAGMA user_version = {version}")
+    conn.commit()
+    conn.close()
+    with StateStore(db) as s:
+        assert user_version(db) == SCHEMA_VERSION
+        assert s.claim("09120000001") is not None
+        s.mark_sent("09120000001", message_id=7, status_code=200, cost=1100)
+        s.record_attempt(phone="09120000001", kind="send", outcome="accepted", started_at=2.0, message_id=7)
+        s.replace_click_hours(0, {3600: 2})
+        assert s.counts() == {SENT: 1} and s.click_hours() == [(3600, 2)]
+
+
+def test_hours_kept_per_utc_hour_are_dropped_for_a_recount(tmp_path):
+    """Schema 9 keeps clicks per Tehran hour. The UTC hours an older version
+    kept can't be split into Tehran hours, so they go; the next clicks sync
+    counts them again from Shlink."""
+    db = tmp_path / "s.db"
+    StateStore(db).close_all()
+    conn = sqlite3.connect(db)
+    conn.execute("INSERT INTO click_hours (hour, clicks) VALUES (1759654800, 4)")
+    conn.execute("PRAGMA user_version = 8")
+    conn.commit()
+    conn.close()
+    with StateStore(db) as s:
+        assert s.click_hours() == [] and s.latest_click_hour() is None
+    assert user_version(db) == SCHEMA_VERSION
+
+
+@pytest.mark.parametrize("version, buggy", [
+    ((3, 46, 1), True),    # Debian trixie's
+    ((3, 51, 2), True),
+    ((3, 51, 3), False),
+    ((3, 50, 6), True),
+    ((3, 50, 7), False),   # a patch release with the fix
+    ((3, 44, 5), True),
+    ((3, 44, 6), False),
+    ((3, 54, 0), False),
+    ((3, 6, 23), False),   # before WAL
+])
+def test_sqlite_versions_with_the_wal_reset_bug_are_known(version, buggy):
+    from sms_sender.state import wal_reset_bug
+
+    assert wal_reset_bug(version) is buggy
+
+
 def test_db_from_a_newer_version_is_refused(tmp_path):
     db = tmp_path / "s.db"
     StateStore(db)

@@ -8,7 +8,6 @@ The operator and the admin have a linked authenticator app; the newcomer,
 an operator too, has none yet."""
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
@@ -17,6 +16,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
+from sms_sender.clicks import tehran_hour
 from sms_sender.state import StateStore
 from sms_sender_web.accounts.models import Profile
 from sms_sender_web.accounts.roles import set_role
@@ -264,7 +264,7 @@ def build_world(data_dir: Path) -> World:
     _test_job(done, operator, approved=True)
     done_store = StateStore(campaign_db(done))
     done_store.record_delivery({PHONES[0]: 10}, checked_at=0)
-    hour = int(time.time()) // 3600 * 3600
+    hour = tehran_hour(timezone.now())
     done_store.replace_click_hours(0, {hour - 5 * 3600: 2, hour - 3 * 3600: 1, hour - 2 * 3600: 4})
     finished = Job.objects.create(
         campaign=done, kind=Job.Kind.SEND, state=Job.State.DONE, requested_by=operator,

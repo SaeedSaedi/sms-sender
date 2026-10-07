@@ -325,7 +325,7 @@ def test_a_recipients_message_is_found_by_number_in_a_post(client_, preset):
     html = _message_of(client_, find="0912 000 0004", segments=["vip", "newbies"])
     assert "گیرنده ۴ از ۴" in html and "09120000004" not in html  # masked, never in full
     html = _message_of(client_, find="09120000004")
-    assert "۰۹۱۲*****۰۴ جزو گیرندگان این گروه‌های مخاطبان نیست." in html
+    assert "\u2066۰۹۱۲*****۰۴\u2069 جزو گیرندگان این گروه‌های مخاطبان نیست." in html
     assert "sms-bubble" not in html
     html = _message_of(client_, find="not a number")
     assert "یک شماره موبایل بنویسید" in html and 'aria-invalid="true"' in html

@@ -11,8 +11,11 @@ HTTP form posts a structured JSON payload so it works as a generic webhook.
 """
 from __future__ import annotations
 
+import ipaddress
 import logging
+import re
 from typing import Any
+from urllib.parse import urlsplit
 
 import requests
 
@@ -56,35 +59,60 @@ def _build_text(s: RunSummary, error: str | None, heading: str | None = None) ->
     return f"{header}\n\n{format_report(s)}"
 
 
+def _post(url: str, payload: dict, timeout: float) -> None:
+    """A target answers for itself: a redirect, which could lead anywhere
+    (an address inside the network too), isn't followed and counts as a
+    failure."""
+    response = requests.post(url, json=payload, timeout=timeout, allow_redirects=False)
+    response.raise_for_status()
+    if response.status_code >= 300:
+        raise requests.HTTPError(f"HTTP {response.status_code}: a redirect, not followed")
+
+
 def _post_slack(webhook_url: str, text: str, timeout: float) -> None:
-    requests.post(webhook_url, json={"text": text}, timeout=timeout).raise_for_status()
+    _post(webhook_url, {"text": text}, timeout)
+
+
+def _telegram(spec: str) -> tuple[str, str]:
+    """`<bot_token>:<chat_id>`. A bot's token has a colon of its own
+    (`123456:ABC…`), so the chat is what follows the last one."""
+    bot_token, _, chat_id = spec.rpartition(":")
+    if not bot_token or not chat_id:
+        raise ValueError("telegram target must be 'telegram:<bot_token>:<chat_id>'")
+    return bot_token, chat_id
 
 
 def _post_telegram(spec: str, text: str, timeout: float) -> None:
-    bot_token, _, chat_id = spec.partition(":")
-    if not bot_token or not chat_id:
-        raise ValueError(
-            f"telegram target must be 'telegram:<bot_token>:<chat_id>', got telegram:{spec!r}"
-        )
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    requests.post(
-        url, json={"chat_id": chat_id, "text": text}, timeout=timeout
-    ).raise_for_status()
+    bot_token, chat_id = _telegram(spec)
+    _post(f"https://api.telegram.org/bot{bot_token}/sendMessage", {"chat_id": chat_id, "text": text}, timeout)
 
 
 def _post_generic(url: str, summary: RunSummary, error: str | None, timeout: float) -> None:
-    payload = {"summary": _summary_to_dict(summary), "error": error}
-    requests.post(url, json=payload, timeout=timeout).raise_for_status()
+    _post(url, {"summary": _summary_to_dict(summary), "error": error}, timeout)
+
+
+# A bot's token (its number, a colon, its secret), then a chat: a number
+# (a group's is negative) or a public @name.
+_TELEGRAM = re.compile(r"\d+:[A-Za-z0-9_-]+:(-?\d+|@[A-Za-z0-9_]{5,32})")
 
 
 def valid_target(target: str) -> bool:
-    """A target notify() knows how to reach."""
+    """A target the dashboard takes: a Slack webhook on Slack's own host, a
+    Telegram bot and chat, or an https:// address that isn't this machine's
+    or a private network's by IP, so an admin can't point the server at its
+    own insides. The CLI's --notify takes any target, as before."""
     if target.startswith("slack:"):
-        return target[len("slack:"):].startswith(("https://", "http://"))
+        return target[len("slack:"):].startswith("https://hooks.slack.com/")
     if target.startswith("telegram:"):
-        bot_token, _, chat_id = target[len("telegram:"):].partition(":")
-        return bool(bot_token and chat_id)
-    return target.startswith(("https://", "http://"))
+        return _TELEGRAM.fullmatch(target[len("telegram:"):]) is not None
+    parts = urlsplit(target)
+    host = parts.hostname or ""
+    if parts.scheme != "https" or not host or host == "localhost" or host.endswith(".localhost"):
+        return False
+    try:
+        return ipaddress.ip_address(host).is_global
+    except ValueError:
+        return True  # a name
 
 
 def notify_text(target: str, text: str, *, timeout: float = DEFAULT_TIMEOUT) -> bool:
@@ -99,7 +127,9 @@ def notify_text(target: str, text: str, *, timeout: float = DEFAULT_TIMEOUT) -> 
         else:
             return False
     except Exception as e:  # noqa: BLE001 — best-effort
-        logger.warning("notify_failed", extra={"target": redact_target(target), "detail": str(e)})
+        # Only the kind of failure: its text would carry the URL, and a
+        # webhook's or a bot's URL holds its secret.
+        logger.warning("notify_failed", extra={"target": redact_target(target), "detail": _failure(e)})
         return False
     logger.info("notify_sent", extra={"target": redact_target(target)})
     return True
@@ -124,16 +154,20 @@ def notify(
         elif target.startswith(("http://", "https://")):
             _post_generic(target, summary, error, timeout)
         else:
-            logger.warning("notify_unknown_scheme", extra={"target": target})
+            logger.warning("notify_unknown_scheme", extra={"target": redact_target(target)})
             return False
     except Exception as e:  # noqa: BLE001 — best-effort
-        logger.warning(
-            "notify_failed",
-            extra={"target": redact_target(target), "detail": str(e)},
-        )
+        logger.warning("notify_failed", extra={"target": redact_target(target), "detail": _failure(e)})
         return False
     logger.info("notify_sent", extra={"target": redact_target(target)})
     return True
+
+
+def _failure(error: Exception) -> str:
+    """`HTTPError 404`, `ConnectTimeout`: what went wrong, without the URL."""
+    response = getattr(error, "response", None)
+    status = getattr(response, "status_code", None)
+    return f"{type(error).__name__} {status}" if status else type(error).__name__
 
 
 def redact_target(target: str) -> str:

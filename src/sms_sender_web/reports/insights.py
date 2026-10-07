@@ -325,12 +325,7 @@ def send_hours(now: datetime | None = None) -> dict | None:
     link of their own at that hour and the share who clicked it, and the
     clicks made in that hour. The best hour to send is the one with the
     highest share, among hours with at least MIN_SENT people. None before
-    anything was sent.
-
-    Clicks are stored per UTC hour (`clicks._sync_hours`), which in Tehran
-    runs from half past to half past; each is put under the Tehran hour it
-    starts in, as the report's clicks chart does, so the page says "give or
-    take half an hour"."""
+    anything was sent. Clicks are stored per Tehran hour (`clicks._sync_hours`)."""
     offset = int((now or timezone.now()).astimezone(TEHRAN).utcoffset().total_seconds())
     sent: Counter[int] = Counter()
     clicked: Counter[int] = Counter()

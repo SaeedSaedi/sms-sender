@@ -60,6 +60,19 @@ def test_a_file_of_numbers_can_be_added(operator_client):
     assert listed() == ["09120000001", "09120000002"]
 
 
+def test_a_file_too_big_is_refused_without_reading_it_all(operator_client, monkeypatch):
+    from sms_sender_web.segments import files
+
+    seen, parse = [], files.parse
+    monkeypatch.setattr(files, "MAX_BYTES", 100)
+    monkeypatch.setattr(files, "parse", lambda data: (seen.append(len(data)), parse(data))[1])
+    operator_client.post("/suppression/", {
+        "action": "add", "file": SimpleUploadedFile("big.csv", b"09120000001\n" * 1000),
+    })
+    assert seen == [101]  # the limit and one byte: enough to know it's too big
+    assert listed() == []
+
+
 def test_nothing_to_add_is_explained(operator_client):
     html = operator_client.post("/suppression/", {"action": "add", "numbers": " "}).content.decode()
     assert "دست‌کم یک شماره وارد کنید" in html

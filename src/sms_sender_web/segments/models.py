@@ -82,7 +82,3 @@ def ready_segments(slugs: list[str]) -> list[Segment | None]:
     being replaced) or its file is gone."""
     ready = {seg.slug: seg for seg in Segment.objects.filter(slug__in=slugs, status=Segment.Status.READY)}
     return [seg if seg is not None and seg.path.exists() else None for seg in map(ready.get, slugs)]
-
-
-def campaign_segments(settings: dict | None) -> list[Segment | None]:
-    return ready_segments(campaign_slugs(settings))

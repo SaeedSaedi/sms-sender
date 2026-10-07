@@ -24,6 +24,7 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_POST
 
+from sms_sender import csvsafe
 from sms_sender.allowlist import allowlist
 from sms_sender.conversions import ConversionFileError, import_conversions, read_rows
 from sms_sender.clicks import (
@@ -44,7 +45,7 @@ from sms_sender.state import DELIVERY_GROUPS, REMOVED, SENT, UNCHECKED, Recipien
 from ..accounts.decorators import requires
 from ..audit.record import record
 from ..campaigns.present import say
-from ..campaigns.terms import NUMBERS_REMOVED, stop_reason
+from ..campaigns.terms import NUMBERS_REMOVED, SEND_AGAIN, SEND_AGAIN_CLI, stop_reason
 from ..dashboard.terms import CLICK_FILTERS, DELIVERY_FILTERS, DELIVERY_STATUS, STATUS_ORDER
 from ..dashboard.templatetags.fa import fa_number, jalali, status_label
 from ..jobs.engine import Engine
@@ -171,10 +172,10 @@ def report(request, slug: str):
         "slug": slug,
         # Plan 06, D2: the counts stay, the numbers and what needs them don't.
         "numbers_removed": bool(removed_at),
-        "numbers_removed_line": say(NUMBERS_REMOVED, {
+        "numbers_removed_line": " ".join((say(NUMBERS_REMOVED, {
             "when": jalali(datetime.fromtimestamp(removed_at, tz=timezone.utc), "%Y/%m/%d"),
             "months": SystemSettings.load().retention_months,
-        }) if removed_at else "",
+        }), str(SEND_AGAIN if campaign else SEND_AGAIN_CLI))) if removed_at else "",
         "campaign": campaign,
         "name": campaign.name if campaign else (store.get_meta("campaign") or slug),
         "template": json.loads(stored).get("template") if stored else None,
@@ -252,7 +253,7 @@ def _csv(filename: str, header: list[str], rows) -> HttpResponse:
     response.write("﻿")
     writer = csv.writer(response)
     writer.writerow(header)
-    writer.writerows(rows)
+    writer.writerows(csvsafe.row(r) for r in rows)  # formulas in people's text stay text
     return response
 
 

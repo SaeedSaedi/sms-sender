@@ -5,6 +5,8 @@ import logging
 import logging.handlers
 from pathlib import Path
 
+from .redact import redact_secrets
+
 _RESERVED = {
     "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
     "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
@@ -14,7 +16,9 @@ _RESERVED = {
 
 
 class KeyValueFormatter(logging.Formatter):
-    """Renders `extra={...}` fields as key=value pairs after the message."""
+    """Renders `extra={...}` fields as key=value pairs after the message.
+    The whole line is scrubbed of secrets last, its traceback too: an error
+    from `requests` carries its URL, and Kavenegar's key is part of it."""
 
     def format(self, record: logging.LogRecord) -> str:
         base = (
@@ -32,7 +36,7 @@ class KeyValueFormatter(logging.Formatter):
             base += " " + " ".join(extras)
         if record.exc_info:
             base += "\n" + self.formatException(record.exc_info)
-        return base
+        return redact_secrets(base)
 
 
 def setup(

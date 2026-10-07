@@ -11,6 +11,7 @@ import jdatetime
 from django import template
 from django.utils import timezone
 
+from sms_sender.phone import ASCII_DIGITS
 from sms_sender.window import TEHRAN
 
 from .fa import fa_digits
@@ -20,7 +21,6 @@ register = template.Library()
 DAYS = 30            # campaigns.forms.SCHEDULE_MAX_DAYS: never further ahead
 STEP_MINUTES = 30    # the times offered
 WEEKDAYS = ("ش", "ی", "د", "س", "چ", "پ", "ج")  # Saturday first
-_ASCII = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
 
 
 def _now() -> datetime:
@@ -75,7 +75,7 @@ def weekdays() -> tuple[str, ...]:
 
 def _normalize(text: str) -> str:
     """A date typed or posted before ("۱۴۰۵/۷/۱۵") in the cells' form."""
-    parts = re.split(r"[/\-.]", (text or "").strip().translate(_ASCII))
+    parts = re.split(r"[/\-.]", (text or "").strip().translate(ASCII_DIGITS))
     if len(parts) != 3 or not all(p.isdigit() for p in parts):
         return ""
     year, month, day = (int(p) for p in parts)
