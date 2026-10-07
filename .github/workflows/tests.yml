@@ -23,6 +23,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: pip install -e ".[dev,web]"
+      # Bugs, not style (pyproject.toml's [tool.ruff]).
+      - run: ruff check .
       - run: pytest
       # A 100,000-recipient campaign's pages, each within its time budget.
       # The budgets are the Mac's; these runners take about 2.5 times as long.

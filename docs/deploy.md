@@ -38,7 +38,11 @@ docker compose build                      # tags sms-sender-dashboard:latest
 IMAGE_TAG=$(git rev-parse --short HEAD) docker compose build   # tag it, for rollbacks
 ```
 
-The build installs packages from PyPI. Behind a proxy, pass it in:
+The build installs exactly the versions in `requirements/server.lock`, each
+checked against its hash, so two builds of one commit are the same. Updating
+them is a change of its own (`requirements/server.in` says how), with the
+tests and a sandbox rehearsal. The packages come from PyPI; behind a proxy,
+pass it in:
 `--build-arg HTTPS_PROXY=http://host.docker.internal:8118 --build-arg HTTP_PROXY=…`.
 
 The image holds no secrets, recipient data or local state (`.dockerignore`).

@@ -2,7 +2,10 @@
 show live progress without a terminal."""
 from __future__ import annotations
 
+import threading
 import time
+
+from django.db import connection
 
 from sms_sender.runner import SendCounts
 
@@ -20,12 +23,16 @@ class JobReporter:
         self._progress: dict = {}
         self._links_started: float | None = None
         self.last_note: str | None = None  # e.g. why a run halted
+        self._thread = threading.get_ident()
 
     def note(self, text: str, key: str = "note", **fields: object) -> None:
         """The engine's English stays in `text` (logs, developers); the page
         shows `key` and its `data` in Persian (campaigns/terms.NOTES)."""
         self.last_note = text
-        JobEvent.objects.create(job_id=self.job_id, key=key, text=text, data=fields)
+        try:
+            JobEvent.objects.create(job_id=self.job_id, key=key, text=text, data=fields)
+        finally:
+            self._done_writing()
 
     def links(self, done: int, total: int) -> None:
         """The link stage's progress, with a time left from the pace so far
@@ -61,4 +68,14 @@ class JobReporter:
 
     def _save(self) -> None:
         self._last = time.monotonic()
-        Job.objects.filter(pk=self.job_id).update(progress=dict(self._progress))
+        try:
+            Job.objects.filter(pk=self.job_id).update(progress=dict(self._progress))
+        finally:
+            self._done_writing()
+
+    def _done_writing(self) -> None:
+        """The engine's own threads (the link stage's) report too. Django
+        opens a connection per thread and nothing closes theirs when they
+        end, so it closes after each of their writes."""
+        if threading.get_ident() != self._thread:
+            connection.close()

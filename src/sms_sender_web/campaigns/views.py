@@ -18,7 +18,6 @@ from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods, require_POST
 
 from sms_sender.links import DEFAULT_RATE as DEFAULT_LINK_RATE
-from sms_sender.reconcile import DEFAULT_MIN_AGE_SEC
 from sms_sender.state import FAILED_PERMANENT, SENT, StateStore
 from sms_sender.rate import parse_rate
 from sms_sender.sender import TOKEN_MAX_SPACES

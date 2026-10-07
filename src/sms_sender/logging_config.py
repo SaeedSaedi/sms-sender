@@ -43,9 +43,11 @@ def setup(
 ) -> None:
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
-    # Wipe any prior handlers so re-runs (and tests) don't double-log.
+    # Wipe any prior handlers so re-runs (and tests) don't double-log, and
+    # close them, so a log file isn't left open behind.
     for h in list(root.handlers):
         root.removeHandler(h)
+        h.close()
 
     fmt = KeyValueFormatter()
 

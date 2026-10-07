@@ -13,7 +13,6 @@ pytest.importorskip("django")
 from django.test import Client  # noqa: E402
 
 from sms_sender.clicks import ATTRIBUTION_HEADER, sync_clicks  # noqa: E402
-from sms_sender.state import StateStore  # noqa: E402
 from sms_sender_web.api import views as api_views  # noqa: E402
 from sms_sender_web.api.models import ApiToken  # noqa: E402
 from sms_sender_web.api.tokens import issue, revoke  # noqa: E402

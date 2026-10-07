@@ -7,6 +7,7 @@ import sqlite3
 import stat
 import subprocess
 import sys
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -55,7 +56,7 @@ def data(tmp_path):
 
 
 def rows(path, table="job"):
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn:
         return conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
 
 

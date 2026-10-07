@@ -1,6 +1,5 @@
-# The Persian campaign dashboard, for local testing with Docker Compose
-# (Phase 3). Production hosting is DevOps' decision: the image only needs
-# environment variables, the data/ volume, and /healthz.
+# The Persian campaign dashboard's server image (docs/deploy.md). It only
+# needs environment variables, the data/ volume, and /healthz.
 FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -11,9 +10,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DJANGO_STATIC_ROOT=/app/static
 
 WORKDIR /app
+# Exactly the locked versions, each checked against its hash, so two builds
+# of one commit install the same thing. Updating: requirements/server.in.
+COPY requirements/server.lock ./requirements/
+RUN pip install --require-hashes -r requirements/server.lock
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN pip install ".[web]"
+RUN pip install --no-deps .
 COPY manage.py ./
 # Static files are collected at build time; this key is only for that step.
 RUN DJANGO_SECRET_KEY=collectstatic-only python manage.py collectstatic --noinput

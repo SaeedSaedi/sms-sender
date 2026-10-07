@@ -99,7 +99,6 @@ def test_wizard_subcommand_errors_without_tty():
 def test_wizard_send_happy_path(tmp_path, monkeypatch):
     inp = tmp_path / "in.txt"
     inp.write_text("09120000001\n09120000002\n", encoding="utf-8")
-    db = tmp_path / "s.db"
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("KAVENEGAR_API_KEY", "k")
 

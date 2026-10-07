@@ -52,9 +52,10 @@ def with_more(campaign: Campaign, *slugs: str) -> Campaign:
 
 
 def recipient_segments(campaign: Campaign) -> dict[str, str]:
-    rows = StateStore(campaign_db(campaign))._conn().execute(
-        "SELECT phone, segment FROM recipients WHERE phone NOT LIKE 'INVALID:%'"
-    ).fetchall()
+    with StateStore(campaign_db(campaign)) as store:
+        rows = store._conn().execute(
+            "SELECT phone, segment FROM recipients WHERE phone NOT LIKE 'INVALID:%'"
+        ).fetchall()
     return dict(rows)
 
 

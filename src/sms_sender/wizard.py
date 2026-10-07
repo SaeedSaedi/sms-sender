@@ -107,7 +107,7 @@ def _wizard_send() -> None:
         click.echo("No valid numbers in the file. Aborting.")
         return
     if loaded.invalid:
-        if q.confirm(f"Show first 5 invalid rows?", default=False).ask():
+        if q.confirm("Show first 5 invalid rows?", default=False).ask():
             for inv in loaded.invalid[:5]:
                 click.echo(f"  line {inv.line_no}: {inv.raw!r} — {inv.reason}")
 

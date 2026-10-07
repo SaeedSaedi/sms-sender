@@ -186,7 +186,7 @@ def test_exports_land_in_data_exports(tmp_path, monkeypatch):
 
     result = CliRunner().invoke(cli, ["export-clickers", "--campaign", "coin-7"])
     assert result.exit_code == 0, result.output
-    rows = list(csv.reader(Path("data/exports/coin-7-clickers.csv").open(encoding="utf-8")))
+    rows = list(csv.reader(Path("data/exports/coin-7-clickers.csv").read_text(encoding="utf-8").splitlines()))
     assert rows[1][:3] == [A, "u-1", "ok"] and len(rows) == 2
 
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-import pytest
 
 from sms_sender.runner import Runner, format_report
 from sms_sender.sender import (
@@ -21,8 +20,6 @@ from sms_sender.sender import (
 from sms_sender.state import (
     FAILED_PERMANENT,
     FAILED_RETRIABLE,
-    NEEDS_REVIEW,
-    PENDING,
     SENT,
     UNKNOWN,
     StateStore,
