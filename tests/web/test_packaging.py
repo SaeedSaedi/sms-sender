@@ -57,6 +57,15 @@ def test_every_apps_templates_ship_in_the_package():
     assert missing == []
 
 
+def test_the_image_brings_a_sqlite_without_the_wal_reset_bug():
+    """Debian's SQLite (3.46.1) has the WAL-reset bug, fixed in 3.51.3: the
+    image builds its own, and its build stops if Python loads another."""
+    text = DOCKERFILE.read_text(encoding="utf-8")
+    version = re.search(r"sqlite-autoconf-(\d)(\d\d)(\d\d)\d\d\.tar\.gz", text)
+    assert version and tuple(int(part) for part in version.groups()) >= (3, 51, 3)
+    assert "sqlite_version_info < (3, 51, 3)" in text and "LD_LIBRARY_PATH=/opt/sqlite/lib" in text
+
+
 def test_the_image_serves_with_threads():
     """Browsers reach gunicorn directly and open idle connections ahead of
     time. A sync worker waits on one until it's killed, and a page gets

@@ -281,6 +281,16 @@ def test_its_report_keeps_the_counts_without_the_numbers(operator_client, places
     assert operator_client.post("/reports/old/reveal/", {"row": "1"}).status_code == 404
 
 
+def test_a_cli_campaigns_report_offers_what_it_can_do(operator_client, places):
+    """A campaign the CLI made has no "duplicate": its report says to start a
+    new campaign instead."""
+    sent_long_ago(places, "cli-only", 400)
+    retention.remove_old_numbers()
+    html = operator_client.get("/reports/cli-only/").content.decode()
+    assert "شماره‌های آن در" in html and "کمپین تازه‌ای بسازید" in html
+    assert "ساخت کمپین مشابه" not in html
+
+
 def test_a_segment_without_its_file_keeps_its_counts(operator_client, places):
     a_segment(places, "unused", 400)
     retention.remove_old_numbers()

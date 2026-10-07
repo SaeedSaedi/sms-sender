@@ -28,7 +28,8 @@ class FakePost:
     def __call__(self, url, *, json=None, timeout=None, **kwargs):
         if self.raise_on_post:
             raise self.raise_on_post
-        self.calls.append({"url": url, "json": json, "timeout": timeout})
+        self.calls.append({"url": url, "json": json, "timeout": timeout,
+                           "allow_redirects": kwargs.get("allow_redirects", True)})
         return _FakeResponse(self.status_code)
 
 
@@ -79,12 +80,12 @@ def test_slack_halted_summary_says_halted(monkeypatch):
 def test_telegram_post_shape(monkeypatch):
     fp = FakePost()
     monkeypatch.setattr(notify_module.requests, "post", fp)
-    ok = notify("telegram:123456:abcdef:99999", _summary())
-    # bot_token = "123456", chat_id = "abcdef:99999" (after first colon)
+    ok = notify("telegram:123456:ABC-def_1:-100123", _summary())
+    # A bot's token holds a colon of its own: the chat follows the last one.
     assert ok is True
     call = fp.calls[0]
-    assert call["url"] == "https://api.telegram.org/bot123456/sendMessage"
-    assert call["json"]["chat_id"] == "abcdef:99999"
+    assert call["url"] == "https://api.telegram.org/bot123456:ABC-def_1/sendMessage"
+    assert call["json"]["chat_id"] == "-100123"
     assert "text" in call["json"]
 
 
@@ -185,3 +186,45 @@ def test_generic_payload_never_carries_api_key_when_summary_redacted(monkeypatch
     serialized = str(payload)
     assert SECRET not in serialized
     assert "***" in serialized
+
+
+def test_a_failure_logs_what_went_wrong_never_the_url(monkeypatch, caplog):
+    """A failed call's text would carry its URL, and a bot's or a webhook's
+    URL holds its secret."""
+    secret = "https://api.telegram.org/bot123:SECRET/sendMessage"
+    fp = FakePost(raise_on_post=ConnectionError(f"Max retries exceeded with url: {secret}"))
+    monkeypatch.setattr(notify_module.requests, "post", fp)
+    with caplog.at_level("WARNING"):
+        assert notify("telegram:123:SECRET:42", _summary()) is False
+    (record,) = [r for r in caplog.records if r.message == "notify_failed"]
+    assert record.detail == "ConnectionError"
+    assert "SECRET" not in record.detail and "SECRET" not in record.target
+
+
+def test_a_redirect_is_never_followed(monkeypatch):
+    """A target answers for itself; a redirect could lead inside the network."""
+    fp = FakePost(status_code=302)
+    monkeypatch.setattr(notify_module.requests, "post", fp)
+    assert notify("https://example.com/hook", _summary()) is False
+    assert fp.calls[0]["allow_redirects"] is False
+
+
+@pytest.mark.parametrize("target, ok", [
+    ("slack:https://hooks.slack.com/services/T0/B0/x", True),
+    ("slack:http://hooks.slack.com/services/T0/B0/x", False),
+    ("slack:https://example.com/services/x", False),
+    ("telegram:123456:ABC-def_1:-100123", True),
+    ("telegram:123456:ABC-def_1:@team_alerts", True),
+    ("telegram:123456:42", False),          # the token without its secret
+    ("telegram:no-chat-id", False),
+    ("https://hooks.example.com/sms", True),
+    ("http://hooks.example.com/sms", False),
+    ("https://127.0.0.1/x", False),
+    ("https://169.254.169.254/latest/meta-data", False),
+    ("https://10.0.0.5/hook", False),
+    ("https://[::1]/x", False),
+    ("https://localhost:8000/x", False),
+    ("ftp://example.com/x", False),
+])
+def test_the_dashboard_takes_only_known_kinds_of_target(target, ok):
+    assert notify_module.valid_target(target) is ok

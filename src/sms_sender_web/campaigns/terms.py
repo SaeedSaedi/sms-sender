@@ -324,7 +324,11 @@ COUNTS = {
 }
 TEST_HINT = _("It goes to your own number, {phone}. Ctrl+Enter does the same.")
 # Plan 06, D2: a campaign whose numbers were removed.
-NUMBERS_REMOVED = _("Its phone numbers were removed on {when}: numbers are kept for {months} months after a campaign's last send. Its counts, costs, deliveries and clicks stay, and it can't send again. To send its message once more, duplicate it.")
+NUMBERS_REMOVED = _("Its phone numbers were removed on {when}: numbers are kept for {months} months after a campaign's last send. Its counts, costs, deliveries and clicks stay, and it can't send again.")
+# What sends its message once more: the dashboard's campaigns are duplicated;
+# one the CLI made has no "duplicate".
+SEND_AGAIN = _("To send its message once more, duplicate it.")
+SEND_AGAIN_CLI = _("To send its message once more, start a new campaign.")
 TEST_HINT_TEAM = _("It goes to your own number, {phone}, then to the team's numbers ({n}). Ctrl+Enter does the same.")
 SAMPLE_LINE = _("Recipient {n} of {count}")
 SAMPLE_MISSING = _("{phone} isn't among these segments' recipients.")

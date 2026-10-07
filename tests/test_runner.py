@@ -938,23 +938,46 @@ def test_already_done_counts_pre_sent_rows(tmp_path):
 
 
 def test_already_done_counts_lost_claim_race(tmp_path):
-    """If claim() returns None mid-fan-out (e.g., the row was concurrently
-    flipped to sent by another process), the runner should count it as
-    already_done rather than dropping it."""
-    inp = write_input(tmp_path, ["09120000001"])
+    """claim() is the dedup gate: a row another process sent after this run
+    read its queue is never sent again, and counts as already done."""
+    first, second = "09120000001", "09120000002"
+    inp = write_input(tmp_path, [first, second])
     state = StateStore(tmp_path / "s.db")
-    # Pre-flip the row to sent so claim() returns None on the worker.
-    state.upsert_pending([("09120000001", "09120000001")])
-    state.claim("09120000001")
-    state.mark_sent("09120000001", message_id=1, status_code=200)
 
-    sender = FakeSender()
-    summary = Runner(
-        input_path=inp, state=state, sender=sender, workers=1,
-    ).run()
-    # Sender never gets called for an already-sent row.
-    assert sender.calls == []
-    assert summary.sent == 0
+    class AnotherProcessSendsTheSecond(FakeSender):
+        def send(self, phone, tokens=None):
+            if phone == first:
+                with StateStore(tmp_path / "s.db") as other:
+                    assert other.claim(second) is not None
+                    other.mark_sent(second, message_id=2, status_code=200)
+            return super().send(phone, tokens)
+
+    sender = AnotherProcessSendsTheSecond()
+    summary = Runner(input_path=inp, state=state, sender=sender, workers=1).run()
+    assert sender.calls == [first]
+    assert (summary.sent, summary.already_done) == (1, 1)
+    assert state.counts() == {SENT: 2}
+
+
+def test_a_stop_while_waiting_for_the_rate_limit_claims_nothing(tmp_path):
+    """The next recipient waits for the rate limiter before its claim; a
+    pause that comes meanwhile leaves it unclaimed and unsent."""
+    phones = ["09120000001", "09120000002", "09120000003"]
+    inp = write_input(tmp_path, phones)
+    state = StateStore(tmp_path / "s.db")
+
+    class PauseSoonAfterTheFirst(FakeSender):
+        def send(self, phone, tokens=None):
+            if not self.calls:
+                threading.Timer(0.1, runner.cancel).start()
+            return super().send(phone, tokens)
+
+    sender = PauseSoonAfterTheFirst()
+    # 1/s: the first goes at once, the next waits a second for its turn.
+    runner = Runner(input_path=inp, state=state, sender=sender, workers=1, rate_per_sec=1.0)
+    summary = runner.run()
+    assert summary.stopped and sender.calls == [phones[0]]
+    assert state.counts() == {SENT: 1, PENDING: 2}
 
 
 # ---------- per-recipient token columns ----------
@@ -1088,3 +1111,13 @@ def test_a_debug_mode_account_is_named(tmp_path):
 def test_a_run_to_the_end_has_no_stop_reason(tmp_path):
     summary, _ = _run(tmp_path, FakeSender(), ["09120000001"])
     assert (summary.stop_reason, summary.stop_fields) == (None, {})
+
+
+def test_a_send_on_a_sqlite_with_the_wal_reset_bug_says_so(tmp_path, monkeypatch, caplog):
+    from sms_sender import runner as runner_module
+
+    monkeypatch.setattr(runner_module, "wal_reset_bug", lambda: True)
+    inp = write_input(tmp_path, ["09120000001"])
+    with caplog.at_level("WARNING"):
+        Runner(input_path=inp, state=StateStore(tmp_path / "s.db"), sender=FakeSender(), workers=1).run()
+    assert [r.fixed_in for r in caplog.records if r.message == "sqlite_wal_reset_bug"] == ["3.51.3"]

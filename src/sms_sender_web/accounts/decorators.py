@@ -21,5 +21,7 @@ def requires(capability: str):
             if not can(request.user, capability):
                 return forbidden(request)
             return view(request, *args, **kwargs)
+        # Read by tests/web/test_access.py: every view says who may open it.
+        wrapped.required_capability = capability
         return wrapped
     return decorator

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable
 
+from .phone import ASCII_DIGITS
 from .state import StateStore
 
 # Header names, case and spaces aside.
@@ -19,7 +20,6 @@ REF_NAMES = {"r", "ref", "reference"}
 USER_ID_NAMES = {"user_id", "userid", "user", "user id"}
 VALUE_NAMES = {"value", "amount", "revenue"}
 WHEN_NAMES = {"converted_at", "date", "time", "at", "timestamp"}
-_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
 
 
 @dataclass(frozen=True)
@@ -56,12 +56,12 @@ def _column(header: list[str], names: set[str]) -> int | None:
 
 
 def _number(text: str) -> float | None:
-    text = text.strip().translate(_DIGITS).replace(",", "").replace("٬", "")
+    text = text.strip().translate(ASCII_DIGITS).replace(",", "").replace("٬", "")
     return float(text) if text else None
 
 
 def _moment(text: str) -> float | None:
-    text = text.strip().translate(_DIGITS)
+    text = text.strip().translate(ASCII_DIGITS)
     if not text:
         return None
     if re.fullmatch(r"\d+(\.\d+)?", text):

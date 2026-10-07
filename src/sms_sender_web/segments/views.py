@@ -2,6 +2,7 @@
 the engine will make of it."""
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 
 from django.conf import settings as django_settings
@@ -17,6 +18,7 @@ from .. import live
 from ..accounts.decorators import requires
 from ..audit.record import record
 from ..dashboard.templatetags.fa import jalali
+from sms_sender import csvsafe
 from sms_sender.input_loader import SLUG_RE
 from sms_sender.state import StateStore
 
@@ -203,8 +205,13 @@ def segment_download(request, slug: str):
     if not segment.path.exists():
         raise Http404
     record("segment_downloaded", request=request, segment=segment.slug)
-    response = HttpResponse("\ufeff" + segment.path.read_text(encoding="utf-8"), content_type="text/csv; charset=utf-8")
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = f'attachment; filename="{segment.slug}.csv"'
+    response.write("\ufeff")
+    # The copy on disk stays exactly as the engine reads it; the download is
+    # for a spreadsheet, so a cell that would run as a formula stays text.
+    with segment.path.open(encoding="utf-8", newline="") as f:
+        csv.writer(response).writerows(csvsafe.row(r) for r in csv.reader(f))
     return response
 
 

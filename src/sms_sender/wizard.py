@@ -20,7 +20,7 @@ from typing import Any, Callable
 
 import click
 
-from . import input_loader
+from . import csvsafe, input_loader
 from .config import ENV_API_KEY
 from .profile import DEFAULT_CONFIG_NAME, list_profiles, load_profile
 from .rate import parse_rate
@@ -520,8 +520,8 @@ def _wizard_export_failed() -> None:
         w = _csv.writer(f)
         w.writerow(["phone_or_raw", "raw", "status_code", "attempts", "last_error"])
         for row in StateStore(db_path).iter_failed_permanent():
-            w.writerow([row["phone"], row["raw"], row["status_code"],
-                        row["attempts"], row["last_error"]])
+            w.writerow(csvsafe.row([row["phone"], row["raw"], row["status_code"],
+                                    row["attempts"], row["last_error"]]))
             n += 1
     click.echo(f"Wrote {n} rows to {p}")
 

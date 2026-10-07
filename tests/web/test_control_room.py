@@ -14,6 +14,7 @@ pytest.importorskip("django")
 
 from django.utils import timezone  # noqa: E402
 
+from sms_sender.clicks import tehran_hour  # noqa: E402
 from sms_sender.state import StateStore  # noqa: E402
 from sms_sender.window import TEHRAN  # noqa: E402
 from sms_sender_web.dashboard import activity, control  # noqa: E402
@@ -61,7 +62,8 @@ def sent(tmp_path):
         ("09120000003", three_days_ago, 3020, None, None),
         ("09120000004", month_ago, 3020, 10, None),
     ])
-    coin.replace_click_hours(0, {int(today) // 3600 * 3600: 5, int(three_days_ago) // 3600 * 3600: 2})
+    coin.replace_click_hours(0, {tehran_hour(datetime.fromtimestamp(today, TEHRAN)): 5,
+                                 tehran_hour(datetime.fromtimestamp(three_days_ago, TEHRAN)): 2})
     # A test SMS's call record, with its cost.
     coin._conn().execute("INSERT INTO attempts (phone, kind, outcome, started_at, cost) "
                          "VALUES ('09120000099', 'test', 'accepted', ?, 3020)", (today,))

@@ -121,6 +121,30 @@ def test_a_send_job_runs_to_the_end(campaign):
     assert counts(campaign) == {SENT: 6}
 
 
+def test_a_send_and_a_test_sms_keep_the_mac_awake(campaign, monkeypatch):
+    import contextlib
+
+    from sms_sender_web.jobs import worker as worker_module
+
+    held = []
+
+    @contextlib.contextmanager
+    def recording():
+        held.append("awake")
+        yield None
+        held.append("may sleep")
+
+    class Watching(FakeKavenegar):
+        def send(self, phone, tokens=None):
+            assert held[-1] == "awake"
+            return super().send(phone, tokens)
+
+    monkeypatch.setattr(worker_module, "awake", recording)
+    queue_send(campaign)
+    assert make_worker(FakeEngine(Watching())).run_once().state == Job.State.DONE
+    assert held == ["awake", "may sleep"]
+
+
 def test_the_smoke_test_option_reaches_the_runner(campaign):
     job = queue_send(campaign)
     Job.objects.filter(pk=job.pk).update(params={"smoke_test": True})

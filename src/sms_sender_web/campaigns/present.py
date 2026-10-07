@@ -16,13 +16,17 @@ from .terms import (
 )
 
 _CODE = re.compile(r"^\[(\d+)\]")
+# After Persian words, Persian digits count as Arabic numbers, so a masked
+# number's groups would show in reverse order: it reads left to right inside
+# an isolate (LRI … PDI), as `|ltr` does on a page.
+_LTR = "\u2066{}\u2069"
 
 
 def _shown(name: str, value) -> str:
     if name == "token":  # an identifier: %token2 keeps its Latin digit
         return str(value)
     if name == "phone":
-        return fa_digits(mask_phone(str(value)))
+        return _LTR.format(fa_digits(mask_phone(str(value))))
     if name == "changed":
         names = dict.fromkeys(str(SETTING_NAMES.get(v, v)) for v in (value or []))
         return "، ".join(names)

@@ -180,3 +180,13 @@ def test_a_send_waits_while_its_window_is_closed(world):
     assert Worker(worker_id="w1").resume_when_window_opens() == 0
     send.refresh_from_db()
     assert send.state == Job.State.PAUSED
+
+
+def test_a_masked_number_in_a_sentence_reads_left_to_right():
+    """After Persian words, Persian digits count as Arabic numbers, so the
+    groups of a masked number would show in reverse order (۱۰*****۰۹۱۵).
+    It is isolated left to right (LRI … PDI)."""
+    from sms_sender_web.campaigns.present import say
+
+    line = say("ارسال پیامک آزمایشی به {phone}.", {"phone": "09151234510"})
+    assert line == "ارسال پیامک آزمایشی به \u2066۰۹۱۵*****۱۰\u2069."

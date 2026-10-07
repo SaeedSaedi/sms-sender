@@ -54,8 +54,8 @@ pytest -k "claim or in_flight"           # by name pattern
 pytest -m e2e                            # browser tests: pip install -e ".[dev,web,e2e]" + Google Chrome
 E2E_SHOTS=/tmp/shots pytest -m e2e       # + a screenshot of every page at every width
 E2E_UPDATE_BASELINE=1 pytest -m e2e tests/web/e2e/test_pages.py   # rewrite baseline.json
-pytest -m perf                           # 100,000-recipient pages under 1 s; every test-world page under 300 ms
-ruff check .                             # bugs, not style ([tool.ruff] in pyproject.toml); CI runs it (PERF_SCALE multiplies both; CI: 2.5)
+pytest -m perf                           # 100,000-recipient pages under 1 s; every test-world page under 300 ms (PERF_SCALE multiplies both; CI: 2.5)
+ruff check .                             # bugs, not style ([tool.ruff] in pyproject.toml); CI runs it
 ```
 
 CI (`.github/workflows/tests.yml`) runs `pytest` and `pytest -m perf` on Python 3.10 (the `requires-python` floor) and 3.14, and `pytest -m e2e`, for pushes to `main` and every PR. Code must keep working on 3.10.
@@ -103,7 +103,7 @@ Settings are what the campaign *sends* — `runner.campaign_settings`: template,
 
 ### Notifications ([notify.py](src/sms_sender/notify.py))
 
-`notify(target, summary, error=None)` is best-effort and never raises. The `target` URL scheme picks the transport: `slack:<webhook>`, `telegram:<bot_token>:<chat_id>`, or plain `http(s)://` for a generic JSON webhook. The Slack/Telegram forms send the rendered report; the generic form posts a structured payload (`{"summary": {...}, "error": ...}`). On failure, a warning is logged with a redacted target — Slack webhooks and Telegram tokens are secrets and never appear in logs. Called once at the end of `cli._do_send`.
+`notify(target, summary, error=None)` is best-effort and never raises. The `target` URL scheme picks the transport: `slack:<webhook>`, `telegram:<bot_token>:<chat_id>` (a bot's token has a colon of its own, so the chat follows the last one), or plain `http(s)://` for a generic JSON webhook. The Slack/Telegram forms send the rendered report; the generic form posts a structured payload (`{"summary": {...}, "error": ...}`). On failure, a warning is logged with a redacted target and only the error's kind (its text would carry the URL) — Slack webhooks and Telegram tokens are secrets and never appear in logs. A redirect is never followed; it counts as a failure. The dashboard takes fewer targets than `--notify` (`valid_target`): Slack's own `https://hooks.slack.com/`, a Telegram bot and chat, or an `https://` address that isn't localhost or a non-public IP. Called once at the end of `cli._do_send`.
 
 ### Rate limiting ([rate.py](src/sms_sender/rate.py))
 
@@ -241,8 +241,9 @@ The CLI still sends one `--input` per run.
 
 ### Clicks ([clicks.py](src/sms_sender/clicks.py))
 
-`sms-sender clicks` polls Shlink (`visits_by_tag("campaign-<slug>")`; Shlink has had no webhooks since 4.0) and stores each link's `nonBots` count on its row. It also keeps clicks per hour (`click_hours`, schema v7) from `ShlinkClient.visit_times` (`/tags/{tag}/visits`, bots excluded):
+`sms-sender clicks` polls Shlink (`visits_by_tag("campaign-<slug>")`; Shlink has had no webhooks since 4.0) and stores each link's `nonBots` count on its row. It also keeps clicks per Tehran hour (`click_hours`: the hour's start in unix seconds, half past in UTC; `clicks.tehran_hour`) from `ShlinkClient.visit_times` (`/tags/{tag}/visits`, bots excluded):
 - it reads again from the start of the latest stored hour and counts every hour from there afresh (`replace_click_hours`), so a repeated sync never counts a visit twice;
+- schema 9 dropped the UTC hours kept before it: the next sync counts them again from Shlink (for an old campaign, its "update clicks" or the CLI's `clicks`);
 - if Shlink can't say when, the counts stand and the hours wait. Updates go by an indexed `short_code`, in chunks of 500: `clicks` doesn't take the run lock, so it must never hold the write lock long enough to stall a send. Reports go per segment and join on `recipients.link_key`. Shared segment/campaign links count for the segment or campaign, never for a person. `export-attribution` (ref, user ID / "missing user ID", segment, link, ISO-8601 UTC time, delivery, clicks) has **no phone numbers**: it's for the backend. `export-clickers` has phones. Both write to `data/exports/` by default.
 
 ### Error taxonomy (split across `sender.py` + `classifier.py`)
@@ -267,7 +268,7 @@ The packaged `kavenegar` SDK calls `requests.post()` with no timeout, so a hung 
 
 ### Phone normalization quirks ([phone.py](src/sms_sender/phone.py))
 
-Canonical form is `09XXXXXXXXX`. The normalizer accepts `+98…`, `0098…`, `98…`, `9…`, plus arbitrary spaces/dashes/parens, and translates Persian (`۰۱۲۳`) and Arabic-Indic (`٠١٢٣`) digits to ASCII first — Excel exports often carry these. Anything else raises `InvalidPhoneError` and the input loader records it as an invalid row.
+Canonical form is `09XXXXXXXXX`. The normalizer accepts `+98…`, `0098…`, `98…`, `9…`, plus arbitrary spaces/dashes/parens, and translates Persian (`۰۱۲۳`) and Arabic-Indic (`٠١٢٣`) digits to ASCII first — Excel exports often carry these. `phone.ASCII_DIGITS` is the one such table: every module that reads typed numbers uses it. Anything else raises `InvalidPhoneError` and the input loader records it as an invalid row.
 
 ### Exit codes (set by `cli.send`)
 
@@ -302,7 +303,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - A role is the Django group `viewer`, `operator` or `admin`; migration `accounts/0001_roles` creates them.
   - Each role adds capabilities to the one before it (`_ADDS`, the spec's permission matrix). Superusers are admins.
   - Only people who can `run_campaigns` keep a number for test SMS (My account hides it from viewers and refuses their POST).
-  - Gate views with `@requires("capability")`. It renders the Persian `403.html`, which also says when the user has no role yet.
+  - Gate views with `@requires("capability")`. It renders the Persian `403.html`, which also says when the user has no role yet. `tests/web/test_access.py` fails on a view that neither requires a capability nor is in its `WITHOUT_CAPABILITY`, with why.
   - In templates, use `user|can:"capability"`.
   - `role_of` caches the role on the user object, and `set_role` clears it.
   - Never check group names directly.
@@ -382,7 +383,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - `service.add` and `service.phones_for(campaign)` are the API. `jobs.engine.Engine.runner` passes `phones_for(campaign)` into the runner's `opt_out`, so every send skips them.
   - Operators (`add_suppression`) see the page and add numbers, pasted or from a file. They apply to every campaign, or to one (the form's `scope`, the CLI's `--opt-out`). Only admins (`remove_suppression`) remove them. Both changes are audited.
   - A number is searched with a POST (`action=find`), never in a URL.
-- **Phone numbers on pages** are masked with `privacy.mask_phone` (filter `mask_phone`): the first four and last two digits are shown, the rest become `*`. Values with fewer than ten digits are hidden entirely. Use `*`, never `•`, because next to Persian digits a dot reads as «۰».
+- **Phone numbers on pages** are masked with `privacy.mask_phone` (filter `mask_phone`): the first four and last two digits are shown, the rest become `*`. Values with fewer than ten digits are hidden entirely. Use `*`, never `•`, because next to Persian digits a dot reads as «۰». In a sentence (`campaigns/present.say`), a masked number is isolated left to right (LRI … PDI), as `|ltr` does on a page: after Persian words, its groups would show in reverse order.
 - **`accounts.decorators.forbidden(request)`** renders the Persian 403. Use it for checks inside a view, such as an action only admins may take.
 - **Campaign pages (`campaigns/`, spec 3):**
   - Settings are stored in `Campaign.settings` in the CLI's terms: `segment`, `input`, `user_id_column`, `template`, `tokens`, `token_columns`, `value_maps`, `links` (LinkSettings fields), `send_window`, `rate`, `workers`. The engine (`jobs/engine.Engine.runner`) turns them into the CLI's runner.
@@ -400,7 +401,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
       - Values and segments change until `settings_locked`; a change invalidates the approval through the settings hash, as anywhere.
     - HTMX: `?part=message` reads only the first list, so it keeps up with typing, and swaps the field errors in out of band; `?part=counts` reads every list (`count_lines`). Ctrl+Enter presses `[data-primary]`: only the test button has it, and sending stays a click and a confirmation.
   - **More segments** (`more_segments`, review G1): ready segments sent after the campaign's own, in name order, in one send with one test SMS.
-    - `segments.models.campaign_slugs` / `campaign_segments` give a campaign's segments in order; `Segment.part()` is one as the runner's `InputPart`, and `engine.more_inputs` builds the rest (one that isn't ready raises `InputError`, which the worker records as `input_unreadable` before anything is read).
+    - `segments.models.campaign_slugs` gives a campaign's segments in order (`ready_segments` the ready ones); `Segment.part()` is one as the runner's `InputPart`, and `engine.more_inputs` builds the rest (one that isn't ready raises `InputError`, which the worker records as `input_unreadable` before anything is read).
     - The form keeps only segments with every column the tokens use, and never the campaign's own segment again (`app.js` hides it too).
     - The check (`checks.check_campaign`) and the preview (`preview.load_segment`) read every list as a send would; `CheckResult.segments` counts what each one adds, and `more_segment_missing` stops the check.
     - The settings hash adds `more_segments` with each one's version, only when there are any, so earlier approvals keep their hash.
@@ -461,7 +462,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
     - **Series** (`/analytics/series/`, `/analytics/series/<preset>/`, `insight_views`): a preset's alerts that sent, oldest first by their first accepted SMS (`alerts_of`). `trends` compares the latest `RECENT` (3) alerts with the ones before them, from 4 alerts on. The chart is a bar per alert (`charts.rate_chart`): click rate where people had links of their own, else delivered share.
     - **Audience** (`/analytics/audience/`):
       - SMS per person in 7 and 30 days, and who's at the frequency cap now (`fatigue`, from `state.folder_sends_since`, as the cap counts);
-      - the best hour to send (`send_hours`): per Tehran hour, people sent a link of their own and the share who clicked, compared only from `MIN_SENT` (100) people. Clicks per hour come from `click_hours`, which are UTC hours: in Tehran each runs from half past, and is put under the hour it starts in, like the clicks chart;
+      - the best hour to send (`send_hours`): per Tehran hour, people sent a link of their own and the share who clicked, compared only from `MIN_SENT` (100) people. Clicks per hour come from `click_hours`, kept per Tehran hour;
       - how far chosen segments overlap (`overlap`, `?s=` slugs, at most `MAX_CHOSEN` 6): numbers read from the prepared files and normalized, the last few kept in memory by version, mtime and size (`phones_of`).
     - `Totals` (`dashboard/activity.py`) carries `cost_per_sms` (test SMS aside: `test_cost`) and `cost_per_click`; `all_time(path)` reads one DB and never creates it.
   - **Audiences** (`segments/audience.make_audience`, operators): a new ready segment from the recipients the list's filters match.
@@ -482,7 +483,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 
     Filters go in the address, with nothing personal in them. A number is searched with a POST, never a GET. A filter is offered only where it means something: several segments, personal links, user IDs. "Missing user ID" shows only where user IDs are used.
   - Numbers are masked. `reveal_phone` (operators) POSTs a rowid to `/reveal/` (HTMX swaps the cell) and records `phone_revealed`. Invalid input rows (`INVALID:…`) are never revealed.
-  - Downloads use English column names, Latin digits and a UTF-8 BOM. They're the same rows as the CLI's `export-attribution` / `export-clickers`. Operators (`export_people`) also get:
+  - Downloads use English column names, Latin digits and a UTF-8 BOM. They're the same rows as the CLI's `export-attribution` / `export-clickers`. Every cell goes through `sms_sender.csvsafe` (`cell` / `row`), the CLI's exports' too: one that starts like a formula (`=`, `+`, `-`, `@`, a tab or a carriage return, unless it's a plain number) gets a leading `'`, so a spreadsheet shows it as text. A segment's prepared copy, which the engine reads, is never changed: only its download is written that way. Operators (`export_people`) also get:
     - `recipients.csv`: the list with its filters, numbers in full;
     - `failed.csv`: the CLI's `export-failed`, with `StateStore.FAILED_HEADER` shared by both.
 
@@ -549,6 +550,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - **Operator actions** are in `jobs/services.py`: enqueue (one active job per campaign and kind), pause, resume, cancel. Cancelling a job that isn't running takes the campaign's run lock.
   - **Engine:** `jobs/engine.Engine` builds the CLI's runner from `Campaign.settings` (`make_runner(reporter=JobReporter, install_signal_handlers=False)`); tests swap in fakes. The approval test isn't part of a send job; it becomes its own dashboard step.
   - **Scheduler:** `Worker.schedule` queues delivery updates while sent rows are under 48 h old, and click updates for 14 days.
+  - **Awake:** while a send or a test SMS runs, the worker holds macOS's `caffeinate -i` (`jobs/awake.py`; nothing elsewhere), so an idle Mac doesn't sleep mid-send. A closed lid still sleeps a laptop.
   - **One worker process only** (with its two lanes). Test DBs are files, not shared-memory SQLite (`settings_test`), because the heartbeat and lane threads write concurrently.
 - **Design system v3 ([app.css](src/sms_sender_web/static/css/app.css), plan 06 L6), on v2 and v1:**
   - **Tokens** follow the L0 prototype: primary `#1d4ed8`, its success, warning and danger colours, navy `#0c1626`, and its dark theme. Corners are 10 px for controls (`--radius`) and 14 px for cards (`--radius-lg`). Figures use `--fs-figure`.
@@ -588,7 +590,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
     - Django tests see the whole page; browser tests click the tab first.
   - **Messages** (`ui/messages.html`): errors and warnings stay on the page (`.messages`). Success and information are `.toasts` that leave after 8 s, held while pointed at or focused.
   - **Forms:** `.form-section` for a form in sections (title and help beside the fields). Fieldset legends read as titles inside the box.
-  - **Other parts:** `.tabs` / `.segmented-tabs`, `.toolbar`, `.timeline`, `.health-grid` / `.health-state` (status page), `.auth-card` (sign-in), `.chip` (meta).
+  - **Other parts:** `.tabs` / `.segmented-tabs`, `.timeline`, `.health-grid` / `.health-state` (status page), `.auth-card` (sign-in), `.chip` (meta).
   - **The control room** (`/`, `dashboard/views.home`, plan 06 L4):
     - Figures for today and the last 7 days: accepted, delivered, clicks, click rate and spend.
     - The sends on their way (`control.active_sends`, polled at `/home/sends/`, 286 when none), each with its pace and time left.
@@ -682,7 +684,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
   - Old jobs' `test_number` / `team_numbers`, their notes' `phone`, `top_errors` and errors, and the activity log's `phone` details are masked in place. The log is otherwise append-only.
   - The suppression list, `Profile.test_phone` and the team's numbers stay.
   - `retention_ran_at` / `retention_result` show the last run; anything removed is recorded (`numbers_removed`, username `worker`) and announced to the targets.
-  - A campaign whose numbers went (`services.numbers_removed`) offers only its history and "duplicate": `request_test`, `start_send` and `requeue` raise `JobConflict("numbers_removed")`, `settings_locked` says so, `can_unlock` is false, the stage becomes `stage/_numbers_removed.html`. The report shows «حذف‌شده» for each number, reveals none, and hides the audience and the downloads with numbers; `make_audience` skips placeholders. The worker files a send that meets one as `numbers_removed`.
+  - A campaign whose numbers went (`services.numbers_removed`) offers only its history and "duplicate" (a CLI campaign's report says to start a new campaign: it has no "duplicate"): `request_test`, `start_send` and `requeue` raise `JobConflict("numbers_removed")`, `settings_locked` says so, `can_unlock` is false, the stage becomes `stage/_numbers_removed.html`. The report shows «حذف‌شده» for each number, reveals none, and hides the audience and the downloads with numbers; `make_audience` skips placeholders. The worker files a send that meets one as `numbers_removed`.
 - **Backups ([backup.py](src/sms_sender_web/backup.py), no Django):** `manage.py backup` / `verify_backup` / `restore_backup` (in `jobs/management/commands/`, with `worker_status`).
   - A backup copies `app.db`, `db/*.db` and `segments/*` into `BACKUP_DIR/<UTC stamp>/` (`SMS_SENDER_BACKUP_DIR`, default `<data>/backups`). Not the sandbox or exports. The dashboard's own backup, taken before an admin changes a sent message, uses `keep=None`, so it never prunes the scheduled ones.
   - DBs go through SQLite's online backup (a plain copy misses the `-wal`). Each is switched to DELETE mode, its leftover `-shm` removed, and integrity-checked.
@@ -694,6 +696,7 @@ The Django + HTMX dashboard sits in the same repo as the `web` extra; the CLI do
 ## Conventions
 
 - **Recipient phone lists and state DBs are PII.** Keep state DBs in `data/db/` and segment / user-id lists in `data/segments/`; `data/` is gitignored as a whole, and so are root-level `*.csv` / `*.txt` / `*.xls*` (which catches `export-failed`'s default `./failed.csv`) and `*-numbers.*` / `*_numbers.*` anywhere. Never commit one — stage files by name, not with `git add -A` / `git add .`. When moving a DB, update every `state = …` in `sms-sender.toml` too: a path that no longer exists silently opens a fresh, empty DB, and that run re-sends to everyone already sent.
-- Logs go to `logs/sms-sender.log` (rotating, 5 MB × 5) and are formatted as `key=value` pairs by `KeyValueFormatter`. Pass structured fields via `logger.info("event_name", extra={...})`, not f-strings, so they stay greppable. An `extra` key must not be a `LogRecord` attribute (`created`, `name`, `msg`, `args`, `module`, …): logging raises `KeyError` mid-run. `tests/test_logging_fields.py` checks every call.
+- Logs go to `logs/sms-sender.log` (rotating, 5 MB × 5) and are formatted as `key=value` pairs by `KeyValueFormatter`. Pass structured fields via `logger.info("event_name", extra={...})`, not f-strings, so they stay greppable. The formatter scrubs secrets from the whole line, tracebacks included (`redact.redact_secrets`: the Kavenegar key in its URLs, Telegram bot tokens, Slack webhook paths). An `extra` key must not be a `LogRecord` attribute (`created`, `name`, `msg`, `args`, `module`, …): logging raises `KeyError` mid-run. `tests/test_logging_fields.py` checks every call.
+- **Data and logs are the owner's only.** The CLI and the launcher set `umask 077`, and `./sms-dashboard start` / `run` / `upgrade` tighten `data/` and `logs/` to 0700 / 0600 (`Place.make_private`): they hold phone numbers.
 - Adding a new Kavenegar status code: extend the relevant frozenset in `classifier.py`. Don't add per-code branching elsewhere.
 - **A `ResourceWarning` fails the test** (`filterwarnings` in pyproject.toml): close what you open (`contextlib.closing` for `sqlite3`; its own `with` only commits). A thread of your own that touches Django closes `django.db.connection` when it ends: Django opens one per thread and closes none of theirs. The engine's threads report through `JobReporter`, which does it for them.

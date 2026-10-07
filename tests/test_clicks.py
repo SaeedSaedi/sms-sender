@@ -192,21 +192,26 @@ def test_exports_land_in_data_exports(tmp_path, monkeypatch):
 
 # ---------- clicks over time (schema v7) ----------
 
-def test_clicks_are_kept_per_hour_and_never_counted_twice(tmp_path):
+def test_clicks_are_kept_per_tehran_hour_and_never_counted_twice(tmp_path):
     from datetime import datetime, timedelta, timezone
 
+    from sms_sender.window import TEHRAN
+
     state = campaign_db(tmp_path / "s.db")
-    t0 = datetime(2026, 10, 5, 9, 40, tzinfo=timezone.utc)
+    # 12:40, 12:50 and 13:10 in Tehran: all three in one UTC hour (09:00),
+    # but in two Tehran hours, which start at half past in UTC.
+    t0 = datetime(2026, 10, 5, 12, 40, tzinfo=TEHRAN)
     source = Visits({"c1": 3}, times=[t0, t0 + timedelta(minutes=10), t0 + timedelta(minutes=30)])
     assert sync_clicks(state, source, "coin-7").hours == 3
-    nine, ten = int(t0.replace(minute=0).timestamp()), int(t0.replace(minute=0).timestamp()) + 3600
-    assert state.click_hours() == [(nine, 2), (ten, 1)]
+    twelve = int(datetime(2026, 10, 5, 12, 0, tzinfo=TEHRAN).timestamp())
+    thirteen = twelve + 3600
+    assert state.click_hours() == [(twelve, 2), (thirteen, 1)]
     # The next sync reads from the start of the latest hour again, and counts
-    # that hour afresh: the 10:10 visit isn't counted twice.
+    # that hour afresh: the 13:10 visit isn't counted twice.
     source.times.append(t0 + timedelta(hours=1, minutes=5))
     sync_clicks(state, source, "coin-7")
-    assert source.since[-1] == datetime.fromtimestamp(ten, tz=timezone.utc)
-    assert state.click_hours() == [(nine, 2), (ten, 2)]
+    assert source.since[-1] == datetime.fromtimestamp(thirteen, tz=timezone.utc)
+    assert state.click_hours() == [(twelve, 2), (thirteen, 2)]
 
 
 def test_counts_still_stand_when_shlink_cant_say_when(tmp_path):

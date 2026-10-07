@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import signal
+import sqlite3
 import threading
 import time
 from collections import Counter
@@ -45,7 +46,7 @@ from .sender import (
 )
 from .shortlink import ShlinkHaltError
 from .frequency import FrequencyCap
-from .state import CAPPED, NEEDS_REVIEW, SUPPRESSED, UNKNOWN, StateStore, folder_sends_since
+from .state import CAPPED, NEEDS_REVIEW, SUPPRESSED, UNKNOWN, StateStore, folder_sends_since, wal_reset_bug
 from .window import TEHRAN, SendWindow, now_tehran
 
 logger = logging.getLogger(__name__)
@@ -802,6 +803,9 @@ class Runner:
         self._reporter.note("Smoke test passed.", "smoke_passed")
 
     def run(self) -> RunSummary:
+        if wal_reset_bug():
+            # The send's threads write at once: the very case of that bug.
+            logger.warning("sqlite_wal_reset_bug", extra={"sqlite": sqlite3.sqlite_version, "fixed_in": "3.51.3"})
         # One process per DB: a second run would treat our `in_flight` rows
         # as orphans and send them again. Raises RunLockError if taken.
         with RunLock(self.state.db_path), self._signals():

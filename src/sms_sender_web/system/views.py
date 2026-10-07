@@ -12,7 +12,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from sms_sender.allowlist import allowlist
 from sms_sender.notify import notify_text, redact_target, valid_target
-from sms_sender.phone import InvalidPhoneError, normalize
+from sms_sender.phone import ASCII_DIGITS, InvalidPhoneError, normalize
 from sms_sender.rate import parse_rate
 from sms_sender.window import parse_window
 
@@ -30,12 +30,11 @@ from .models import TEAM_TEST_MAX, SystemSettings
 logger = logging.getLogger(__name__)
 
 CAP_SMS, CAP_DAYS = range(1, 21), range(1, 91)  # what the form accepts
-_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
 TEST_MESSAGE = "sms-sender: a test notification from the dashboard. Sends that end or stop are announced here."
 
 
 def _number(data, name: str, allowed: range) -> int | None:
-    value = data.get(name, "").strip().translate(_DIGITS)
+    value = data.get(name, "").strip().translate(ASCII_DIGITS)
     return int(value) if value.isdigit() and int(value) in allowed else None
 
 
@@ -89,8 +88,8 @@ def _notifications(request, current: SystemSettings) -> str:
 
 
 def _defaults(request, current: SystemSettings) -> str:
-    window = request.POST.get("default_window", "").strip().translate(_DIGITS)
-    rate = request.POST.get("default_rate", "").strip().translate(_DIGITS)
+    window = request.POST.get("default_window", "").strip().translate(ASCII_DIGITS)
+    rate = request.POST.get("default_rate", "").strip().translate(ASCII_DIGITS)
     try:
         if window:
             parse_window(window)
@@ -108,7 +107,7 @@ def _defaults(request, current: SystemSettings) -> str:
 
 def _credit(request, current: SystemSettings) -> str:
     """The credit warning level, in rials (empty: no warning)."""
-    value = request.POST.get("credit_floor", "").strip().translate(_DIGITS).replace(",", "").replace("٬", "")
+    value = request.POST.get("credit_floor", "").strip().translate(ASCII_DIGITS).replace(",", "").replace("٬", "")
     if value and not value.isdigit():
         return _("Write the credit in rials, digits only, or leave it empty for no warning.")
     floor = int(value) if value else None

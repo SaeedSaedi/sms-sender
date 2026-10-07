@@ -52,7 +52,8 @@ class AddForm(forms.Form):
         upload = data.get("file")
         if upload is not None:
             try:
-                table = files.parse(upload.read())
+                # The limit and a byte: enough to refuse a file too big without reading it all.
+                table = files.parse(upload.read(files.MAX_BYTES + 1))
             except files.UploadError as e:
                 self.add_error("file", UPLOAD_ERRORS[e.code])
                 return data

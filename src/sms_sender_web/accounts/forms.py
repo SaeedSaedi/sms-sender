@@ -5,18 +5,17 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.utils.translation import gettext_lazy as _
 
+from sms_sender.phone import ASCII_DIGITS
+
 from .roles import ROLES
 from .terms import ROLE_LABELS
-
-# A Persian keyboard types ۰–۹ (and some apps paste ٠–٩); the code is ASCII.
-_TO_ASCII = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
 
 
 class CodeForm(forms.Form):
     code = forms.CharField(max_length=16)
 
     def clean_code(self) -> str:
-        code = re.sub(r"\s", "", self.cleaned_data["code"]).translate(_TO_ASCII)
+        code = re.sub(r"\s", "", self.cleaned_data["code"]).translate(ASCII_DIGITS)
         if not re.fullmatch(r"\d{6}", code):
             raise forms.ValidationError(_("Enter the six-digit code from your authenticator app."))
         return code

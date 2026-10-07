@@ -12,8 +12,9 @@ CANONICAL_RE = re.compile(r"^09\d{9}$")
 _ALREADY = re.compile(r"09[0-9]{9}")
 _DIGITS_RE = re.compile(r"\D+")
 
-# Persian/Arabic-Indic digits → ASCII (CSV exports from Excel often carry these)
-_DIGIT_TRANSLATION = str.maketrans(
+# Persian/Arabic-Indic digits → ASCII: CSV exports from Excel often carry
+# them, and a Persian keyboard types them. The one table, for every module.
+ASCII_DIGITS = str.maketrans(
     "۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩",
     "01234567890123456789",
 )
@@ -33,7 +34,7 @@ def normalize(raw: str) -> str:
         raise InvalidPhoneError("empty")
     if _ALREADY.fullmatch(raw):
         return raw
-    s = raw.strip().translate(_DIGIT_TRANSLATION)
+    s = raw.strip().translate(ASCII_DIGITS)
     if not s:
         raise InvalidPhoneError("empty")
     digits = _DIGITS_RE.sub("", s)

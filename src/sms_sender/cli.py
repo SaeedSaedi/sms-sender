@@ -15,7 +15,7 @@ import click
 from click.core import ParameterSource
 from dotenv import load_dotenv
 
-from . import input_loader, logging_config
+from . import csvsafe, input_loader, logging_config
 from .allowlist import ENV_ALLOWED_NUMBERS
 from .config import load_api_key
 from .input_loader import SLUG_RE, InputError, TokenColumns
@@ -380,6 +380,9 @@ def cli(ctx: click.Context, config_path: str | None, profile_name: str | None) -
     # env var (e.g. --send-window) and SMS_SENDER_LINK_DOMAINS see it too.
     # Never overrides a variable that's already set.
     load_dotenv(".env")
+    # What it writes (state DBs, its log, exports) holds phone numbers: its
+    # owner's only.
+    os.umask(0o077)
     try:
         values = load_profile(config_path, profile_name)
     except ProfileError as e:
@@ -782,9 +785,9 @@ def export_failed(db_path: str, out: str, campaign: str | None) -> None:
     n = 0
     with p.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(StateStore.FAILED_HEADER)
+        w.writerow(StateStore.FAILED_HEADER)  # rows go through csvsafe: raw cells are people's text
         for row in store.iter_failed_permanent():
-            w.writerow([row["phone"], row["raw"], row["status_code"], row["attempts"], row["last_error"]])
+            w.writerow(csvsafe.row([row["phone"], row["raw"], row["status_code"], row["attempts"], row["last_error"]]))
             n += 1
     click.echo(f"Wrote {n} rows to {p}")
 
@@ -1019,7 +1022,7 @@ def _write_csv(path: Path, header: list[str], rows: Iterator[list]) -> int:
         w = csv.writer(f)
         w.writerow(header)
         for row in rows:
-            w.writerow(row)
+            w.writerow(csvsafe.row(row))
             n += 1
     return n
 

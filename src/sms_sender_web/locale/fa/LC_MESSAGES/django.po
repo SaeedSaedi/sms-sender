@@ -3875,8 +3875,8 @@ msgstr "در ۳۰ روز گذشته برای کسی پیامکی فرستاده 
 msgid "None of its alerts has sent yet."
 msgstr "هنوز هیچ‌یک از هشدارهای آن فرستاده نشده است."
 
-msgid "Only hours with at least {n} people sent a link of their own are compared, and the sending window limits which hours have been tried. Clicks are counted by the hour, give or take half an hour."
-msgstr "فقط ساعت‌هایی مقایسه می‌شوند که دست‌کم برای {n} نفر لینک شخصی ارسال شده است، و بازه مجاز ارسال تعیین می‌کند کدام ساعت‌ها امتحان شده‌اند. کلیک‌ها با حدود نیم ساعت تقریب در ساعت‌ها شمرده می‌شوند."
+msgid "Only hours with at least {n} people sent a link of their own are compared, and the sending window limits which hours have been tried."
+msgstr "فقط ساعت‌هایی مقایسه می‌شوند که دست‌کم برای {n} نفر لینک شخصی ارسال شده است، و بازه مجاز ارسال تعیین می‌کند کدام ساعت‌ها امتحان شده‌اند."
 
 msgid "About the same as the 30-day average"
 msgstr "تقریباً هم‌اندازه میانگین ۳۰ روز"
@@ -4055,8 +4055,14 @@ msgstr "تا پایان کاری که در جریان است نگه داشته �
 msgid "This campaign's phone numbers were removed, so it can't send again. To send its message once more, duplicate it."
 msgstr "شماره‌های این کمپین حذف شده است، پس دیگر نمی‌تواند ارسال کند. برای ارسال دوباره پیام آن، «ساخت کمپین مشابه» را بزنید."
 
-msgid "Its phone numbers were removed on {when}: numbers are kept for {months} months after a campaign's last send. Its counts, costs, deliveries and clicks stay, and it can't send again. To send its message once more, duplicate it."
-msgstr "شماره‌های آن در {when} حذف شد: شماره‌ها تا {months} ماه پس از آخرین ارسال هر کمپین نگهداری می‌شوند. آمار، هزینه، تحویل و کلیک‌های آن می‌ماند و دیگر نمی‌تواند ارسال کند. برای ارسال دوباره پیام آن، «ساخت کمپین مشابه» را بزنید."
+msgid "Its phone numbers were removed on {when}: numbers are kept for {months} months after a campaign's last send. Its counts, costs, deliveries and clicks stay, and it can't send again."
+msgstr "شماره‌های آن در {when} حذف شد: شماره‌ها تا {months} ماه پس از آخرین ارسال هر کمپین نگهداری می‌شوند. آمار، هزینه، تحویل و کلیک‌های آن می‌ماند و دیگر نمی‌تواند ارسال کند."
+
+msgid "To send its message once more, duplicate it."
+msgstr "برای ارسال دوباره پیام آن، «ساخت کمپین مشابه» را بزنید."
+
+msgid "To send its message once more, start a new campaign."
+msgstr "برای ارسال دوباره پیام آن، کمپین تازه‌ای بسازید."
 
 msgid "Phone numbers removed"
 msgstr "شماره‌ها حذف شد"

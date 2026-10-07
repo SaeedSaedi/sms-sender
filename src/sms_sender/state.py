@@ -119,9 +119,25 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         """,
         "CREATE INDEX idx_conversions_phone ON conversions(phone)",
     ),
+    (  # 8 → 9: clicks are kept per Tehran hour (its start, unix seconds), which
+       # starts at half past in UTC. The UTC hours kept until now are dropped;
+       # the next clicks sync counts them again from Shlink.
+        "DELETE FROM click_hours",
+    ),
 )
 
 SCHEMA_VERSION = len(_MIGRATIONS)
+
+
+def wal_reset_bug(version: Sequence[int] | None = None) -> bool:
+    """SQLite's WAL-reset bug, in 3.7.0 to 3.51.2: a write and a checkpoint
+    at the same instant, on two connections, can lose committed pages and
+    corrupt the DB. Fixed in 3.51.3, and in the 3.50.7 and 3.44.6 patch
+    releases. A distribution's own backport keeps the old number."""
+    v = tuple(version or sqlite3.sqlite_version_info)[:3]
+    if v >= (3, 51, 3) or (3, 50, 7) <= v < (3, 51) or (3, 44, 6) <= v < (3, 45):
+        return False
+    return v >= (3, 7, 0)
 
 # `--campaign <slug>` keeps each campaign's state DB here (gitignored).
 CAMPAIGN_DB_DIR = Path("data/db")

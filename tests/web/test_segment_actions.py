@@ -58,7 +58,9 @@ def test_operators_download_the_prepared_copy_and_its_recorded(world, verified):
     response = operator.get("/segments/vip/download/")
     body = response.content.decode("utf-8")
     assert response["Content-Disposition"] == 'attachment; filename="vip.csv"'
-    assert body.startswith("﻿phone,user_id,first_name\n")  # Excel shows Persian with the BOM
+    # Excel shows Persian with the BOM. The rows are written again (formulas
+    # kept as text), with CSV's own line ends, as the prepared copy has them.
+    assert body.startswith("﻿phone,user_id,first_name\r\n")
     assert AuditEvent.objects.get(action="segment_downloaded").detail == {"segment": "vip"}
     assert signed_in(world.users["viewer"], verified).get("/segments/vip/download/").status_code == 403
 
