@@ -190,3 +190,25 @@ def test_a_masked_number_in_a_sentence_reads_left_to_right():
 
     line = say("ارسال پیامک آزمایشی به {phone}.", {"phone": "09151234510"})
     assert line == "ارسال پیامک آزمایشی به \u2066۰۹۱۵*****۱۰\u2069."
+
+
+ZWNJ = chr(0x200C)
+
+
+@pytest.mark.parametrize("strategy, recipients", [
+    ("campaign", f"همه گیرندگان یک لینک مشترک می{ZWNJ}گیرند"),
+    ("segment", "گیرندگان هر گروه مخاطبان یک لینک مشترک دارند"),
+    ("recipient", f"هر گیرنده لینک مخصوص خودش را می{ZWNJ}گیرد"),
+    (None, f"هر گیرنده لینک مخصوص خودش را می{ZWNJ}گیرد"),  # the default
+])
+def test_the_test_step_says_its_links_are_its_own(strategy, recipients):
+    """Each test SMS has a link of its own (test clicks never count), whatever
+    the recipients get. The page says what they get, so two test SMS with two
+    links don't look like a fault when the campaign shares one."""
+    from django.template.loader import render_to_string
+    from django.utils import translation
+
+    links = {"token": "token2", **({"strategy": strategy} if strategy else {})}
+    with translation.override("fa"):
+        html = render_to_string("campaigns/stage/_test_links.html", {"campaign": {"settings": {"links": links}}})
+    assert "هر پیامک آزمایشی لینک کوتاه مخصوص خودش را دارد" in html and recipients in html

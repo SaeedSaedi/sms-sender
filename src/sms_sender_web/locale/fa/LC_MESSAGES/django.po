@@ -1938,8 +1938,17 @@ msgstr "ارسال این کمپین زمان‌بندی شده است. برای
 msgid "Before sending, one SMS goes to your own number, so you can see the final text."
 msgstr "پیش از ارسال اصلی، یک پیامک به شماره خود شما ارسال می‌شود تا متن نهایی را ببینید."
 
-msgid "It carries a short link of its own; the recipients' links are made when sending starts."
-msgstr "این پیامک لینک کوتاه مخصوص خودش را دارد؛ لینک‌های گیرندگان با آغاز ارسال ساخته می‌شوند."
+msgid "Each test SMS carries a short link of its own, to the same address, so test clicks never count."
+msgstr "هر پیامک آزمایشی لینک کوتاه مخصوص خودش را دارد که به همان نشانی می‌رود، تا کلیک‌های آزمایشی شمرده نشوند."
+
+msgid "All recipients get one link, the same for everyone, made when sending starts."
+msgstr "همه گیرندگان یک لینک مشترک می‌گیرند که با آغاز ارسال ساخته می‌شود."
+
+msgid "The recipients of each segment share one link, made when sending starts."
+msgstr "گیرندگان هر گروه مخاطبان یک لینک مشترک دارند که با آغاز ارسال ساخته می‌شود."
+
+msgid "Each recipient gets a link of their own, made when sending starts."
+msgstr "هر گیرنده لینک مخصوص خودش را می‌گیرد که با آغاز ارسال ساخته می‌شود."
 
 msgid "Starts at {when}."
 msgstr "زمان آغاز: {when}"
@@ -4020,8 +4029,8 @@ msgstr "پیامک آزمایشی را شخص دومی تأیید می‌کند"
 msgid "whoever asks for a test SMS may approve it"
 msgstr "درخواست‌کننده پیامک آزمایشی می‌تواند خودش آن را تأیید کند"
 
-msgid "One SMS to your own number, set on “My account”, and to the team's numbers a system admin keeps, with the final text and link. Check it on your phone, then approve it or reject it. When a system admin asks for it, someone other than whoever asked for the test approves it."
-msgstr "یک پیامک با متن و لینک نهایی به شماره خودتان، که در «حساب من» ثبت کرده‌اید، و به شماره‌های تیم که مدیر سامانه ثبت می‌کند. آن را روی گوشی خود ببینید و سپس تأیید یا رد کنید. اگر مدیر سامانه بخواهد، کسی جز درخواست‌کننده آن را تأیید می‌کند."
+msgid "One SMS to your own number, set on “My account”, and to the team's numbers a system admin keeps, with the final text. Its short link is a test link of its own, so test clicks never count. Check it on your phone, then approve it or reject it. When a system admin asks for it, someone other than whoever asked for the test approves it."
+msgstr "یک پیامک با متن نهایی به شماره خودتان، که در «حساب من» ثبت کرده‌اید، و به شماره‌های تیم که مدیر سامانه ثبت می‌کند. لینک کوتاه آن لینک آزمایشی مخصوص خودش است، تا کلیک‌های آزمایشی شمرده نشوند. آن را روی گوشی خود ببینید و سپس تأیید یا رد کنید. اگر مدیر سامانه بخواهد، کسی جز درخواست‌کننده آن را تأیید می‌کند."
 
 msgid "A test SMS goes only to your own number and to the team's numbers a system admin keeps. Settings changed after its approval need a new test."
 msgstr "پیامک آزمایشی فقط به شماره خودتان و شماره‌های تیم که مدیر سامانه ثبت می‌کند ارسال می‌شود. اگر تنظیمات پس از تأیید آن تغییر کند، پیامک آزمایشی تازه‌ای لازم است."
