@@ -15,7 +15,7 @@ from .terms import DELIVERY_STATUS, SUBMISSION_STATUS
 STEP_HELP = (
     _("Choose the segment (or several, for one send), the template and what fills its tokens."),
     _("The check reads the list as a send would: the valid numbers, the template, the tokens, the short link and the sending window. The preview shows each recipient's final text."),
-    _("One SMS to your own number, set on “My account”, and to the team's numbers a system admin keeps, with the final text and link. Check it on your phone, then approve it or reject it. When a system admin asks for it, someone other than whoever asked for the test approves it."),
+    _("One SMS to your own number, set on “My account”, and to the team's numbers a system admin keeps, with the final text. Its short link is a test link of its own, so test clicks never count. Check it on your phone, then approve it or reject it. When a system admin asks for it, someone other than whoever asked for the test approves it."),
     _("A send needs a test SMS approved for these exact settings. It starts now or at a set time: the short links are made first, then the SMS go out inside the sending window."),
     _("What was accepted, delivered and clicked, and what's left to do. Delivery is checked for 48 hours after sending, clicks for 14 days."),
 )

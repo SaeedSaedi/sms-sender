@@ -77,6 +77,7 @@ The CLI became a whole campaign tool, and a Persian dashboard runs it on a Mac o
 - Timing budgets on CI (#57).
 - Telegram targets with a real bot token (#61).
 - Clicks per Tehran hour (#61).
+- The test SMS step says each test SMS has a short link of its own (test clicks never count) and what the recipients get: one link for all, one per segment, or their own. Two test SMS with two links looked like a fault (#64).
 - A copy of the repo other than the panel's (a worktree, a test's folder) could stop the panel and remove its login agent; the agent now belongs to its folder, and no test reaches the Mac's launchd (#63).
 
 ## 0.1.0 (2026-07-27)

@@ -51,7 +51,7 @@
 {% include "campaigns/stage/_recipients_preview.html" %}
 
 <h3>{% translate "Test SMS" %}</h3>
-<p>{% if test_team %}{% translate "Before sending, one SMS goes to your own number and to the team's numbers, so you can see the final text." %}{% else %}{% translate "Before sending, one SMS goes to your own number, so you can see the final text." %}{% endif %}{% if campaign.settings.links.token %} {% translate "It carries a short link of its own; the recipients' links are made when sending starts." %}{% endif %}</p>
+<p>{% if test_team %}{% translate "Before sending, one SMS goes to your own number and to the team's numbers, so you can see the final text." %}{% else %}{% translate "Before sending, one SMS goes to your own number, so you can see the final text." %}{% endif %}{% if campaign.settings.links.token %} {% include "campaigns/stage/_test_links.html" %}{% endif %}</p>
 {% if user|can:"run_campaigns" %}
   {% if sending_held %}
     {% include "campaigns/stage/_held_note.html" %}
